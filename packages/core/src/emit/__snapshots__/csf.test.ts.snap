@@ -1,0 +1,38 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`emitCsf 生成した CSF が sampleScreen で安定した全文になる 1`] = `
+"import type { Meta, StoryObj } from "@storybook/react";
+import { SearchForm } from "~/ui/form";
+import { Page, PageHeader } from "~/ui/layout";
+import { TextField } from "~/ui/shadcn-ui/input";
+import { Table } from "~/ui/table";
+
+const meta: Meta = {
+	title: "Screens/Customer list",
+};
+
+export default meta;
+
+export const Default: StoryObj = {
+	render: () => (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<>
+					<SearchForm
+						fields={
+							<>
+								{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+								<TextField label="Customer name" placeholder="Enter a customer name" />
+							</>
+						}
+					/>
+					{/* TODO(yosegi): {"bindings":{"rows":"customers","loading":"customerQuery.isLoading"},"events":{"onRowClick":{"action":"navigate","arguments":{"to":"/customers/:customerId"}}}} */}
+					<Table />
+				</>
+			}
+		/>
+	),
+};
+"
+`;

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+.yosegi/
+.pack/
+*.log
+.DS_Store
+
+# The source of truth for skills/ is the repository root. packages/server/skills is a copy for
+# publishing, so it is not tracked.
+packages/server/skills/

@@ -1,0 +1,36 @@
+{
+	"name": "yosegi",
+	"description": "Agent-facing tooling that assembles screens from Storybook components, emits them as Stories, and turns them into implementations (monorepo root)",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"packages/*"
+	],
+	"catalog": {
+		"zod": "^4.4.3"
+	},
+	"scripts": {
+		"build": "bun --filter '@yosegi/core' build && bun --filter '@yosegi/yosegi' build",
+		"pack": "bun run scripts/pack.ts",
+		"test": "bun --filter '*' test && bun run test:scripts",
+		"test:scripts": "bun --smol test ./scripts",
+		"typecheck": "bun --filter '*' typecheck && bun run typecheck:scripts",
+		"typecheck:scripts": "bun --smol tsc --noEmit -p tsconfig.json",
+		"sync:skills": "bun --filter '@yosegi/yosegi' sync:skills",
+		"lint": "bun --smol biome check .",
+		"lint:fix": "bun --smol biome check --write .",
+		"textlint": "textlint \"docs/ja/**/*.md\"",
+		"textlint:fix": "textlint --fix \"docs/ja/**/*.md\""
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.7",
+		"@types/bun": "1.3.14",
+		"textlint": "15.8.0",
+		"textlint-rule-preset-ja-technical-writing": "12.0.2",
+		"typescript": "6.0.3"
+	},
+	"engines": {
+		"bun": ">=1.3.0",
+		"node": ">=20"
+	}
+}

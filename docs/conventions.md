@@ -1,0 +1,156 @@
+# Documentation conventions
+
+English | [日本語](./ja/conventions.md)
+
+How the pages in this repository are written. Read it before editing `README.md`, anything under
+`docs/`, or the Agent Skill.
+
+## Page roles
+
+Each page owns one subject. A concept is explained once, on the page that owns it; every other page
+links there.
+
+| Page | What it is | Keep out of it |
+| --- | --- | --- |
+| `README.md` | The face: value in the first lines, how it works in five steps, a minimal quickstart, links out | Flag tables, troubleshooting, anything a linked page owns |
+| `docs/getting-started.md` | The walkthrough — requirements, install, the numbered path to a Story and on to an implementation | Full flag lists, extraction internals |
+| `docs/cli.md` | Reference only. Per command: synopsis, an options table (flag / type / default / meaning), one short example | Conceptual explanation, tutorials, procedures that chain commands |
+| `docs/screen-json.md` | The format spec — fields, component ids, synthetic primitives, `bindings` / `events` | Flags, and the loops that produce the file |
+| `docs/workflows.md` | Use cases, the upstream and downstream loops, the error and warning codes | Flag semantics |
+| `docs/registry.md` | How types become a catalog, the measurements, the patterns that do not extract | Command reference |
+| `docs/development.md` | Working on this repository: layout, commands, pre-publish verification, release | How to use Yosegi in a host |
+| `docs/ROADMAP.md` | Planned work and open questions | Anything already shipped |
+| `docs/conventions.md` | This page | Coding conventions — those live in [`AGENTS.md`](../AGENTS.md) |
+| `skills/yosegi/**` | The unit distributed to a host project, read by an agent | Links out of the skill (see below) |
+
+## Prose budget
+
+- A step is a command block plus one line of purpose. Nothing else.
+- Cut any sentence that does not change what the reader does next.
+- No connective filler, no "as mentioned above", no paragraph restating the previous one.
+- Prefer a table to a list, and a list to a paragraph.
+- Wrap at 100 columns.
+
+## Command examples
+
+Package managers are stacked in one block, in this fixed order, in exactly this form:
+
+```sh
+# npm
+npm i -D @yosegi/yosegi
+# pnpm
+pnpm add -D @yosegi/yosegi
+# yarn
+yarn add -D @yosegi/yosegi
+# bun
+bun add -d @yosegi/yosegi
+```
+
+- State the invocation once per page — "`yosegi` below means `npx yosegi` (`pnpm yosegi`,
+  `yarn yosegi`, `bunx yosegi`)" — then write a bare `yosegi` in every example on it.
+- Always quote globs: `--source "app/components/**/*.tsx"`. An unquoted one is expanded by the shell
+  before the CLI sees it.
+- Break a long invocation with `\`, one flag per line, and pass `--data-dir` explicitly.
+
+## Terminology
+
+| Concept | English | Japanese | Do not write |
+| --- | --- | --- | --- |
+| The component catalog | Component Registry, short "the registry" | Component Registry, short "Registry" | 台帳, コンポーネント一覧, "component index" |
+| The intermediate tree | Screen JSON | Screen JSON | Screen Definition, 画面定義, "screen spec" |
+| `Text` / `Box` / `Heading` | synthetic primitives | 合成プリミティブ | built-ins, fallback components |
+| The project Yosegi runs against | the host | ホスト | your project, the client, the consumer app |
+| The deliverable | Story (capitalised), CSF for the format | Story, CSF | story file, snapshot |
+| The installed package | `@yosegi/yosegi` | `@yosegi/yosegi` | `@yosegi/server` — that is a directory, not a package |
+| The packaged procedure | Agent Skill, short "the skill" | Agent Skill, short "Skill" | plugin, prompt pack |
+
+## English / Japanese parity
+
+English is the source. Write a page or an edit in English first, translate it to Japanese, and land
+both in the same commit. `bun run textlint` checks the translated Japanese under `docs/ja/**`
+(`.textlintrc.json`); English pages are not linted.
+
+- Every `docs/x.md` has a twin at `docs/ja/x.md`, and `README.md` has `README.ja.md` next to it at
+  the repository root. Both change in the same commit.
+- The line under the H1 is the switcher: `English | [日本語](./ja/x.md)` on the English side,
+  `[English](../x.md) | 日本語` on the Japanese side.
+- Same headings in the same order, same code blocks, same tables. Comments inside a code block are
+  translated; the commands themselves are not.
+- A Japanese page links to a sibling Japanese page with `./x.md` — both live in `docs/ja/`. It links
+  to an English-only target one level up (`../x.md`, another page under `docs/`) or two levels up
+  (`../../x.md`, a repository-root file such as `AGENTS.md` or `CONTRIBUTING.md`). Identifiers,
+  flags, error codes, and paths stay in English on both sides.
+- `skills/` is English only — it is read by agents working in a host project.
+
+## Anonymity
+
+- No real host project or company names, no host-specific component names, no absolute local paths
+  (write `<repo>` for the path to a clone). Example ids take the generic shape
+  `app/components/ui/button#Button`.
+- Measurements name their subject generically ("a production React design system"), and a component
+  under discussion becomes a description ("a charting-library wrapper").
+
+## Skill self-containment
+
+- `skills/yosegi/` must never depend on `docs/` or on a URL for anything essential. `SKILL.md` sends
+  the reader into `references/` and nowhere else, so content overlapping a `docs/` page is duplicated
+  there on purpose and kept in step by hand.
+- Edit `skills/yosegi/`. `packages/server/skills/` is a generated mirror — never edit it.
+
+## Checks before committing docs
+
+Run every command a page shows, against a scratch React + TypeScript host outside this repository —
+`docs/` examples assume an installed CLI, so drive it through `bin/yosegi.js`:
+
+```sh
+cd <scratch-host>
+node <repo>/packages/server/bin/yosegi.js registry build \
+  --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --data-dir .yosegi
+```
+
+Then, from the repository root, check that links and anchors resolve and that the twins line up:
+
+```sh
+python3 - <<'PY'
+import pathlib, re, sys
+
+md = sorted(pathlib.Path(".").glob("*.md")) + sorted(pathlib.Path("docs").glob("**/*.md"))
+raw = {f: f.read_text() for f in md}
+prose = {f: re.sub(r"^`{3}.*?^`{3}", "", t, flags=re.M | re.S) for f, t in raw.items()}
+links = {f: re.sub(r"`[^`]*`", "", p) for f, p in prose.items()}
+slug = lambda h: re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", h.strip().lower()))
+heads = {f.resolve(): [slug(m) for m in re.findall(r"^#+\s+(.*)$", p, re.M)] for f, p in prose.items()}
+bad = []
+for f in md:
+	for link in re.findall(r"\]\((?!https?:|mailto:)([^)\s]+)\)", links[f]):
+		path, _, anchor = link.partition("#")
+		target = (f.parent / path if path else f).resolve()
+		if not target.exists():
+			bad.append(f"{f}: missing file -> {link}")
+		elif anchor and anchor not in heads.get(target, []):
+			bad.append(f"{f}: missing anchor -> {link}")
+for en in md:
+	if en.parent.name == "ja" or not (en.parent.name == "docs" or en.name == "README.md"):
+		continue
+	ja = en.parent / "README.ja.md" if en.name == "README.md" else en.parent / "ja" / en.name
+	if not ja.exists():
+		bad.append(f"{en}: no Japanese twin")
+	else:
+		for label, pat, src in (("headings", r"^#+\s", prose), ("fences", r"^`{3}", raw), ("table rows", r"^\|", prose)):
+			a, b = (len(re.findall(pat, src[p], re.M)) for p in (en, ja))
+			if a != b:
+				bad.append(f"{en.name} vs {ja.name}: {label} {a} != {b}")
+print("\n".join(bad) or "docs ok")
+sys.exit(1 if bad else 0)
+PY
+```
+
+If `docs/ja/**` changed — authored or re-translated — run `bun run textlint` and fix every
+violation. It is the self-review on the translated output; do not commit with violations.
+
+Finish with `bun lint`.
+
+## Next steps
+
+- [`AGENTS.md`](../AGENTS.md) — the conventions for the code itself.
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — how to get a change through.

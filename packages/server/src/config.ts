@@ -1,0 +1,120 @@
+import { readFileSync } from "node:fs";
+import {
+	access,
+	cp,
+	mkdir,
+	readdir,
+	readFile,
+	writeFile,
+} from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseComponentRegistry } from "@yosegi/core";
+import { Composer, FileScreenRepository } from "@yosegi/core/app";
+
+// Package root (one level above src/). fileURLToPath also handles Windows/URL encoding correctly.
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// The version of this CLI (@yosegi/yosegi) itself. Read from package.json exactly once.
+// Stamped into the Registry to record which Yosegi build produced it, so that on read we can
+// compare it against the running version and tell whether the ledger was written by an older
+// Yosegi and is missing newer fields.
+let cachedYosegiVersion: string | null = null;
+export function yosegiVersion(): string {
+	if (cachedYosegiVersion === null) {
+		const raw = readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8");
+		const { version } = JSON.parse(raw) as { version?: unknown };
+		if (typeof version !== "string" || version.length === 0) {
+			throw new Error("Could not read the Yosegi version from package.json.");
+		}
+		cachedYosegiVersion = version;
+	}
+	return cachedYosegiVersion;
+}
+
+// Absolute path of the currently running CLI entry point. Via bin/yosegi.js this is the bin
+// path; via `bun --filter '@yosegi/yosegi' cli <command>` it's that entry's path instead.
+// Stamping it into the Registry means a reader doesn't have to guess which checkout the
+// `yosegi` in a rebuild line points to (used, like yosegiVersion, as Registry freshness info).
+export function yosegiCliPath(): string {
+	return resolve(process.argv[1]);
+}
+
+// The runtime store lives in the host's working directory. Placing it inside the package
+// (node_modules/@yosegi/...) would wipe out the user's screens on every reinstall, and would
+// fail to write at all in environments like CI or containers where node_modules is read-only.
+// Basing it on cwd puts the generated output under the host's control, so the host also
+// decides whether to commit it to the repository. Overridable with --data-dir.
+export const DEFAULT_DATA_DIR = resolve(process.cwd(), ".yosegi");
+
+// seeds/ is the git-tracked initial data (source of truth) and ships with the package, so it's
+// resolved relative to the package.
+const SEEDS_DIR = join(PACKAGE_ROOT, "seeds");
+
+async function pathExists(p: string): Promise<boolean> {
+	try {
+		await access(p);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+// Copies from seeds when data is uninitialized (for first run / fresh clone).
+export async function seedDataDir(dataDir = DEFAULT_DATA_DIR): Promise<void> {
+	await mkdir(screensDir(dataDir), { recursive: true });
+	const seedRegistry = join(SEEDS_DIR, "registry.json");
+	if (
+		!(await pathExists(registryPath(dataDir))) &&
+		(await pathExists(seedRegistry))
+	) {
+		await cp(seedRegistry, registryPath(dataDir));
+	}
+	// Screen seeding happens only on the first run. Basing it on an "is the directory empty"
+	// check would resurrect deleted screens on restart after a user deletes every screen, so we
+	// use a sentinel to make it a strictly one-time operation instead.
+	const seedScreens = join(SEEDS_DIR, "screens");
+	const sentinel = join(dataDir, ".screens-seeded");
+	if ((await pathExists(seedScreens)) && !(await pathExists(sentinel))) {
+		const current = await readdir(screensDir(dataDir)).catch(() => []);
+		// If user data already exists, skip the copy and just set the sentinel so future runs skip too.
+		if (current.length === 0) {
+			await cp(seedScreens, screensDir(dataDir), { recursive: true });
+		}
+		await writeFile(sentinel, "");
+	}
+}
+
+export function registryPath(dataDir = DEFAULT_DATA_DIR): string {
+	return join(dataDir, "registry.json");
+}
+
+export function screensDir(dataDir = DEFAULT_DATA_DIR): string {
+	return join(dataDir, "screens");
+}
+
+// Loads data/registry.json. If it doesn't exist, explains how to generate it.
+export async function loadRegistry(dataDir = DEFAULT_DATA_DIR) {
+	const path = registryPath(dataDir);
+	try {
+		const raw = await readFile(path, "utf8");
+		return parseComponentRegistry(JSON.parse(raw));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			throw new Error(
+				`Registry not found at ${path}. Generate it with: yosegi registry build --source <glob> --tsconfig <path>`,
+			);
+		}
+		throw error;
+	}
+}
+
+// Builds the runtime Composer. Every Adapter shares this instance.
+export async function createRuntimeComposer(
+	dataDir = DEFAULT_DATA_DIR,
+): Promise<Composer> {
+	await seedDataDir(dataDir);
+	const registry = await loadRegistry(dataDir);
+	const repository = new FileScreenRepository(screensDir(dataDir));
+	return new Composer(registry, repository);
+}

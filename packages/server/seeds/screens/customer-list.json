@@ -1,0 +1,31 @@
+{
+	"schemaVersion": "1.0",
+	"id": "customer-list",
+	"name": "Sample screen",
+	"status": "draft",
+	"componentRegistryVersion": "seed:synthetics",
+	"revision": 1,
+	"root": {
+		"id": "root",
+		"component": "Box",
+		"props": { "className": "flex flex-col gap-4 p-6" },
+		"slots": {
+			"children": [
+				{
+					"id": "title",
+					"component": "Heading",
+					"props": { "text": "Sample screen" },
+					"slots": {}
+				},
+				{
+					"id": "desc",
+					"component": "Text",
+					"props": {
+						"text": "Run registry build to pull the host's components into the registry, explore them with component list / inspect, then assemble a screen."
+					},
+					"slots": {}
+				}
+			]
+		}
+	}
+}

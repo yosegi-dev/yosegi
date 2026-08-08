@@ -1,0 +1,69 @@
+{
+	"name": "@yosegi/core",
+	"description": "Yosegi domain layer: Screen JSON schema, validator, CSF emitter, and registry normalization (framework-agnostic)",
+	"version": "0.1.0",
+	"license": "MIT",
+	"author": "dachi023",
+	"homepage": "https://github.com/yosegi-dev/yosegi#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/yosegi-dev/yosegi.git",
+		"directory": "packages/core"
+	},
+	"bugs": {
+		"url": "https://github.com/yosegi-dev/yosegi/issues"
+	},
+	"keywords": [
+		"storybook",
+		"csf",
+		"design-system",
+		"ui",
+		"codegen",
+		"ai-agent"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/domain/index.d.ts",
+			"default": "./dist/domain/index.js"
+		},
+		"./app": {
+			"types": "./dist/application/index.d.ts",
+			"default": "./dist/application/index.js"
+		},
+		"./emit": {
+			"types": "./dist/emit/index.d.ts",
+			"default": "./dist/emit/index.js"
+		},
+		"./registry": {
+			"types": "./dist/registry/index.d.ts",
+			"default": "./dist/registry/index.js"
+		},
+		"./testing": {
+			"types": "./dist/test-fixtures.d.ts",
+			"default": "./dist/test-fixtures.js"
+		}
+	},
+	"files": [
+		"dist",
+		"LICENSE",
+		"README.md"
+	],
+	"scripts": {
+		"build": "bun -e \"import{rmSync}from'node:fs';rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+		"prepack": "bun run build",
+		"test": "bun --smol test",
+		"typecheck": "bun --smol tsc --noEmit",
+		"lint": "bun --smol biome check ."
+	},
+	"dependencies": {
+		"zod": "catalog:"
+	},
+	"engines": {
+		"node": ">=20"
+	}
+}

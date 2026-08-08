@@ -1,0 +1,8 @@
+[install]
+# With a hoisted layout, a dependency that's missing from package.json can
+# still be imported as long as it ends up at the root of node_modules. If
+# that slips through, resolution only fails once a consumer installs the
+# published tarball (their node_modules won't have anyone else's dependency).
+# With isolated, an undeclared dependency is never visible in the first
+# place, so a missing dependency declaration fails right here in this repo.
+linker = "isolated"

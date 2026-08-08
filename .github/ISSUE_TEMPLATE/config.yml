@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/yosegi-dev/yosegi/tree/main/docs
+    about: Commands and flags, the Screen JSON format, and the workflows.
+  - name: Component registry limitations
+    url: https://github.com/yosegi-dev/yosegi/blob/main/docs/registry.md#patterns-that-do-not-extract-cleanly
+    about: Read this first if a component's props came back empty.
+  - name: Contributing
+    url: https://github.com/yosegi-dev/yosegi/blob/main/CONTRIBUTING.md
+    about: Development setup, language policy, and commit conventions.

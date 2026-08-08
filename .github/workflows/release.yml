@@ -1,0 +1,135 @@
+name: Release
+
+# Publishing is triggered by pushing a v* tag. npm authentication goes
+# through Trusted Publishing (OIDC), so this repository never holds an npm
+# token.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  # Kept separate from the publish job to minimize what runs with
+  # id-token: write. If this job fails, publish never runs.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+          # Publishing runs from this tag-triggered workflow, so a poisoned
+          # actions/cache entry could smuggle a compromised bun executable
+          # into the release. Skip the cache entirely rather than trust it.
+          no-cache: true
+      - run: bun install --frozen-lockfile
+      - name: Lint
+        run: bun run lint
+      - name: Test
+        run: |
+          bun --filter '@yosegi/*' test
+          bun run test:scripts
+      - name: Typecheck
+        run: |
+          bun --filter '@yosegi/*' typecheck
+          bun run typecheck:scripts
+      - name: Build
+        run: bun run build
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Required to issue the OIDC token for Trusted Publishing. This is the
+      # only authentication mechanism used; there's no secrets.NPM_TOKEN or
+      # similar.
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+          # Same reasoning as the verify job: don't let a cached executable
+          # ride into the job that actually publishes.
+          no-cache: true
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          # No package.json at the repo root declares a cache-relevant
+          # package manager, but disable it explicitly rather than rely on
+          # that: this job publishes, so a poisoned cache is the highest-value
+          # target in the whole workflow.
+          package-manager-cache: false
+      # Trusted Publishing only works on npm CLI 11.5.1 or later, and the npm
+      # bundled with Node can be older, so we upgrade it explicitly. Using
+      # @latest would let publish behavior change the day the next major
+      # version ships, without this repository changing at all, so we pin to
+      # a range instead.
+      - name: Ensure npm supports trusted publishing
+        # zizmor: ignore[adhoc-packages] bootstraps the npm CLI itself before
+        # anything else runs; there's no lockfile for the tool that would
+        # read one.
+        run: |
+          npm install -g "npm@^11.5.1"
+          npm --version
+      - run: bun install --frozen-lockfile
+      # A mismatch between the tag and the version can't be undone once
+      # published (npm won't let you overwrite the same version). Stop here
+      # if the pushed tag disagrees with package.json.
+      - name: Check the tag matches the package versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for pkg in packages/core packages/server; do
+            version="$(node -p "require('./$pkg/package.json').version")"
+            if [ "$version" != "$tag" ]; then
+              echo "::error::$pkg is at $version but the tag is v$tag"
+              exit 1
+            fi
+          done
+          # @yosegi/yosegi requires an exact version of core. If this is out
+          # of sync, an install right after publishing would try to fetch a
+          # version that doesn't exist.
+          dependency="$(node -p "require('./packages/server/package.json').dependencies['@yosegi/core']")"
+          if [ "$dependency" != "$tag" ]; then
+            echo "::error::@yosegi/yosegi depends on @yosegi/core@$dependency, not $tag"
+            exit 1
+          fi
+      # Publishing points at a tarball. Running `npm publish` from a package's
+      # own directory would bundle the package.json with Bun's `catalog:`
+      # still unresolved, and every consumer's install would then fail with
+      # EUNSUPPORTEDPROTOCOL (--dry-run doesn't warn about this). Letting Bun
+      # handle packing alone gives us a manifest with everything resolved.
+      # The script runs the build via prepack, confirms no `catalog:` /
+      # `workspace:` remain and that every file the manifest references is
+      # actually present, then prints the tarball paths in publish order.
+      - name: Pack and verify what will be published
+        run: |
+          bun run scripts/pack.ts "$RUNNER_TEMP/tarballs" > "$RUNNER_TEMP/tarballs.txt"
+          # Logs the manifest that's actually being shipped. This is the only
+          # place we can later check "what did we send" after publishing.
+          while read -r tarball; do
+            echo "=== $tarball ==="
+            tar -xzOf "$tarball" package/package.json
+          done < "$RUNNER_TEMP/tarballs.txt"
+      # core goes first. @yosegi/yosegi requires an exact version of core, so
+      # reversing the order would let an install that lands between the two
+      # publishes fail to resolve. pack.ts already returns them in publish order.
+      - name: Publish to npm
+        run: |
+          while read -r tarball; do
+            echo "Publishing $tarball"
+            npm publish "$tarball" --provenance
+          done < "$RUNNER_TEMP/tarballs.txt"

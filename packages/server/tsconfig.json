@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"paths": {
+			"@yosegi/core": ["../core/src/domain/index.ts"],
+			"@yosegi/core/app": ["../core/src/application/index.ts"],
+			"@yosegi/core/emit": ["../core/src/emit/index.ts"],
+			"@yosegi/core/registry": ["../core/src/registry/index.ts"],
+			"@yosegi/core/testing": ["../core/src/test-fixtures.ts"]
+		}
+	},
+	"include": ["src/**/*.ts", "scripts/**/*.ts"]
+}

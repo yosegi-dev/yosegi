@@ -1,0 +1,14 @@
+{
+	"rules": {
+		"preset-ja-technical-writing": {
+			"sentence-length": {
+				"max": 120
+			},
+			"no-mix-dearu-desumasu": {
+				"preferInBody": "である"
+			},
+			"ja-no-mixed-period": false,
+			"no-unmatched-pair": false
+		}
+	}
+}

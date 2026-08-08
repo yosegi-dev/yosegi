@@ -1,0 +1,60 @@
+name: Bug report
+description: Something Yosegi produced is wrong, or a command failed.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A registry or a Story that comes out wrong is close to impossible to reproduce without the
+        host's setup and the exact command. Please fill in every field.
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "`@yosegi/yosegi`, Node.js, and the package manager you installed with."
+      placeholder: "yosegi 0.1.0 / Node 22.11.0 / pnpm 9.12.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: host
+    attributes:
+      label: Host setup
+      description: >
+        Where the tsconfig lives relative to the repository root, the `--source` glob you passed,
+        and `--project-root` if you set it. In a monorepo, say which package.
+      placeholder: |
+        tsconfig: packages/web/tsconfig.json
+        --source: "app/components/**/*.tsx"
+        --project-root: not set
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Full command
+      description: The command as you ran it, with every flag. Redact paths, but keep their shape.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: input
+    attributes:
+      label: Screen JSON and output
+      description: >
+        The Screen JSON you passed (or the smallest version that still reproduces it), and what the
+        command printed — the validation errors, the statistics block, or the error JSON.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What you expected to happen, and what happened instead.
+    validations:
+      required: true

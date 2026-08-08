@@ -1,0 +1,29 @@
+{
+	"version": "seed:synthetics",
+	"components": [
+		{
+			"id": "Box",
+			"name": "Box",
+			"category": "Components",
+			"import": { "packageName": "@yosegi/synthetic", "exportName": "Box" },
+			"props": { "className": { "kind": "string" } },
+			"slots": { "children": {} }
+		},
+		{
+			"id": "Heading",
+			"name": "Heading",
+			"category": "Components",
+			"import": { "packageName": "@yosegi/synthetic", "exportName": "Heading" },
+			"props": { "text": { "kind": "string" } },
+			"slots": {}
+		},
+		{
+			"id": "Text",
+			"name": "Text",
+			"category": "Components",
+			"import": { "packageName": "@yosegi/synthetic", "exportName": "Text" },
+			"props": { "text": { "kind": "string" } },
+			"slots": {}
+		}
+	]
+}

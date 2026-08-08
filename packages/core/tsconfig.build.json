@@ -1,0 +1,16 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"declaration": true,
+		"declarationMap": true,
+		"outDir": "dist",
+		"rootDir": "src",
+		// Relative imports in source are written with a `.ts` extension.
+		// rewriteRelativeImportExtensions rewrites them to `.js` on output, so dist
+		// resolves correctly under Node's ESM resolution too.
+		"rewriteRelativeImportExtensions": true
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["src/**/*.test.ts"]
+}
