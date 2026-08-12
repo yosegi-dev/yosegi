@@ -881,6 +881,14 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 				`Warning: --source matched no files (--project-root: ${projectRoot}). Globs are relative to that directory.`,
 			);
 		}
+		// The mirror image of the warning above: the glob matched files, but none of them
+		// exported a React component (a non-React project, or globs that only cover
+		// utilities). Only files: 0 warning would leave this case looking like a success.
+		if (stats.files > 0 && stats.componentCandidates === 0) {
+			print(
+				`Warning: ${stats.files} files were read but no React component exports were found; check that the glob includes .tsx files and the project uses React.`,
+			);
+		}
 		// A --metadata id that matched nothing is almost certainly a typo. Dropping it
 		// silently would hide the reason the supplement had no effect, so name it explicitly.
 		if (unusedMetadataIds.length > 0) {

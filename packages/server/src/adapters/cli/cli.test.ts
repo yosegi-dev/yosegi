@@ -1329,6 +1329,38 @@ describe("runCli", () => {
 		expect(output()).toContain("--source matched no files");
 	});
 
+	// A glob that matches files but no component exports (a non-React project, or globs
+	// covering only utilities) used to look identical to a successful build.
+	it("registry build --source がコンポーネントを1つも見つけないときは警告を出す", async () => {
+		const hostRoot = join(dataDir, "nonreact-host");
+		await mkdir(join(hostRoot, "src"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["src"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "src", "util.ts"),
+			"export function formatLabel(label: string): string {\n\treturn label.trim();\n}\n",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"src/**/*.ts",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--data-dir",
+			join(dataDir, "nonreact-data"),
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain("no React component exports were found");
+		// The glob did match, so the files: 0 warning must stay silent.
+		expect(output()).not.toContain("--source matched no files");
+	});
+
 	it("registry build --source は --tsconfig 無しだとエラーになる", async () => {
 		const code = await runCli([
 			"registry",
