@@ -106,6 +106,30 @@ const RESERVED_FIXTURE_NAMES: ReadonlySet<string> = new Set(
 	EMIT_RESERVED_IDENTIFIERS,
 );
 
+// A fixture's value is emitted verbatim into the Story as source code, so only
+// values with a JSON form are representable. `z.unknown()` would also admit
+// `undefined`, `Date`, `Map`, functions — values JSON.stringify silently drops
+// or mangles — so the schema spells the JSON grammar out recursively and
+// rejects everything else up front.
+export type JsonValue =
+	| string
+	| number
+	| boolean
+	| null
+	| JsonValue[]
+	| { [key: string]: JsonValue };
+
+export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+	z.union([
+		z.string(),
+		z.number(),
+		z.boolean(),
+		z.null(),
+		z.array(jsonValueSchema),
+		z.record(z.string(), jsonValueSchema),
+	]),
+);
+
 // Fixtures are the screen's mock-data layer: each entry becomes a top-level
 // `const <name> = <JSON value>;` in the generated Story, and bindings reference
 // the names. Name legality is checked here rather than with a validation code:
@@ -114,7 +138,7 @@ const RESERVED_FIXTURE_NAMES: ReadonlySet<string> = new Set(
 // screenIdSchema's file-name restriction — so it fails the same way
 // (INVALID_REQUEST, before validation is ever reached).
 export const fixturesSchema = z
-	.record(z.string(), z.unknown())
+	.record(z.string(), jsonValueSchema)
 	.superRefine((fixtures, ctx) => {
 		for (const name of Object.keys(fixtures)) {
 			if (!isJsIdentifier(name)) {

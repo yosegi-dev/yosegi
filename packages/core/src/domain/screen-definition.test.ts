@@ -120,6 +120,22 @@ describe("fixtures constraints", () => {
 		expect(withFixtures({ Meta: {} })).toThrow();
 		expect(withFixtures({ StoryObj: {} })).toThrow();
 	});
+
+	// A fixture is emitted verbatim as Story source, so anything JSON.stringify
+	// would drop or mangle has to be rejected before the screen is ever saved.
+	it("rejects values that have no JSON form", () => {
+		expect(withFixtures({ value: undefined })).toThrow();
+		expect(withFixtures({ value: new Date() })).toThrow();
+		expect(withFixtures({ value: new Map() })).toThrow();
+		expect(withFixtures({ value: () => 1 })).toThrow();
+		expect(withFixtures({ value: Number.NaN })).toThrow();
+		expect(withFixtures({ value: Number.POSITIVE_INFINITY })).toThrow();
+	});
+
+	it("rejects a non-JSON value nested inside an otherwise valid fixture", () => {
+		expect(withFixtures({ rows: [{ createdAt: new Date() }] })).toThrow();
+		expect(withFixtures({ rows: { deep: [undefined] } })).toThrow();
+	});
 });
 
 describe("bindingRootIdentifier", () => {
