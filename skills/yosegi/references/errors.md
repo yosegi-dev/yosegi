@@ -11,9 +11,10 @@ at before fixing anything.
    Validation was never reached at all.
 4. **A command error** — `{ "error": { "code": "...", "message": "..." } }`, exit code 1. The
    command failed before or outside validation, and the code says how: `MISSING_ARGUMENT`,
-   `UNKNOWN_COMMAND`, `UNKNOWN_FLAG`, `REGISTRY_NOT_FOUND`, `INVALID_ARGUMENT`, `INVALID_JSON`, or
-   `INTERNAL_ERROR` for everything else. It is JSON with a `code`, so do not go looking for a bare
-   `Error:` line. The table at the bottom of this file covers each code.
+   `UNKNOWN_COMMAND`, `UNKNOWN_FLAG`, `REGISTRY_NOT_FOUND`, `INVALID_ARGUMENT`, `INVALID_JSON`,
+   a lookup miss such as `COMPONENT_NOT_FOUND` / `SCREEN_NOT_FOUND`, or `INTERNAL_ERROR` for
+   everything else. It is JSON with a `code`, so do not go looking for a bare `Error:` line. The
+   table at the bottom of this file covers each code.
 5. **Plain-text notices** — `Warning:` or `Note:` lines printed alongside a *successful* run. They
    carry no `code` and are easy to scroll past. They are listed at the bottom of this file.
 
@@ -159,6 +160,8 @@ reached the screen. Every code is self-correcting from the payload alone:
 | `REGISTRY_NOT_FOUND` | No registry where the command looked; `path` and `dataDir` name the location consulted | Either you have not built one yet, or `--data-dir` differs from the one `registry build` wrote to. Check the second before rebuilding — the default (`.yosegi` under the cwd) moves with your working directory |
 | `INVALID_ARGUMENT` | The argument combination is unusable (e.g. `--source` without `--tsconfig`) | Fix the invocation as the message says |
 | `INVALID_JSON` | The file you passed is not valid JSON | Fix the file. The message says "Input file", not "Request body", on the CLI |
+| `COMPONENT_NOT_FOUND` | The id you passed to `component inspect` (or wrote in a screen operation) is not in the registry | Take the `suggestion` (did-you-mean over the registry). A short id (`Button`) may need the full `<module path>#<export>` form from `component list` |
+| `SCREEN_NOT_FOUND` | No saved screen has that id | List the saved screens (`yosegi screen list`) and use an id from there |
 | `INTERNAL_ERROR` | Everything else, with the underlying message attached | Read the message; the table below lists the frequent ones |
 
 The frequent `INTERNAL_ERROR` messages:
