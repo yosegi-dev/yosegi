@@ -189,9 +189,13 @@ export class FileScreenRepository implements ScreenRepository {
 		const warnings: ScreenListWarning[] = [];
 		for (const file of files) {
 			let screen: ScreenDefinition;
+			let modifiedAt: string;
 			try {
 				const raw = await readFile(join(this.dir, file), "utf8");
 				screen = parseScreenDefinition(JSON.parse(raw));
+				// stat sits inside the same guard: the file can vanish between readFile and
+				// stat, and one disappearing file must not take the whole listing down.
+				modifiedAt = (await stat(join(this.dir, file))).mtime.toISOString();
 			} catch (error) {
 				warnings.push({
 					file,
@@ -209,8 +213,7 @@ export class FileScreenRepository implements ScreenRepository {
 				});
 				continue;
 			}
-			const info = await stat(join(this.dir, file));
-			screens.push(toSummary(screen, info.mtime.toISOString()));
+			screens.push(toSummary(screen, modifiedAt));
 		}
 		return {
 			screens: screens.sort((a, b) => a.id.localeCompare(b.id)),

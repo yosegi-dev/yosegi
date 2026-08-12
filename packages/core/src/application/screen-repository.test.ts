@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SERVICE_CODES } from "../domain/errors.ts";
@@ -193,5 +193,16 @@ describe("FileScreenRepository: 読めないファイルの混入", () => {
 		expect(list.warnings[0].file).toBe("alpha.json");
 		expect(list.warnings[0].message).toContain('"beta"');
 		expect(await repo.get("beta")).toBe(null);
+	});
+
+	// A file readdir listed can be gone by the time it is read or stat-ed (deleted
+	// mid-listing). The dangling symlink reproduces that ENOENT deterministically.
+	it("読み込み時に消えているファイルは警告付きでスキップする", async () => {
+		const { dir, repo } = await repoWithSample();
+		await symlink(join(dir, "missing.json"), join(dir, "ghost.json"));
+		const list = await repo.list();
+		expect(list.screens.map((s) => s.id)).toEqual(["customer-list"]);
+		expect(list.warnings).toHaveLength(1);
+		expect(list.warnings[0].file).toBe("ghost.json");
 	});
 });
