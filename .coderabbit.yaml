@@ -1,0 +1,169 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+# CodeRabbit configuration for Yosegi.
+# Reference: https://docs.coderabbit.ai/reference/configuration
+
+# This repository is public and CONTRIBUTING.md targets outside contributors, so review comments
+# follow the same rule as the rest of the repository: English.
+language: en-US
+
+tone_instructions: |
+  Review in English. Prefix each comment with [MUST]/[SHOULD]/[IMO]/[nits]/[Q], then state
+  fact -> impact -> suggested fix. Cite AGENTS.md when a written rule is broken.
+
+reviews:
+  # "assertive" turns into nit-picking on a two-package repository.
+  profile: "chill"
+  high_level_summary: true
+  collapse_walkthrough: true
+  related_prs: true
+  # AI poems add nothing to a PR that agents also read.
+  poem: false
+
+  auto_review:
+    enabled: true
+    # PRs are opened as drafts by default here, so skipping drafts would skip almost everything.
+    drafts: true
+    # Stacked PRs target another feature branch, not main. Without this, only PRs against the
+    # default branch are reviewed.
+    base_branches:
+      - ".*"
+
+  # path_filters is intentionally empty. Everything generated in this repository is already
+  # untracked (node_modules/, dist/, .pack/, .yosegi/, data/, packages/server/skills/), and
+  # bun.lock is covered by CodeRabbit's default *.lock ignore. The one generated path worth
+  # noticing is packages/server/skills/**, which is handled by a path_instruction below so that a
+  # mistaken commit gets flagged rather than silently skipped.
+
+  tools:
+    # Biome owns formatting and linting here; ESLint and friends are not used.
+    biome:
+      enabled: true
+    actionlint:
+      enabled: true
+    # CI already carries zizmor ignore comments, so the same analyzer runs on the PR itself.
+    zizmor:
+      enabled: true
+    gitleaks:
+      enabled: true
+    # The repository has no markdownlint config, and docs/conventions.md prescribes a house style
+    # (100-column wrap, stacked package-manager blocks) that default rules argue with.
+    markdownlint:
+      enabled: false
+    # English pages are deliberately terse and docs/ja/** is already linted by textlint
+    # (.textlintrc.json), so grammar checking here is noise on both sides.
+    languagetool:
+      enabled: false
+
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Prefix every comment with one of the following, and order the body fact -> impact ->
+        suggested fix:
+        - [MUST]: real damage once merged (unmet requirement, security or performance defect).
+          Blocks the merge.
+        - [SHOULD]: violates a rule written down in AGENTS.md, docs/conventions.md, or
+          CONTRIBUTING.md. Blocks the merge.
+        - [IMO]: optional improvement or an alternative angle. Does not block.
+        - [nits]: typo or style, unrelated to behaviour. Does not block.
+        - [Q]: a question, where the right answer is not decidable from the diff. Does not block.
+
+        Decide in this order: a question is [Q]; otherwise real damage is [MUST], a written-rule
+        violation is [SHOULD], a design suggestion is [IMO], and anything else is [nits]. When
+        torn between two labels, take the weaker one.
+
+        [MUST] and [SHOULD] must name their evidence — the failing code path and how to reproduce
+        it, or the rule file and heading being violated. Without evidence, downgrade to [IMO].
+
+    - path: "packages/**/*.ts"
+      instructions: |
+        AGENTS.md "Coding conventions" applies:
+        - No `any`, no `biome-ignore`, no `@ts-ignore`. TypeScript strict mode stays on.
+        - Nullable values are `| null`, never `undefined`.
+        - Relative imports carry an explicit `.ts` extension. Without it the build still passes
+          lint, tests, and typecheck, and only breaks non-Bun consumers.
+        - New logic needs a `*.test.ts` beside its source, using `bun:test`.
+        - User-facing strings and code comments are English. Comments explain why, especially where
+          the obvious implementation was rejected; they do not narrate the code.
+
+    - path: "packages/core/**/*.ts"
+      instructions: |
+        `@yosegi/core` is framework-agnostic with zod as its only dependency. Flag any import of
+        `node:fs`, `node:path` for filesystem access, `typescript`, or another runtime dependency —
+        that code belongs in `packages/server`. Check that new modules stay inside the published
+        subpaths (`.`, `/app`, `/emit`, `/registry`, `/testing`) and that a new export is added to
+        `package.json` `exports`.
+
+    - path: "packages/server/src/adapters/cli/**/*.ts"
+      instructions: |
+        Behaviour that only shows up in the CLI needs coverage in
+        `packages/server/src/adapters/cli/cli.test.ts`. Check that failures go through the coded
+        error contract rather than an ad-hoc message, that the MCP tools in
+        `packages/server/src/adapters/mcp` stay in parity with any new CLI capability, and that
+        docs/cli.md plus docs/ja/cli.md and skills/yosegi/references/cli.md are updated when a flag
+        changes.
+
+    - path: "{package.json,packages/*/package.json,bun.lock}"
+      instructions: |
+        AGENTS.md "Publishing" applies:
+        - A dependency that reaches a published `.d.ts` takes a caret range, never an exact pin
+          (`zod`, `hono`, `@modelcontextprotocol/sdk`, `typescript`). A duplicated copy of a class
+          with private members is a type error the consumer cannot work around. `typescript` keeps
+          its `<7` upper bound: TypeScript 7.0 ships no compiler API.
+        - A dependency the consumer cannot reach stays exactly pinned, for reproducibility
+          (`react-docgen-typescript`, the root `typescript` devDependency).
+        - `@yosegi/core` is the exception: exactly pinned, because the two packages release in
+          lockstep.
+        - A version bump must update `packages/server`'s `@yosegi/core` dependency and `bun.lock`
+          in the same commit, and a `catalog` edit must be committed together with the `bun.lock`
+          produced by `bun install`. `bun pm pack` substitutes from the lockfile, so a stale
+          lockfile ships a dependency on a version that does not exist.
+        - A new consumer-facing dependency also belongs in the `node-consumer` job in
+          `.github/workflows/ci.yml`, which is what keeps the pinning rule honest.
+
+    - path: "{README.md,README.ja.md,docs/**/*.md}"
+      instructions: |
+        docs/conventions.md applies:
+        - Each page owns one subject; a concept is explained only where it is owned, and every
+          other page links there.
+        - A step is a command block plus one line of purpose. Cut any sentence that does not change
+          what the reader does next. Wrap at 100 columns.
+        - Package managers are stacked npm / pnpm / yarn / bun, in that order, and globs are quoted.
+        - Every `docs/x.md` has a `docs/ja/x.md` twin, and `README.md` has `README.ja.md`, changed
+          in the same commit with the same headings, code blocks, and tables. Flag an English-only
+          change to a page that has a twin.
+        - Use the terminology table: Component Registry, Screen JSON, synthetic primitives, the
+          host, Story / CSF, `@yosegi/yosegi` (never `@yosegi/server`), Agent Skill.
+        - No host project or company names, no host-specific component names, no absolute local
+          paths.
+
+    - path: "skills/yosegi/**"
+      instructions: |
+        The skill is distributed as a self-contained unit. It must never link out to `docs/` or to
+        a URL for anything essential — `SKILL.md` sends the reader into `references/` and nowhere
+        else. Content overlapping a `docs/` page is duplicated here on purpose; check that the
+        duplicate was updated too. English only.
+
+    - path: "packages/server/skills/**"
+      instructions: |
+        [MUST] This directory is a generated mirror of the repository-root `skills/`, produced by
+        `packages/server/scripts/sync-skills.ts` and gitignored. Any diff here means the mirror was
+        edited or committed by mistake; the change belongs in `skills/` at the repository root.
+
+    - path: ".github/workflows/**/*.yml"
+      instructions: |
+        Actions are pinned to a full commit SHA with the version as a trailing comment, `permissions`
+        is least-privilege per job, and checkout uses `persist-credentials: false`. Flag any secret
+        written inline. The `node-consumer` job must keep packing through `scripts/pack.ts`, since a
+        tarball built any other way would not be the one that gets published.
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "CONTRIBUTING.md"
+      - "docs/conventions.md"
