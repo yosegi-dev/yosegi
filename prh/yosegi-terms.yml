@@ -1,0 +1,39 @@
+# Terminology dictionary for the Japanese documentation (README.ja.md, docs/ja/**).
+# Enforced through textlint-rule-prh; docs/conventions.md holds the human-readable
+# terminology table this file implements.
+version: 1
+rules:
+  # A UI component is コンポーネント — never 部品, and never the bare English word
+  # in Japanese prose. "Component Registry" / "Component Manifest" keep their
+  # capital C and are untouched by the lowercase-only pattern.
+  - expected: コンポーネント
+    pattern: 部品
+  - expected: コンポーネント
+    pattern: /\bcomponent\b/
+  - expected: Manifest
+    pattern: /\bmanifest\b/
+  - expected: エラー
+    pattern: /\berror\b/
+  - expected: 警告
+    pattern: /\bwarning\b/
+  - expected: キュレーション
+    pattern: /\bcuration\b/
+  - expected: サードパーティ
+    pattern: 第三者
+  - expected: サードパーティ
+    pattern: /\bthird-party\b/
+  - expected: 再 export
+    pattern: 再エクスポート
+  - expected: ラッパー
+    pattern: /\bwrapper\b/
+  # サーバ, not サーバー (applies to server / dev server alike).
+  - expected: サーバ
+    pattern: サーバー
+  # "an exact version" is 厳密なバージョン and "a real version" is 実際のバージョン.
+  # 実バージョン conflates the two; the replacement below covers the common case,
+  # and exact-version sentences are reworded by hand.
+  - expected: 実際のバージョン
+    pattern: 実バージョン
+  # npm's registry is npm レジストリ, keeping it apart from Yosegi's Registry.
+  - expected: npm レジストリ
+    pattern: /(?<!npm )レジストリ/

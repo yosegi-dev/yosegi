@@ -9,6 +9,10 @@
 			},
 			"ja-no-mixed-period": false,
 			"no-unmatched-pair": false
+		},
+		"prh": {
+			"severity": "warning",
+			"rulePaths": ["prh/yosegi-terms.yml"]
 		}
 	}
 }
