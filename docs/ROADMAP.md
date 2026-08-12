@@ -4,13 +4,13 @@ English | [日本語](./ja/ROADMAP.md)
 
 What is planned, and what is still undecided. For what Yosegi does today, start from
 [`README.md`](../README.md); for how the Component Registry works, see
-[Component registry](./registry.md).
+[Component Registry](./registry.md).
 
 ## Registry extraction
 
 ### Rescue the props the extractor cannot read today
 
-Three kinds of component come back with only `className` / `children`: a value cast to an overloaded
+Two kinds of component come back with only `className` / `children`: a value cast to an overloaded
 call signature type, and re-exports of third-party components. Reading the first parameter of the
 call signature directly through the TypeChecker should recover them.
 

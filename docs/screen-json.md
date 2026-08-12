@@ -83,7 +83,7 @@ several of them (`Card` / `CardHeader` / `CardBody`), which a bare export name c
 `CardHeader` produces `COMPONENT_NOT_FOUND` with the full id as the candidate.
 
 The `--index`-only mode still produces short ids (`Button`), kept for compatibility. See
-[Component registry](./registry.md).
+[Component Registry](./registry.md).
 
 ## Synthetic primitives
 

@@ -1,4 +1,4 @@
-# Component registry
+# Component Registry
 
 English | [日本語](./ja/registry.md)
 

@@ -121,7 +121,7 @@ Then: *"build me a screen proposal from the existing components"*.
 | [CLI reference](./docs/cli.md) | Every command and flag, plus the MCP tools |
 | [Development](./docs/development.md) | Package layout, build, pre-publish verification |
 | [Roadmap](./docs/ROADMAP.md) | Planned work and open questions |
-| [Component registry](./docs/registry.md) | How types become a catalog, and the measurements |
+| [Component Registry](./docs/registry.md) | How types become a catalog, and the measurements |
 
 Working in this repository: [`AGENTS.md`](./AGENTS.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md),
 [documentation conventions](./docs/conventions.md).
