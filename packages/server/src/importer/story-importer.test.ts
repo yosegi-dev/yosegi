@@ -725,6 +725,29 @@ describe("importStory", () => {
 			expect(imported.fixtures).toEqual({});
 		});
 
+		it("let / var 宣言は OPAQUE_FIXTURE として警告し fixture に読まない", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"let rows = [1, 2];",
+				"var pageSize = 20;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+			]);
+			expect(imported.warnings[0].message).toContain('"rows"');
+			expect(imported.warnings[0].message).toContain('"let"');
+			expect(imported.warnings[1].message).toContain('"pageSize"');
+			expect(imported.warnings[1].message).toContain('"var"');
+			expect(imported.fixtures).toEqual({});
+		});
+
 		it("export された const は fixture として読まない", () => {
 			const source = [
 				'import { Table } from "~/components/table";',

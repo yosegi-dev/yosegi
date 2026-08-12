@@ -940,6 +940,22 @@ function collectFixtures(
 				continue;
 			}
 			const name = declaration.name.text;
+			// emit writes fixtures as consts, and a `let` / `var` declares intent to
+			// reassign — a mutable top-level is Story machinery, not screen mock
+			// data, so it is skipped rather than snapshotted at its initial value.
+			if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
+				const keyword =
+					(statement.declarationList.flags & ts.NodeFlags.Let) === 0
+						? "var"
+						: "let";
+				warn(
+					context,
+					"OPAQUE_FIXTURE",
+					`Top-level "${name}" is declared with "${keyword}", so it was not imported as a fixture (only const declarations are)`,
+					declaration,
+				);
+				continue;
+			}
 			const initializer = declaration.initializer;
 			if (!initializer) {
 				warn(
