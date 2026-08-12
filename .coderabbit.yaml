@@ -28,11 +28,14 @@ reviews:
     base_branches:
       - ".*"
 
-  # path_filters is intentionally empty. Everything generated in this repository is already
-  # untracked (node_modules/, dist/, .pack/, .yosegi/, data/, packages/server/skills/), and
-  # bun.lock is covered by CodeRabbit's default *.lock ignore. The one generated path worth
-  # noticing is packages/server/skills/**, which is handled by a path_instruction below so that a
-  # mistaken commit gets flagged rather than silently skipped.
+  # Nothing needs excluding: everything generated in this repository is already untracked
+  # (node_modules/, dist/, .pack/, .yosegi/, data/, packages/server/skills/). The single entry is
+  # the opposite — an override. bun.lock is tracked, and AGENTS.md requires it to change in the
+  # same commit as a version or catalog edit, but CodeRabbit's default ignore list drops *.lock.
+  # Without this line the lockfile never enters the review scope and the path_instruction for it
+  # below can never fire.
+  path_filters:
+    - "bun.lock"
 
   tools:
     # Biome owns formatting and linting here; ESLint and friends are not used.
