@@ -1,0 +1,24 @@
+# Categories for GitHub's auto-generated release notes, which the Release
+# workflow requests with --generate-notes. Categorization is label-based and
+# this repository only carries GitHub's default labels, so the mapping stays
+# minimal: an unlabeled pull request falls through to Other Changes, where its
+# Conventional Commits title still says what it did.
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other Changes
+      labels:
+        - "*"
