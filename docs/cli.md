@@ -294,7 +294,7 @@ claude mcp add yosegi -- npx yosegi mcp
 
 `generate_story` takes `root` — the ScreenNode alone, not the whole Screen JSON — and `importMap` is
 the same string the CLI takes, not an object. `search_components` returns summaries capped at
-`limit` (default 50) with `total` / `truncated`; `detail: "full"` returns complete manifests.
+`limit` (default 50, max 200) with `total` / `truncated`; `detail: "full"` returns complete manifests.
 `registry build`, `registry metadata`, and `story import` are CLI-only, and there is no MCP
 equivalent of `--meta-template`.
 

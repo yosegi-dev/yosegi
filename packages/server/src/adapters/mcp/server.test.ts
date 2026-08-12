@@ -92,6 +92,17 @@ describe("MCP server", () => {
 		expect(parsed.total).toBeGreaterThan(2);
 	});
 
+	// Without a ceiling, limit combined with detail: "full" could return every
+	// manifest in one oversized tool result.
+	it("search_components は上限を超える limit を拒否する", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "search_components",
+			arguments: { limit: 100000, detail: "full" },
+		});
+		expect((result as { isError?: boolean }).isError).toBe(true);
+	});
+
 	it("search_components は detail: full で Manifest を返す", async () => {
 		const client = await connect();
 		const result = await client.callTool({

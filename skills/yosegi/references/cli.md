@@ -340,7 +340,7 @@ claude mcp add yosegi -- npx yosegi mcp
 
 | MCP tool | Arguments | CLI equivalent |
 | --- | --- | --- |
-| `search_components` | `query`, `category`, `detail`, `limit` | `component list --query --category` — returns summaries capped at `limit` (default 50) with `total` / `truncated`; `detail: "full"` returns complete manifests |
+| `search_components` | `query`, `category`, `detail`, `limit` | `component list --query --category` — returns summaries capped at `limit` (default 50, max 200) with `total` / `truncated`; `detail: "full"` returns complete manifests |
 | `get_component` | `componentId` | `component inspect` — an unknown id returns `COMPONENT_NOT_FOUND` with the same did-you-mean `suggestion` |
 | `list_categories` | — | the `categories` field of `component list --json` |
 | `get_registry_status` | — | `registry status`, provenance only: it reports version / build time / inputs and the version-mismatch warning, but does not recompute source drift |

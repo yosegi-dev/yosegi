@@ -288,7 +288,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
 `generate_story` が取る `root` は ScreenNode 単体であって Screen JSON 全体ではない。`importMap` は
-CLI と同じ文字列で、オブジェクトではない。`search_components` は `limit`（既定 50）で打ち切った
+CLI と同じ文字列で、オブジェクトではない。`search_components` は `limit`（既定 50、上限 200）で打ち切った
 要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返す。
 `registry build`・`registry metadata`・`story import` は CLI にしか無く、`--meta-template` に相当する
 MCP の口も無い。

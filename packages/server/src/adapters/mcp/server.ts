@@ -54,12 +54,14 @@ export function createMcpServer(composer: Composer): McpServer {
 		"search_components",
 		{
 			description:
-				'Search the registered components by name and category. Returns summaries (id, category, prop-type tokens, slots) capped at `limit`; pass detail: "full" for complete manifests',
+				'Search the registered components by name and category. Returns summaries (id, category, prop-type tokens, slots) capped at `limit` (default 50, max 200); pass detail: "full" for complete manifests',
 			inputSchema: {
 				query: z.string().optional(),
 				category: z.string().optional(),
 				detail: z.enum(["summary", "full"]).optional(),
-				limit: z.number().int().positive().optional(),
+				// The cap keeps a detail: "full" response from ballooning into an
+				// unbounded tool result on a large registry.
+				limit: z.number().int().positive().max(200).optional(),
 			},
 		},
 		async ({ query, category, detail, limit }) => {
