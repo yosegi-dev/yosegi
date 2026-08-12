@@ -41,6 +41,9 @@ props read from types, deterministic output. See [`docs/registry.md`](./docs/reg
 
 Details in [`docs/workflows.md`](./docs/workflows.md).
 
+Storybook 10.3+ ships an official MCP server and Component Manifest of its own. Yosegi complements
+them rather than competing; the split is in [`docs/storybook-mcp.md`](./docs/storybook-mcp.md).
+
 ## Install
 
 Requires Node.js 20+. Any package manager. The registry reads your types through the TypeScript 6.x
@@ -113,6 +116,7 @@ Then: *"build me a screen proposal from the existing components"*.
 | --- | --- |
 | [Getting started](./docs/getting-started.md) | Team setup and the full walkthrough |
 | [Workflows](./docs/workflows.md) | Use cases, upstream and downstream loops, error codes |
+| [Storybook MCP and Yosegi](./docs/storybook-mcp.md) | The overlap with Storybook's official MCP, and the split |
 | [Screen JSON](./docs/screen-json.md) | Component ids, synthetic primitives, bindings / events |
 | [CLI reference](./docs/cli.md) | Every command and flag, plus the MCP tools |
 | [Development](./docs/development.md) | Package layout, build, pre-publish verification |

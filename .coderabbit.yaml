@@ -34,7 +34,10 @@ reviews:
   # same commit as a version or catalog edit, but CodeRabbit's default ignore list drops *.lock.
   # Without this line the lockfile never enters the review scope and the path_instruction for it
   # below can never fire.
+  # "**" first: a bare include pattern turns path_filters into an allowlist, so listing only
+  # bun.lock silently excluded every other file and skipped whole reviews.
   path_filters:
+    - "**"
     - "bun.lock"
 
   tools:
