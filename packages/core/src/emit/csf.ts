@@ -330,7 +330,9 @@ function requiredPropExpression(
 	if (def.kind === "function") {
 		return NOOP_HANDLER;
 	}
-	const expression = node.bindings?.[propName];
+	const expression = Object.hasOwn(node.bindings ?? {}, propName)
+		? node.bindings?.[propName]
+		: undefined;
 	if (expression === undefined || !isEmittableBindingExpression(expression)) {
 		return null;
 	}
@@ -611,12 +613,16 @@ function renderNode(node: ScreenNode, context: RenderContext): RenderedNode {
 		...Object.keys(node.events ?? {}),
 	]);
 	for (const propName of declaredPropNames) {
-		if (RESERVED_PROPS.has(propName) || propName in node.props) {
+		if (RESERVED_PROPS.has(propName) || Object.hasOwn(node.props, propName)) {
 			continue;
 		}
+		// Guarded with hasOwn: a plain bracket lookup keyed by a screen-supplied name
+		// walks the prototype chain, so a prop named "toString" would look defined.
 		const expression = requiredPropExpression(
 			node,
-			manifest?.props[propName],
+			manifest && Object.hasOwn(manifest.props, propName)
+				? manifest.props[propName]
+				: undefined,
 			propName,
 		);
 		if (expression !== null) {
