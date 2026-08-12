@@ -15,6 +15,11 @@ import {
 } from "@yosegi/core/app";
 import { buildImportMapResolver, emitCsf } from "@yosegi/core/emit";
 import { z } from "zod";
+import { yosegiVersion } from "../../config.ts";
+import {
+	formatRegistryVersionWarning,
+	summarizeComponent,
+} from "../cli/format.ts";
 import { toErrorResponse } from "../error-response.ts";
 
 // Convert a tool's return value into MCP's content format (JSON text).
@@ -42,17 +47,31 @@ function fail(error: unknown) {
 export function createMcpServer(composer: Composer): McpServer {
 	const server = new McpServer({ name: "yosegi", version: "0.1.0" });
 
+	// Full manifests for a whole registry run to hundreds of kilobytes — far past what a
+	// tool result should put into a context window — so the default is a capped list of
+	// summaries carrying the same information as the CLI's component list.
 	server.registerTool(
 		"search_components",
 		{
-			description: "Search the registered components by name and category",
+			description:
+				'Search the registered components by name and category. Returns summaries (id, category, prop-type tokens, slots) capped at `limit`; pass detail: "full" for complete manifests',
 			inputSchema: {
 				query: z.string().optional(),
 				category: z.string().optional(),
+				detail: z.enum(["summary", "full"]).optional(),
+				limit: z.number().int().positive().optional(),
 			},
 		},
-		async ({ query, category }) =>
-			ok(composer.components.searchComponents({ query, category })),
+		async ({ query, category, detail, limit }) => {
+			const matched = composer.components.searchComponents({ query, category });
+			const shown = matched.slice(0, limit ?? 50);
+			return ok({
+				total: matched.length,
+				shown: shown.length,
+				truncated: shown.length < matched.length,
+				components: detail === "full" ? shown : shown.map(summarizeComponent),
+			});
+		},
 	);
 
 	server.registerTool(
@@ -68,6 +87,40 @@ export function createMcpServer(composer: Composer): McpServer {
 			} catch (error) {
 				return fail(error);
 			}
+		},
+	);
+
+	server.registerTool(
+		"list_categories",
+		{
+			description: "List the categories present in the registry",
+			inputSchema: {},
+		},
+		async () => ok(composer.components.listCategories()),
+	);
+
+	// The CLI warns about a version mismatch on stderr on every read; MCP has no stderr
+	// a client surfaces, so the same warning rides in this tool's payload instead.
+	// Unlike the CLI's registry status, this does not recompute source drift (that needs
+	// the TypeScript compiler and the host's files) — it reports provenance only.
+	server.registerTool(
+		"get_registry_status",
+		{
+			description:
+				"Report the registry's provenance (version, build time, recorded inputs) and warn when it was built by a different Yosegi than the one running. Does not recompute source drift; run the CLI's registry status for that",
+			inputSchema: {},
+		},
+		async () => {
+			const registry = composer.components.getRegistry();
+			return ok({
+				version: registry.version,
+				generatedAt: registry.generatedAt ?? null,
+				builtWith: registry.builtWith ?? null,
+				builtWithCliPath: registry.builtWithCliPath ?? null,
+				inputs: registry.inputs ?? null,
+				runningVersion: yosegiVersion(),
+				warning: formatRegistryVersionWarning(registry, yosegiVersion()),
+			});
 		},
 	);
 

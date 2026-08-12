@@ -53,6 +53,87 @@ describe("MCP server", () => {
 		expect(textOf(result as never)).toContain("Button");
 	});
 
+	// The default is a summary: same information as the CLI's component list, not the
+	// full manifests (which run to hundreds of kilobytes on a real registry).
+	it("search_components は既定で summary を返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "search_components",
+			arguments: {},
+		});
+		const parsed = JSON.parse(textOf(result as never)) as {
+			total: number;
+			shown: number;
+			truncated: boolean;
+			components: { id: string; props: string[]; slots: string[] }[];
+		};
+		expect(parsed.truncated).toBe(false);
+		expect(parsed.total).toBe(parsed.components.length);
+		const button = parsed.components.find((c) => c.id === "Button");
+		expect(button?.props).toContain("variant:enum(5)");
+		// A summary entry never carries the manifest's import block.
+		expect(textOf(result as never)).not.toContain("packageName");
+	});
+
+	it("search_components は limit 超過を truncated と総件数で返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "search_components",
+			arguments: { limit: 2 },
+		});
+		const parsed = JSON.parse(textOf(result as never)) as {
+			total: number;
+			shown: number;
+			truncated: boolean;
+			components: unknown[];
+		};
+		expect(parsed.shown).toBe(2);
+		expect(parsed.truncated).toBe(true);
+		expect(parsed.total).toBeGreaterThan(2);
+	});
+
+	it("search_components は detail: full で Manifest を返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "search_components",
+			arguments: { query: "button", detail: "full" },
+		});
+		const parsed = JSON.parse(textOf(result as never)) as {
+			components: { id: string; import: { packageName: string } }[];
+		};
+		expect(parsed.components[0].import.packageName).toBe(
+			"~/components/shadcn-ui/button",
+		);
+	});
+
+	it("list_categories がカテゴリ一覧を返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "list_categories",
+			arguments: {},
+		});
+		const parsed = JSON.parse(textOf(result as never)) as string[];
+		expect(parsed).toContain("form");
+	});
+
+	it("get_registry_status は provenance と実行中の版を返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "get_registry_status",
+			arguments: {},
+		});
+		const parsed = JSON.parse(textOf(result as never)) as {
+			version: string;
+			runningVersion: string;
+			warning: string | null;
+		};
+		expect(parsed.version).toBe("test:v1");
+		expect(parsed.runningVersion.length).toBeGreaterThan(0);
+		// The fixture registry has no builtWith, so the CLI's stderr warning shows up
+		// here, in the payload — MCP has no stderr a client surfaces.
+		expect(parsed.warning).toContain("Rebuild it:");
+	});
+
 	it("apply_screen_operations で画面を更新できる", async () => {
 		const client = await connect();
 		const result = await client.callTool({
@@ -81,6 +162,21 @@ describe("MCP server", () => {
 		const text = textOf(result as never);
 		expect(text).toContain("COMPONENT_NOT_FOUND");
 		expect(text).not.toContain("INTERNAL_ERROR");
+	});
+
+	// The did-you-mean candidates come from requireComponent itself, so MCP offers the
+	// same suggestion the CLI does.
+	it("get_component の綴り違いには候補を返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "get_component",
+			arguments: { componentId: "Buton" },
+		});
+		const parsed = JSON.parse(textOf(result as never)) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("COMPONENT_NOT_FOUND");
+		expect(parsed.error.suggestion).toContain("Button");
 	});
 
 	it("validate_screen で検証結果を返す", async () => {

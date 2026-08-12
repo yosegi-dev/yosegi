@@ -64,9 +64,23 @@ function badges(manifest: ComponentManifest): string {
 	return parts.join(" ");
 }
 
-function formatListEntry(manifest: ComponentManifest): string {
-	const header = [manifest.id, badges(manifest)].filter(Boolean).join(" ");
+// The structured counterpart of a list entry. Shared with the MCP adapter, so
+// search_components' summary carries exactly the information the CLI list shows
+// (id / badges / prop-type tokens / slots) instead of the full manifest.
+export type ComponentSummary = {
+	id: string;
+	category: string | null;
+	recommended: boolean;
+	deprecated: boolean;
+	// "name:kind*" tokens, required first, capped like the text list with a "(+N more)" tail.
+	props: string[];
+	// Slot names, "*" marking a required slot.
+	slots: string[];
+};
 
+export function summarizeComponent(
+	manifest: ComponentManifest,
+): ComponentSummary {
 	const props = sortedProps(manifest);
 	const shown = props
 		.slice(0, LIST_PROP_LIMIT)
@@ -77,15 +91,25 @@ function formatListEntry(manifest: ComponentManifest): string {
 	if (props.length > LIST_PROP_LIMIT) {
 		shown.push(`(+${props.length - LIST_PROP_LIMIT} more)`);
 	}
+	return {
+		id: manifest.id,
+		category: manifest.category ?? null,
+		recommended: manifest.curation?.recommended ?? false,
+		deprecated: manifest.constraints?.deprecated ?? false,
+		props: shown,
+		slots: sortedSlots(manifest).map((name) =>
+			manifest.slots[name].required ? `${name}*` : name,
+		),
+	};
+}
 
-	const slots = sortedSlots(manifest).map((name) =>
-		manifest.slots[name].required ? `${name}*` : name,
-	);
-
+function formatListEntry(manifest: ComponentManifest): string {
+	const header = [manifest.id, badges(manifest)].filter(Boolean).join(" ");
+	const summary = summarizeComponent(manifest);
 	return [
 		header,
-		`    props: ${shown.length > 0 ? shown.join(" ") : "-"}`,
-		`    slots: ${slots.length > 0 ? slots.join(" ") : "-"}`,
+		`    props: ${summary.props.length > 0 ? summary.props.join(" ") : "-"}`,
+		`    slots: ${summary.slots.length > 0 ? summary.slots.join(" ") : "-"}`,
 	].join("\n");
 }
 
