@@ -214,6 +214,9 @@ the shape first, then enter the validation loop.
 The ones worth checking yourself before running:
 
 - `bindings` written in the shape of `events`, or the reverse.
-- `bindings` / `events` / `when` / `each` nested inside `props` instead of sitting on the node.
 - `slots` given a bare node instead of an array — every slot value is an array of ScreenNodes.
 - A missing `props: {}` or `slots: {}` on a leaf node. Both are required even when empty.
+
+`bindings` / `events` / `when` / `each` nested inside `props` is a related mistake but **not** a
+schema violation — `props` is a free-form record, so it passes the schema and surfaces in
+validation as `UNKNOWN_PROP`, with a `suggestion` to move the field onto the node.

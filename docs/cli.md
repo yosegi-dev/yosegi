@@ -28,7 +28,12 @@ bun add -d @yosegi/yosegi
 | `--data-dir <dir>` | path | `.yosegi` under the cwd | Where the registry and the saved screens live. Created if missing. Pass the same value to every command |
 
 Repeatable flags (`--source`) also accept comma-separated values. Always quote globs — the shell
-expands an unquoted one before the CLI sees it. Errors exit with code 1.
+expands an unquoted one before the CLI sees it.
+
+Errors exit with code 1 as JSON carrying `error.code`. An unknown command or flag is rejected with
+the nearest candidates (`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`), and a missing required argument returns
+`MISSING_ARGUMENT`. `--help` (`-h`) prints usage with exit 0; `--version` prints
+`{ "version", "cliPath" }` with exit 0.
 
 ## `registry build`
 
@@ -50,6 +55,7 @@ yosegi registry build --source <glob> --tsconfig <path> [options]
 | `--report <path>` | path | — | Writes `{ stats, missed, undocumented }`: the exports that could not be extracted, and the props worth writing JSDoc on, ranked |
 | `--out <path>` | path | `registry.json` under `--data-dir` | Where the registry is written. Intermediate directories are created |
 | `--version <ref>` | string | a content hash | The registry's `version` string, which a Screen JSON copies into `componentRegistryVersion` |
+| `--json` | boolean | `false` | Return `{ out, version, count, stats, warnings, hints }` as one object instead of the text output (`stats` is `null` on the `--index`-only path) |
 
 ```sh
 yosegi registry build \
@@ -274,8 +280,10 @@ claude mcp add yosegi -- npx yosegi mcp
 
 | MCP tool | Arguments | CLI equivalent |
 | --- | --- | --- |
-| `search_components` | `query`, `category` | `component list` |
+| `search_components` | `query`, `category`, `detail`, `limit` | `component list` |
 | `get_component` | `componentId` | `component inspect` |
+| `list_categories` | — | the `categories` field of `component list --json` |
+| `get_registry_status` | — | `registry status`, provenance only — it does not recompute source drift |
 | `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework` | `screen generate`, but it returns the CSF source as a string and writes no file |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
@@ -285,8 +293,10 @@ claude mcp add yosegi -- npx yosegi mcp
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
 `generate_story` takes `root` — the ScreenNode alone, not the whole Screen JSON — and `importMap` is
-the same string the CLI takes, not an object. `registry build`, `registry metadata`, and
-`story import` are CLI-only, and there is no MCP equivalent of `--meta-template`.
+the same string the CLI takes, not an object. `search_components` returns summaries capped at
+`limit` (default 50) with `total` / `truncated`; `detail: "full"` returns complete manifests.
+`registry build`, `registry metadata`, and `story import` are CLI-only, and there is no MCP
+equivalent of `--meta-template`.
 
 ## Next steps
 

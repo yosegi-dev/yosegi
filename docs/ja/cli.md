@@ -27,7 +27,12 @@ Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情�
 | `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ作成する。全コマンドへ同じ値を渡す |
 
 繰り返し指定できるフラグ（`--source`）はカンマ区切りも受け付ける。glob は必ずクォートする（しないと
-CLI へ届く前にシェルが展開する）。エラー時の終了コードは 1。
+CLI へ届く前にシェルが展開する）。
+
+エラーは `error.code` を持つ JSON で返り、終了コードは 1。未知のコマンド・フラグは近い候補付きで
+拒否され（`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`）、必須引数の不足は `MISSING_ARGUMENT` を返す。
+`--help`（`-h`）は usage を表示して終了コード 0、`--version` は `{ "version", "cliPath" }` を返して
+終了コード 0。
 
 ## `registry build`
 
@@ -49,6 +54,7 @@ yosegi registry build --source <glob> --tsconfig <path> [options]
 | `--report <path>` | path | — | `{ stats, missed, undocumented }` を書き出す。抽出できなかった export と、JSDoc を書く価値のある props を優先順に並べたもの |
 | `--out <path>` | path | `--data-dir` 直下の `registry.json` | Registry の書き出し先。中間ディレクトリは自動作成 |
 | `--version <ref>` | string | 内容ハッシュ | Registry の `version` 文字列。Screen JSON が `componentRegistryVersion` へ写す値 |
+| `--json` | boolean | `false` | テキスト出力の代わりに `{ out, version, count, stats, warnings, hints }` を単一オブジェクトで返す（`--index` 単独の経路では `stats` は `null`） |
 
 ```sh
 yosegi registry build \
@@ -269,8 +275,10 @@ claude mcp add yosegi -- npx yosegi mcp
 
 | MCP ツール | 引数 | CLI の対応 |
 | --- | --- | --- |
-| `search_components` | `query`, `category` | `component list` |
+| `search_components` | `query`, `category`, `detail`, `limit` | `component list` |
 | `get_component` | `componentId` | `component inspect` |
+| `list_categories` | — | `component list --json` の `categories` フィールド |
+| `get_registry_status` | — | `registry status`。ただし provenance のみで、ソースの変化は再計算しない |
 | `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework` | `screen generate`。ただしファイルは書かず CSF のソースを文字列で返す |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`。保存済み画面の id で指定する |
 | `validate_screen` | `screenId` | `screen validate` |
@@ -280,8 +288,10 @@ claude mcp add yosegi -- npx yosegi mcp
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
 `generate_story` が取る `root` は ScreenNode 単体であって Screen JSON 全体ではない。`importMap` は
-CLI と同じ文字列で、オブジェクトではない。`registry build`・`registry metadata`・`story import` は
-CLI にしか無く、`--meta-template` に相当する MCP の口も無い。
+CLI と同じ文字列で、オブジェクトではない。`search_components` は `limit`（既定 50）で打ち切った
+要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返す。
+`registry build`・`registry metadata`・`story import` は CLI にしか無く、`--meta-template` に相当する
+MCP の口も無い。
 
 ## 次に読む
 

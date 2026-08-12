@@ -66,12 +66,14 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 [
   {
     "nodeId": "card",
+    "path": "$.children[0]",
     "code": "INVALID_PROP_VALUE",
-    "message": "Value for \"app/components/ui/card#Card.elevation\" does not match kind \"enum\".",
-    "suggestion": "Use one of: flat, raised"
+    "message": "Value for \"app/components/ui/card#Card.elevation\" does not match kind \"enum\" (received: \"float\").",
+    "suggestion": "Use one of: \"flat\", \"raised\""
   },
   {
     "nodeId": "cta",
+    "path": "$.children[1]",
     "code": "COMPONENT_NOT_FOUND",
     "message": "Component \"Button\" is not registered.",
     "suggestion": "Did you mean: app/components/ui/button#Button?"
@@ -80,8 +82,9 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 ```
 
 `COMPONENT_NOT_FOUND`・`UNKNOWN_PROP`・`UNKNOWN_BINDING_TARGET` にはレーベンシュタイン距離で最も近い
-候補が付き、`INVALID_PROP_VALUE` には enum の選択肢が付く。警告は生成を止めず、ファイル書き出しの後に
-並ぶ。
+候補が付く。`INVALID_PROP_VALUE` には受け取った値と enum の選択肢が付く。どのエラーもツリー内の位置を
+示す `path` を持つので、id が衝突していてもノードを特定できる。警告は生成を止めず、ファイル書き出しの
+後に並ぶ。
 
 生成される meta は既定では `title` だけ。ホストが要求する定型は `--meta-template <file>` で差し込む。
 値はソースの断片として解釈せずに引き継ぐので、Yosegi が持っていない Figma の URL を捏造することは
@@ -94,16 +97,16 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | code | 意味 | 直し方 |
 | --- | --- | --- |
 | `COMPONENT_NOT_FOUND` | その id は Registry に無い | `suggestion` の候補に差し替える。候補が無ければ `component list --query` で探し直す |
-| `UNKNOWN_PROP` | その prop は無い | `suggestion` の名前に直すか、`component inspect` で実在する props を並べる |
+| `UNKNOWN_PROP` | その prop は無い | `suggestion` の名前に直すか、`component inspect` で実在する props を並べる。ノード直下に置くべきフィールド（`bindings` / `events` / `when` / `each`）を `props` の中に書いた場合もここに落ち、ノードへ移す `suggestion` が付く |
 | `UNKNOWN_BINDING_TARGET` | `bindings` のキーが存在しない prop を指している | `suggestion` の名前に直す。`ReactNode` の prop は prop ではなく slot なので binding の宛先にはできない |
-| `INVALID_PROP_VALUE` | 値が型や enum と合わない | `suggestion` の選択肢から選ぶ |
-| `MISSING_REQUIRED_PROP` | 必須 prop に値が無い | 値を入れる。binding だけで満たせるのは式が識別子パスの場合のみ |
+| `INVALID_PROP_VALUE` | 値が型や enum と合わない。message に受け取った値が入る | `suggestion` の選択肢から選ぶ |
+| `MISSING_REQUIRED_PROP` | 必須 prop に値が無い。message に kind が入る | 値を入れる（enum なら `suggestion` に選択肢が付く）。binding だけで満たせるのは式が識別子パスの場合のみ |
 | `FUNCTION_PROP_VALUE` | 関数型の prop に値を書いている | 宣言を `events`（または `bindings`）へ移し、`props` から消す |
 | `RESERVED_PROP` | `props` の中に `children`・`key`・`ref` を書いている | これらは JSX の属性として出力されない。内容は `slots.children` へ移し、`key`・`ref` は消す |
 | `SLOT_NOT_FOUND` | その slot は無い | `component inspect` で slots を確認する。子要素はたいてい `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | slot の制約がその子を許さない | 許されるものは `suggestion` にある |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | 親子の組み合わせに制約がある | 許される部品は `suggestion` にある |
-| `DUPLICATE_NODE_ID` | 2 つのノードが同じ `id` を持つ | どちらかを変える |
+| `DUPLICATE_NODE_ID` | 2 つのノードが同じ `id` を持つ。message に衝突した両方の `path` が入る | どちらかを変える |
 
 生成を止めない警告:
 

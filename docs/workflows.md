@@ -70,12 +70,14 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 [
   {
     "nodeId": "card",
+    "path": "$.children[0]",
     "code": "INVALID_PROP_VALUE",
-    "message": "Value for \"app/components/ui/card#Card.elevation\" does not match kind \"enum\".",
-    "suggestion": "Use one of: flat, raised"
+    "message": "Value for \"app/components/ui/card#Card.elevation\" does not match kind \"enum\" (received: \"float\").",
+    "suggestion": "Use one of: \"flat\", \"raised\""
   },
   {
     "nodeId": "cta",
+    "path": "$.children[1]",
     "code": "COMPONENT_NOT_FOUND",
     "message": "Component \"Button\" is not registered.",
     "suggestion": "Did you mean: app/components/ui/button#Button?"
@@ -84,8 +86,9 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 ```
 
 `COMPONENT_NOT_FOUND`, `UNKNOWN_PROP`, and `UNKNOWN_BINDING_TARGET` carry the nearest candidates by
-Levenshtein distance; `INVALID_PROP_VALUE` carries the enum options. Warnings do not stop generation
-and are listed after the file is written.
+Levenshtein distance; `INVALID_PROP_VALUE` echoes the received value and the enum options. Every
+issue also carries `path`, the node's position in the tree, so a node is locatable even when ids
+collide. Warnings do not stop generation and are listed after the file is written.
 
 By default the generated meta holds only `title`. Splice in the boilerplate the host requires with
 `--meta-template <file>`. Values are carried as source fragments without being interpreted, so
@@ -99,16 +102,16 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | code | Meaning | How to fix |
 | --- | --- | --- |
 | `COMPONENT_NOT_FOUND` | The id is not in the registry | Swap in the candidate from `suggestion`. With no candidate, search again with `component list --query` |
-| `UNKNOWN_PROP` | The component has no such prop | Correct it to the name in `suggestion`, or list the real props with `component inspect` |
+| `UNKNOWN_PROP` | The component has no such prop | Correct it to the name in `suggestion`, or list the real props with `component inspect`. A node-level field (`bindings` / `events` / `when` / `each`) written inside `props` also lands here, with a `suggestion` to move it onto the node |
 | `UNKNOWN_BINDING_TARGET` | A `bindings` key names a prop the component does not have | Correct it to the name in `suggestion`. A `ReactNode` prop is a slot, not a prop, so it cannot be a binding target |
-| `INVALID_PROP_VALUE` | The value does not match the type or enum | Pick from the options in `suggestion` |
-| `MISSING_REQUIRED_PROP` | A required prop is unset | Supply a value. A binding only satisfies it when the expression is a plain identifier path |
+| `INVALID_PROP_VALUE` | The value does not match the type or enum; the message echoes the received value | Pick from the options in `suggestion` |
+| `MISSING_REQUIRED_PROP` | A required prop is unset; the message names its kind | Supply a value (`suggestion` lists an enum's options). A binding only satisfies it when the expression is a plain identifier path |
 | `FUNCTION_PROP_VALUE` | A value was written into a function-kind prop | Move the declaration to `events` (or `bindings`) and delete it from `props` |
 | `RESERVED_PROP` | A value was written into `children`, `key`, or `ref` under `props` | These are never emitted as JSX attributes. Move the content to `slots.children`; delete `key` / `ref` |
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect`. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's constraints reject these children | `suggestion` lists what is allowed |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | The parent/child pairing is constrained | `suggestion` lists the allowed components |
-| `DUPLICATE_NODE_ID` | Two nodes share an `id` | Change one of them |
+| `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s | Change one of them |
 
 Warnings, which do not stop generation:
 
