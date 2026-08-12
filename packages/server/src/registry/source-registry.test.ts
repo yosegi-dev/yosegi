@@ -1,4 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import {
 	indexRegistry,
@@ -915,5 +917,85 @@ describe("buildRegistryFromSource の deprecated", () => {
 		expect(
 			manifests.get("mixed-cards#MixedCardFooter")?.constraints?.deprecated,
 		).toBeUndefined();
+	});
+});
+
+// A host missing @types/react (pnpm's strict node_modules, or one that only gets it
+// transitively) builds without a single error, yet every ReactNode collapses to `any`:
+// slots vanish and the props degrade while propsUnreadable stays at 0. The fixture lives
+// in a temp directory because anything under the repository resolves the workspace's own
+// @types/react through node_modules walk-up.
+describe("buildRegistryFromSource の React 型解決検出", () => {
+	let hostRoot: string;
+
+	beforeAll(async () => {
+		hostRoot = await mkdtemp(join(tmpdir(), "vc-no-react-types-"));
+		await mkdir(join(hostRoot, "components"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: {
+					strict: true,
+					jsx: "react-jsx",
+					moduleResolution: "bundler",
+					module: "ESNext",
+				},
+				include: ["components"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "components", "button.tsx"),
+			[
+				'import type { ReactNode } from "react";',
+				"",
+				"export type ButtonProps = {",
+				'\tvariant?: "primary" | "secondary";',
+				"\ticon?: ReactNode;",
+				"\tchildren?: ReactNode;",
+				"};",
+				"",
+				"export function Button({ children }: ButtonProps) {",
+				"\treturn <button>{children}</button>;",
+				"}",
+				"",
+			].join("\n"),
+		);
+	});
+
+	afterAll(async () => {
+		await rm(hostRoot, { recursive: true, force: true });
+	});
+
+	it("@types/react が解決できるホストでは reactTypesResolved が true になる", () => {
+		expect(build().reactTypesResolved).toBe(true);
+	});
+
+	it("@types/react が解決できないと reactTypesResolved が false になり props が劣化する", () => {
+		const result = buildRegistryFromSource({
+			projectRoot: hostRoot,
+			sources: ["components/**/*.tsx"],
+			tsconfigPath: join(hostRoot, "tsconfig.json"),
+		});
+		expect(result.reactTypesResolved).toBe(false);
+		// The degradation this flag exists to catch: no slots, ReactNode flattened to
+		// json / shape any, and none of it counted as unreadable.
+		const manifest = indexRegistry(result.registry).get(
+			"components/button#Button",
+		);
+		expect(manifest?.slots).toEqual({});
+		expect(manifest?.props.icon?.kind).toBe("json");
+		expect(manifest?.props.icon?.shape?.type).toBe("any");
+		expect(result.stats.withNodeSlots).toBe(0);
+		expect(result.stats.propsUnreadable).toBe(0);
+		expect(result.stats.anyShapedProps).toBe(2);
+	});
+
+	it("glob が 0 件のときは未検査として true を返す", () => {
+		const result = buildRegistryFromSource({
+			projectRoot: hostRoot,
+			sources: ["nowhere/**/*.tsx"],
+			tsconfigPath: join(hostRoot, "tsconfig.json"),
+		});
+		expect(result.reactTypesResolved).toBe(true);
 	});
 });

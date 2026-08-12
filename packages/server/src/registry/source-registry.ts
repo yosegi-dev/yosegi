@@ -129,6 +129,10 @@ type ExtractionStats = {
 	withProps: number;
 	withEnumProps: number;
 	withNodeSlots: number;
+	// Number of props whose one-level-deep shape could only be read as `any`. A handful is
+	// normal (a genuinely untyped prop); a spike alongside withNodeSlots: 0 is the
+	// signature of React's typings not resolving (see reactTypesResolved).
+	anyShapedProps: number;
 	withStory: number;
 	// Number of components --metadata was applied to.
 	metadataApplied: number;
@@ -178,6 +182,12 @@ export type SourceRegistryResult = {
 	// Entries written in --metadata that matched no component id at all. A likely typo in the id.
 	unusedMetadataIds: string[];
 	outsideSources: OutsideSourcesReport;
+	// Whether React's type definitions resolve from the host's tsconfig. When they don't
+	// (pnpm's strict node_modules, or a host that only gets @types/react transitively),
+	// nothing errors: the checker types every ReactNode as `any`, so slot detection finds
+	// nothing and ReactNode props collapse to `json` / `shape: any`, while every other
+	// stat stays healthy-looking. True when there was nothing to check (no files matched).
+	reactTypesResolved: boolean;
 };
 
 function contentHash(components: ComponentManifest[]): string {
@@ -234,6 +244,30 @@ function hasDeprecatedTag(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
 	return symbol
 		.getJsDocTags(checker)
 		.some((tag) => tag.name === DEPRECATED_TAG);
+}
+
+// Extensions that carry type information. With allowJs on, "react" can resolve to the
+// package's own index.js, which gives the checker no ReactNode either.
+const TYPE_BEARING_EXTENSION_PATTERN = /\.(d\.[mc]?ts|[mc]?ts|tsx)$/;
+
+// Whether importing "react" reaches its type definitions, checked once with the same
+// resolution the program itself uses (so paths mappings and typeRoots are honored).
+// Resolution failing is exactly the state that silently flattens ReactNode to `any`, so
+// this is what lets the CLI warn instead of reporting a degraded build as success.
+function reactTypesResolve(
+	containingFile: string,
+	compilerOptions: ts.CompilerOptions,
+): boolean {
+	const { resolvedModule } = ts.resolveModuleName(
+		"react",
+		containingFile,
+		compilerOptions,
+		ts.sys,
+	);
+	return (
+		resolvedModule !== undefined &&
+		TYPE_BEARING_EXTENSION_PATTERN.test(resolvedModule.resolvedFileName)
+	);
 }
 
 // Whether @yosegi-internal is attached to the JSDoc.
@@ -1229,6 +1263,7 @@ export function buildRegistryFromSource(
 		withProps: 0,
 		withEnumProps: 0,
 		withNodeSlots: 0,
+		anyShapedProps: 0,
 		withStory: 0,
 		metadataApplied: 0,
 		elapsedMs: 0,
@@ -1353,6 +1388,11 @@ export function buildRegistryFromSource(
 				stats.propsUnreadable += 1;
 				missed.push({ id, reason: "props-unreadable" });
 			}
+			for (const definition of Object.values(props)) {
+				if (definition.kind === "json" && definition.shape?.type === "any") {
+					stats.anyShapedProps += 1;
+				}
+			}
 			if (Object.keys(props).length > 0) {
 				stats.withProps += 1;
 			}
@@ -1463,5 +1503,10 @@ export function buildRegistryFromSource(
 		missed,
 		unusedMetadataIds,
 		outsideSources,
+		// Resolution is directory-independent within one host, so the first matched file
+		// stands in for all of them. With no files there is nothing to resolve from (and
+		// the files: 0 warning already covers that state).
+		reactTypesResolved:
+			files.length === 0 || reactTypesResolve(files[0], compilerOptions),
 	};
 }

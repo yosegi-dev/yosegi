@@ -857,6 +857,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 			missed,
 			unusedMetadataIds,
 			outsideSources,
+			reactTypesResolved,
 		} = buildRegistryFromSource({
 			projectRoot,
 			sources,
@@ -887,6 +888,15 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		if (stats.files > 0 && stats.componentCandidates === 0) {
 			print(
 				`Warning: ${stats.files} files were read but no React component exports were found; check that the glob includes .tsx files and the project uses React.`,
+			);
+		}
+		// Unresolved React typings degrade the registry without a single error: ReactNode
+		// props collapse to `json` / `shape: any` and no slots are detected, yet
+		// propsUnreadable stays at 0. Gated on componentCandidates so a non-React project
+		// gets the warning above rather than both.
+		if (stats.componentCandidates > 0 && !reactTypesResolved) {
+			print(
+				"Warning: React's type definitions did not resolve, so ReactNode props degrade to json and no slots are detected; check that the host's @types/react resolves through --tsconfig.",
 			);
 		}
 		// A --metadata id that matched nothing is almost certainly a typo. Dropping it
