@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { ComposerError } from "../domain/errors.ts";
 import { sampleRegistry } from "../test-fixtures.ts";
 import { ComponentService } from "./component-service.ts";
 
@@ -32,6 +33,31 @@ describe("ComponentService", () => {
 	it("query が単一の文字列でも従来どおり動く", () => {
 		const found = service().searchComponents({ query: "table" });
 		expect(found.map((c) => c.id)).toEqual(["Table"]);
+	});
+
+	// The suggestion lives on the error itself, so every adapter (CLI / MCP / HTTP)
+	// surfaces the same candidates without re-deriving them.
+	it("requireComponent は typo に候補付き COMPONENT_NOT_FOUND を投げる", () => {
+		let caught: unknown;
+		try {
+			service().requireComponent("Buton");
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(ComposerError);
+		const composerError = caught as ComposerError;
+		expect(composerError.code).toBe("COMPONENT_NOT_FOUND");
+		expect(composerError.suggestion).toContain("Button");
+	});
+
+	it("requireComponent は候補がなければ suggestion を null にする", () => {
+		let caught: unknown;
+		try {
+			service().requireComponent("zzzzzzzz");
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as ComposerError).suggestion).toBe(null);
 	});
 
 	it("カテゴリで絞り込む", () => {
