@@ -807,7 +807,7 @@ function convertJsx(
 	warn(
 		context,
 		"INTENT_NOT_APPLIED",
-		`An intent comment preceded ${nodes.length} sibling elements, so its bindings/events could not be attached to any of them`,
+		`An intent comment preceded ${nodes.length} sibling nodes, so its bindings/events could not be attached to any of them`,
 		child,
 		nodes[0].id,
 	);
