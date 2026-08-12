@@ -733,12 +733,16 @@ describe("importStory", () => {
 				"const rows = [1, 2];",
 				"const totals = { a: 1 };",
 				"const extra = { a: 1 };",
+				"const stats = { count: 0 };",
+				"const series = { items: [1, 2] };",
 				"const keep = [3, 4];",
 				'customers.push({ name: "Sato" });',
 				'settings.theme = "dark";',
 				"rows[0] = 9;",
 				"Object.assign(totals, { b: 2 });",
 				"delete extra.a;",
+				"stats.count++;",
+				"series.items[0]--;",
 				'const meta: Meta = { title: "S/T" };',
 				"export default meta;",
 				"export const Default: StoryObj = { render: () => <Table /> };",
@@ -747,6 +751,8 @@ describe("importStory", () => {
 			const imported = importSource(source);
 
 			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
 				"OPAQUE_FIXTURE",
 				"OPAQUE_FIXTURE",
 				"OPAQUE_FIXTURE",

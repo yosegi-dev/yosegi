@@ -939,8 +939,8 @@ function rootIdentifierOfChain(expression: ts.Expression): string | null {
 // initialization. Snapshotting the initializer of such a const would re-emit a
 // value the Story never rendered with, so those names are excluded from the
 // fixtures. Detected: assignments (plain and compound) to a property or
-// element of the identifier, `delete`, the known in-place array methods, and
-// `Object.assign` with the identifier as target. Full mutation detection is
+// element of the identifier, `++` / `--`, `delete`, the known in-place array
+// methods, and `Object.assign` with the identifier as target. Full mutation detection is
 // statically impossible — a mutation through an alias
 // (`const rows = customers; rows.push(...)`) or inside a helper the value is
 // passed to still slips through — which matches the read-back contract:
@@ -965,6 +965,15 @@ function collectMutatedIdentifiers(sourceFile: ts.SourceFile): Set<string> {
 			add(rootIdentifierOfChain(node.left));
 		} else if (ts.isDeleteExpression(node)) {
 			add(rootIdentifierOfChain(node.expression));
+		} else if (
+			(ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+			(node.operator === ts.SyntaxKind.PlusPlusToken ||
+				node.operator === ts.SyntaxKind.MinusMinusToken)
+		) {
+			// `customers.count++` mutates just like `customers.count += 1`. A bare
+			// `customers++` on a const is a runtime error, but flagging it too is
+			// harmless — it only errs toward importing less.
+			add(rootIdentifierOfChain(node.operand));
 		} else if (ts.isCallExpression(node)) {
 			const callee = node.expression;
 			if (ts.isPropertyAccessExpression(callee)) {
