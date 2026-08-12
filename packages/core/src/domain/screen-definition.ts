@@ -34,6 +34,12 @@ export type ScreenNode = {
 	when?: string;
 	// Repeat-display expression (declaration only).
 	each?: string;
+	// Number of structural copies emit expands this subtree into (a mock list's
+	// rows). Unlike `each` — which stays a declaration and produces no JSX — repeat
+	// is realized in the generated Story. The Screen JSON keeps the single node.
+	// Only integer-ness lives in the schema; the allowed range is checked by the
+	// validator so the error carries nodeId / path and a suggestion.
+	repeat?: number;
 };
 
 export const screenNodeSchema: z.ZodType<ScreenNode> = z.lazy(() =>
@@ -46,6 +52,7 @@ export const screenNodeSchema: z.ZodType<ScreenNode> = z.lazy(() =>
 		events: z.record(z.string(), eventDefinitionSchema).optional(),
 		when: z.string().optional(),
 		each: z.string().optional(),
+		repeat: z.number().int().optional(),
 	}),
 );
 
@@ -64,6 +71,69 @@ const BINDING_PATH_PATTERN =
 export function isEmittableBindingExpression(expression: string): boolean {
 	return BINDING_PATH_PATTERN.test(expression);
 }
+
+// The leading identifier of an emittable binding expression
+// ("customers.items" -> "customers"). null when the expression cannot be written
+// into the Story at all. This is what gets matched against fixture names: a
+// binding whose head resolves to a fixture references a value that really exists
+// in the generated Story.
+export function bindingRootIdentifier(expression: string): string | null {
+	if (!isEmittableBindingExpression(expression)) {
+		return null;
+	}
+	const separator = expression.indexOf(".");
+	return separator === -1 ? expression : expression.slice(0, separator);
+}
+
+// A form that can be written as-is in an identifier position (a fixture's const
+// name, a Story's export name, an import's local name). Shared with emit so the
+// schema and the writer can't drift apart.
+const JS_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+export function isJsIdentifier(name: string): boolean {
+	return JS_IDENTIFIER_PATTERN.test(name);
+}
+
+// Identifiers the emitted Story itself always declares: `const meta` and the
+// Meta / StoryObj type imports. A fixture name is emitted verbatim as
+// `const <name>` and is referenced from binding expressions as written, so emit
+// cannot alias it the way it suffixes a colliding component import — renaming the
+// const would orphan every binding that points at it. With no escape hatch at emit
+// time, the collision is rejected up front, here in the schema.
+export const EMIT_RESERVED_IDENTIFIERS = ["meta", "Meta", "StoryObj"] as const;
+
+const RESERVED_FIXTURE_NAMES: ReadonlySet<string> = new Set(
+	EMIT_RESERVED_IDENTIFIERS,
+);
+
+// Fixtures are the screen's mock-data layer: each entry becomes a top-level
+// `const <name> = <JSON value>;` in the generated Story, and bindings reference
+// the names. Name legality is checked here rather than with a validation code:
+// validation codes report registry-dependent problems, while a fixture name's
+// legality is a structural property of the document itself — the same tier as
+// screenIdSchema's file-name restriction — so it fails the same way
+// (INVALID_REQUEST, before validation is ever reached).
+export const fixturesSchema = z
+	.record(z.string(), z.unknown())
+	.superRefine((fixtures, ctx) => {
+		for (const name of Object.keys(fixtures)) {
+			if (!isJsIdentifier(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [name],
+					message: `Fixture name "${name}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", and do not start with a digit.`,
+				});
+				continue;
+			}
+			if (RESERVED_FIXTURE_NAMES.has(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [name],
+					message: `Fixture name "${name}" collides with an identifier the generated Story declares (${EMIT_RESERVED_IDENTIFIERS.join(", ")}). Rename the fixture.`,
+				});
+			}
+		}
+	});
 
 export const screenStatusSchema = z.enum(["draft", "published"]);
 export type ScreenStatus = z.infer<typeof screenStatusSchema>;
@@ -89,6 +159,8 @@ export const screenDefinitionSchema = z.object({
 	componentRegistryVersion: z.string().min(1),
 	// Revision for optimistic locking. Incremented by 1 on every update.
 	revision: z.number().int().nonnegative(),
+	// Mock data emitted into the Story as top-level consts, referenced by bindings.
+	fixtures: fixturesSchema.optional(),
 	root: screenNodeSchema,
 });
 export type ScreenDefinition = z.infer<typeof screenDefinitionSchema>;

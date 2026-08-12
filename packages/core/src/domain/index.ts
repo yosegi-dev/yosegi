@@ -2,6 +2,7 @@
 export * from "./component-manifest.ts";
 export * from "./errors.ts";
 export * from "./operation.ts";
+export * from "./repeat.ts";
 export * from "./screen-definition.ts";
 export * from "./suggest.ts";
 export * from "./synthetics.ts";

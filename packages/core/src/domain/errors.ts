@@ -24,6 +24,12 @@ export const VALIDATION_CODES = {
 	PARENT_NOT_ALLOWED: "PARENT_NOT_ALLOWED",
 	CHILD_NOT_ALLOWED: "CHILD_NOT_ALLOWED",
 	DUPLICATE_NODE_ID: "DUPLICATE_NODE_ID",
+	// repeat sits on the root node. The root has no parent slot to hold its
+	// copies, so there is nothing the expansion could mean.
+	REPEAT_ON_ROOT: "REPEAT_ON_ROOT",
+	// repeat's value is outside the allowed range (an integer between
+	// MIN_REPEAT_COUNT and MAX_REPEAT_COUNT).
+	REPEAT_OUT_OF_RANGE: "REPEAT_OUT_OF_RANGE",
 	REGISTRY_VERSION_MISMATCH: "REGISTRY_VERSION_MISMATCH",
 	// warning
 	// The event's target points at a prop that doesn't exist in the Manifest. Since
@@ -39,6 +45,9 @@ export const VALIDATION_CODES = {
 	BOUND_REQUIRED_PROP: "BOUND_REQUIRED_PROP",
 	DEPRECATED_COMPONENT: "DEPRECATED_COMPONENT",
 	MISSING_REQUIRED_SLOT: "MISSING_REQUIRED_SLOT",
+	// A fixture no binding references. Emitted into the Story anyway (an unused
+	// const breaks nothing), so it stays informational rather than blocking.
+	UNUSED_FIXTURE: "UNUSED_FIXTURE",
 	// A short id was written while the Registry also has a host component sharing a
 	// name with a synthetic primitive.
 	SYNTHETIC_NAME_SHADOWED: "SYNTHETIC_NAME_SHADOWED",

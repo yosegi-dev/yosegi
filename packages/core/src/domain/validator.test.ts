@@ -971,3 +971,150 @@ describe("validateScreen: self-correction info", () => {
 		expect(issue?.path).toBe("$.body[2]");
 	});
 });
+
+describe("validateScreen: fixtures", () => {
+	function withFixtures(
+		screen: ScreenDefinition,
+		fixtures: Record<string, unknown>,
+	): ScreenDefinition {
+		return parseScreenDefinition({ ...screen, fixtures });
+	}
+
+	// The fixture makes the bound identifier real in the generated Story, so the
+	// "won't type-check" warning would be wrong.
+	it("a fixture-backed bound required Prop yields no BOUND_REQUIRED_PROP warning", () => {
+		const bound = applyOperation(sampleScreen(), {
+			type: "setBinding",
+			nodeId: "node-header",
+			bindings: { title: "pageTitles.main" },
+		});
+		const withoutProp = applyOperation(bound, {
+			type: "setProps",
+			nodeId: "node-header",
+			props: {},
+			merge: false,
+		});
+		const screen = withFixtures(withoutProp, {
+			pageTitles: { main: "Customers" },
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		expect(result.valid).toBe(true);
+		expect(
+			result.warnings.some(
+				(w) => w.code === VALIDATION_CODES.BOUND_REQUIRED_PROP,
+			),
+		).toBe(false);
+	});
+
+	it("a bound required Prop without a matching fixture still warns", () => {
+		const bound = applyOperation(sampleScreen(), {
+			type: "setBinding",
+			nodeId: "node-header",
+			bindings: { title: "pageTitles.main" },
+		});
+		const withoutProp = applyOperation(bound, {
+			type: "setProps",
+			nodeId: "node-header",
+			props: {},
+			merge: false,
+		});
+		const screen = withFixtures(withoutProp, { customers: [] });
+		const result = validateScreen(screen, sampleRegistry());
+		expect(
+			result.warnings.some(
+				(w) => w.code === VALIDATION_CODES.BOUND_REQUIRED_PROP,
+			),
+		).toBe(true);
+	});
+
+	it("a fixture no binding references yields an UNUSED_FIXTURE warning", () => {
+		const screen = withFixtures(sampleScreen(), { orphan: [1, 2] });
+		const result = validateScreen(screen, sampleRegistry());
+		const warning = result.warnings.find(
+			(w) => w.code === VALIDATION_CODES.UNUSED_FIXTURE,
+		);
+		expect(warning?.message).toContain('"orphan"');
+		expect(result.valid).toBe(true);
+	});
+
+	// sampleScreen binds rows to "customers", so the fixture counts as referenced
+	// even though the binding sits on a member path elsewhere too.
+	it("a fixture referenced from a binding head is not reported unused", () => {
+		const screen = withFixtures(sampleScreen(), { customers: [] });
+		const result = validateScreen(screen, sampleRegistry());
+		expect(
+			result.warnings.some((w) => w.code === VALIDATION_CODES.UNUSED_FIXTURE),
+		).toBe(false);
+	});
+});
+
+describe("validateScreen: repeat", () => {
+	function withBodyNode(node: ScreenNode): ScreenDefinition {
+		const screen = sampleScreen();
+		screen.root.slots.body.push(node);
+		return screen;
+	}
+
+	it("passes an in-range repeat", () => {
+		const screen = withBodyNode({
+			id: "node-row",
+			component: "Table",
+			props: {},
+			slots: {},
+			repeat: 3,
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		expect(result.valid).toBe(true);
+	});
+
+	it("an out-of-range repeat yields REPEAT_OUT_OF_RANGE", () => {
+		for (const repeat of [1, 0, -2, 21]) {
+			const screen = withBodyNode({
+				id: "node-row",
+				component: "Table",
+				props: {},
+				slots: {},
+				repeat,
+			});
+			const result = validateScreen(screen, sampleRegistry());
+			const issue = result.errors.find(
+				(e) => e.code === VALIDATION_CODES.REPEAT_OUT_OF_RANGE,
+			);
+			expect(issue?.nodeId).toBe("node-row");
+			expect(issue?.path).toBe("$.body[2]");
+		}
+	});
+
+	it("repeat on the root yields REPEAT_ON_ROOT", () => {
+		const screen = sampleScreen();
+		screen.root.repeat = 2;
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.REPEAT_ON_ROOT,
+		);
+		expect(issue?.nodeId).toBe("node-page");
+		expect(issue?.suggestion).toContain("Box");
+	});
+
+	it("an expansion id collision yields DUPLICATE_NODE_ID", () => {
+		const screen = withBodyNode({
+			id: "node-row",
+			component: "Table",
+			props: {},
+			slots: {},
+			repeat: 2,
+		});
+		screen.root.slots.body.push({
+			id: "node-row-2",
+			component: "Table",
+			props: {},
+			slots: {},
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.DUPLICATE_NODE_ID,
+		);
+		expect(issue?.nodeId).toBe("node-row-2");
+		expect(issue?.message).toContain("repeat");
+	});
+});
