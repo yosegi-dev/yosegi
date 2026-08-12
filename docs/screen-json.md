@@ -71,7 +71,8 @@ becomes the JSX children; every other slot name is passed as a prop.
 
 ## Component ids
 
-Ids in a registry built from types take the form `<module path relative to projectRoot>#<exportName>`.
+Ids in a registry built from types take the form
+`<module path relative to projectRoot>#<exportName>`.
 
 ```
 app/components/ui/button#Button

@@ -55,8 +55,8 @@ The first two steps are the mandatory part: they pin down the real props so a gu
 ships. The screen's skeleton and composition idiom come from the host's own Stories and templates,
 not the registry. How the Story gets written is a choice of format. Write it directly when any
 component on the screen needs a value that is not a JSON literal — a runtime object, a component
-reference, a `ReactNode` built in an expression, repetition, a condition — because Screen JSON has no
-syntax for those. Otherwise Screen JSON buys validation before any JSX exists, plus the hand-off
+reference, a `ReactNode` built in an expression, repetition, a condition — because Screen JSON has
+no syntax for those. Otherwise Screen JSON buys validation before any JSX exists, plus the hand-off
 comments the downstream half reads back.
 
 Either way the host's type check is what confirms the result: it reads the JSX against the real

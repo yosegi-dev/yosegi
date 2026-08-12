@@ -13,11 +13,9 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const WIDTH_LIMIT = 100;
 
-// The width check reports without failing for now: the existing Japanese pages
-// carry around a hundred over-long lines, and they are re-wrapped in a
-// follow-up PR that flips this to true. Links, anchors, and twin parity fail
-// immediately either way.
-export const WIDTH_VIOLATIONS_FAIL = false;
+// Every page is wrapped within the budget, so an over-long line fails the
+// check the same way a broken link does.
+export const WIDTH_VIOLATIONS_FAIL = true;
 
 export type DocFile = {
 	// Path relative to the repository root, with forward slashes.
