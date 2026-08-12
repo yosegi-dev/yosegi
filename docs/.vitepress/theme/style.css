@@ -1,0 +1,72 @@
+/* Brand palette. Walnut carries the accent on light, Keyaki on dark: the two wood tones that hold
+   4.5:1 against their own background. Sumi and Mizuki stay the ink and the ground. */
+:root {
+	--vp-c-brand-1: #5b3b27;
+	--vp-c-brand-2: #6f4a33;
+	--vp-c-brand-3: #8a5e42;
+	--vp-c-brand-soft: rgba(185, 138, 82, 0.16);
+
+	--vp-c-bg: #ffffff;
+	--vp-c-bg-alt: #f7f2e9;
+	--vp-c-bg-soft: #f7f2e9;
+	--vp-c-text-1: #14110f;
+	--vp-c-text-2: #56504a;
+
+	--vp-home-hero-name-color: #14110f;
+	--vp-button-brand-bg: #14110f;
+	--vp-button-brand-hover-bg: #322b26;
+	--vp-button-brand-active-bg: #000000;
+	--vp-button-brand-border: transparent;
+
+	--yosegi-display: "Zen Kaku Gothic New", ui-sans-serif, system-ui, sans-serif;
+}
+
+.dark {
+	--vp-c-brand-1: #c79a5e;
+	--vp-c-brand-2: #b98a52;
+	--vp-c-brand-3: #a97c48;
+	--vp-c-brand-soft: rgba(185, 138, 82, 0.2);
+
+	--vp-c-bg: #14110f;
+	--vp-c-bg-alt: #1c1815;
+	--vp-c-bg-soft: #1c1815;
+	--vp-c-text-1: #f0e7d6;
+	--vp-c-text-2: #b3a999;
+
+	--vp-home-hero-name-color: #f0e7d6;
+	--vp-button-brand-bg: #f0e7d6;
+	--vp-button-brand-text: #14110f;
+	--vp-button-brand-hover-bg: #ffffff;
+	--vp-button-brand-hover-text: #14110f;
+	--vp-button-brand-active-bg: #ded2bd;
+	--vp-button-brand-active-text: #14110f;
+}
+
+/* The wordmark's typeface, kept to display sizes: body copy stays on the system stack, which
+   renders faster and reads better at 16px. */
+.VPHero .name,
+.VPHero .text,
+.VPFeature .title,
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+	font-family: var(--yosegi-display);
+	font-weight: 700;
+}
+
+.VPHero .name {
+	letter-spacing: -0.01em;
+}
+
+/* The symbol carries the page; the default glow behind it competes with the seams. */
+.VPHero .image-bg {
+	display: none;
+}
+
+.VPHero .VPImage {
+	max-width: 240px;
+}
+
+.VPFeature {
+	border-radius: 4px;
+}

@@ -34,6 +34,10 @@ jobs:
         run: bun run lint
       - name: Docs (textlint)
         run: bun run textlint
+      # The site build is where a broken cross-document link surfaces. Without
+      # this, a dead link would only be caught by the deploy on main.
+      - name: Docs (site build)
+        run: bun run docs:build
       - name: Test
         run: |
           bun --filter '@yosegi/*' test

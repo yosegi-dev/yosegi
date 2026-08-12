@@ -20,14 +20,19 @@
 		"lint": "bun --smol biome check .",
 		"lint:fix": "bun --smol biome check --write .",
 		"textlint": "textlint \"docs/ja/**/*.md\"",
-		"textlint:fix": "textlint --fix \"docs/ja/**/*.md\""
+		"textlint:fix": "textlint --fix \"docs/ja/**/*.md\"",
+		"docs:assets": "mkdir -p docs/public/brand && cp assets/brand/*.svg docs/public/brand/",
+		"docs:dev": "bun run docs:assets && vitepress dev docs",
+		"docs:build": "bun run docs:assets && vitepress build docs",
+		"docs:preview": "vitepress preview docs"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.7",
 		"@types/bun": "1.3.14",
 		"textlint": "15.8.0",
 		"textlint-rule-preset-ja-technical-writing": "12.0.2",
-		"typescript": "6.0.3"
+		"typescript": "6.0.3",
+		"vitepress": "1.6.4"
 	},
 	"engines": {
 		"bun": ">=1.3.0",
