@@ -57,7 +57,19 @@ bun add -d @yosegi/yosegi
 
 | Concept | English | Japanese | Do not write |
 | --- | --- | --- | --- |
-| The component catalog | Component Registry, short "the registry" | Component Registry, short "Registry" | 台帳, コンポーネント一覧, "component index" |
+| The component catalog | Component Registry, short "the registry" | Component Registry, short "Registry" | `台帳`, `コンポーネント一覧`, `"component index"` |
+| A UI building block | `component` | コンポーネント | `部品`; bare `component` in Japanese prose |
+| The registry's per-component record | `manifest` (`ComponentManifest`) | Manifest | lowercase `manifest` in Japanese prose |
+| A validation failure | `error` | エラー | `error` as-is in Japanese prose |
+| A non-blocking finding | `warning` | 警告 | `warning` as-is in Japanese prose |
+| The Story-derived signal | `curation` | キュレーション | `curation` as-is in Japanese prose |
+| Code from outside the host | `third-party` | サードパーティ | `第三者` |
+| Exposing another module's export | `re-export` | 再 export | `再エクスポート` |
+| A component wrapping another | `wrapper` | ラッパー | `wrapper` as-is in Japanese prose |
+| The MCP / dev server | `server` | サーバ | `サーバー` |
+| A pinned, single version | `exact version` | 厳密なバージョン | `実バージョン` |
+| A substituted, existing version | `a real version` | 実際のバージョン | `実バージョン` |
+| npm's package registry | `npm registry` | npm レジストリ | bare `レジストリ` — it collides with the Registry |
 | The intermediate tree | Screen JSON | Screen JSON | Screen Definition, 画面定義, "screen spec" |
 | `Text` / `Box` / `Heading` | synthetic primitives | 合成プリミティブ | built-ins, fallback components |
 | The project Yosegi runs against | the host | ホスト | your project, the client, the consumer app |
@@ -82,6 +94,20 @@ everything under `docs/ja/**` (`.textlintrc.json`); English pages are not linted
   (`../../x.md`, a repository-root file such as `AGENTS.md` or `CONTRIBUTING.md`). Identifiers,
   flags, error codes, and paths stay in English on both sides.
 - `skills/` is English only — it is read by agents working in a host project.
+
+## Translation review checklist
+
+Reviewing a Japanese page against its English source, check that the translation:
+
+- adds no evaluation, conclusion, or reasoning the English does not have.
+- keeps hedges (may, usually, still, ...) exactly where the English has them — none dropped, none
+  invented.
+- keeps negations and conditional clauses as written; a condition must not come back as a reason.
+- translates headings in full, conditions included.
+- renders the same English sentence identically wherever it appears across pages.
+- introduces no translation the terminology table does not list.
+- is re-wrapped at 100 columns counted in East Asian character width after translating.
+- does not copy an English em dash (—) as 「——」; parentheses or a sentence split take its place.
 
 ## Anonymity
 

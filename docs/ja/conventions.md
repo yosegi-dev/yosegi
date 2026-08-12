@@ -55,7 +55,19 @@ bun add -d @yosegi/yosegi
 
 | 概念 | 英語 | 日本語 | 使わない語 |
 | --- | --- | --- | --- |
-| 部品のカタログ | Component Registry、短くは "the registry" | Component Registry、短くは「Registry」 | 台帳, コンポーネント一覧, "component index" |
+| コンポーネントのカタログ | Component Registry、短くは "the registry" | Component Registry、短くは「Registry」 | `台帳`、`コンポーネント一覧`、`"component index"` |
+| UI の構成単位 | `component` | コンポーネント | `部品`、地の文の `component` |
+| Registry の 1 コンポーネント分の記録 | `manifest`（`ComponentManifest`） | Manifest | 小文字のままの `manifest` |
+| 検証の失敗 | `error` | エラー | `error` のまま |
+| 生成を止めない指摘 | `warning` | 警告 | `warning` のまま |
+| Story 由来の信号 | `curation` | キュレーション | `curation` のまま |
+| ホストの外から来るコード | `third-party` | サードパーティ | `第三者` |
+| 別モジュールの export の公開 | `re-export` | 再 export | `再エクスポート` |
+| 別のコンポーネントを包むもの | `wrapper` | ラッパー | `wrapper` のまま |
+| MCP / dev サーバ | `server` | サーバ | `サーバー` |
+| 固定された単一のバージョン | `exact version` | 厳密なバージョン | `実バージョン` |
+| 置換後の実在するバージョン | `a real version` | 実際のバージョン | `実バージョン` |
+| npm レジストリ | `npm registry` | npm レジストリ | 単なる `レジストリ`（Registry と紛れる） |
 | 中間表現のツリー | Screen JSON | Screen JSON | Screen Definition, 画面定義, "screen spec" |
 | `Text` / `Box` / `Heading` | synthetic primitives | 合成プリミティブ | built-ins, fallback components |
 | Yosegi を走らせる対象のプロジェクト | the host | ホスト | your project, the client, the consumer app |
@@ -80,6 +92,19 @@ bun add -d @yosegi/yosegi
   `CONTRIBUTING.md` などリポジトリ直下のファイル）で辿る。識別子・フラグ・エラー code・パスはどちらでも
   英語のまま。
 - `skills/` は英語のみ。ホストで作業するエージェントが読むものだから。
+
+## 翻訳レビューの観点
+
+日本語ページを英語の原文と突き合わせるときは、訳文が次を満たすことを確認する。
+
+- 原文に無い評価・結論・理由づけを足していない。
+- ヘッジ（may・usually・still など）は原文にある場所へそのまま残す。落とさず、勝手に足さない。
+- 否定と条件節は書かれたとおりに保つ。条件を理由に読み替えない。
+- 見出しは条件まで含めて訳す。
+- 複数ページに現れる同一の英文には、どのページでも同一の訳文を当てる。
+- 用語表に無い訳語を持ち込まない。
+- 訳出後は、東アジア文字幅で数えて 100 桁で折り返し直す。
+- 英語のダッシュ（—）を「——」で写さない。括弧への置き換えか文の分割で受ける。
 
 ## 匿名性
 
