@@ -115,6 +115,19 @@ describe("fixtures constraints", () => {
 		expect(withFixtures({ "a b": [] })).toThrow();
 	});
 
+	// Reserved words match the identifier pattern but `const class = ...` is a
+	// SyntaxError; the strict-mode set matters because a Story is a module.
+	it("rejects a name that is a reserved word", () => {
+		expect(withFixtures({ class: [] })).toThrow("reserved word");
+		expect(withFixtures({ default: [] })).toThrow("reserved word");
+		expect(withFixtures({ null: [] })).toThrow("reserved word");
+		expect(withFixtures({ let: [] })).toThrow("reserved word");
+		expect(withFixtures({ static: [] })).toThrow("reserved word");
+		expect(withFixtures({ await: [] })).toThrow("reserved word");
+		expect(withFixtures({ eval: [] })).toThrow("reserved word");
+		expect(withFixtures({ arguments: [] })).toThrow("reserved word");
+	});
+
 	it("rejects the identifiers the generated Story itself declares", () => {
 		expect(withFixtures({ meta: {} })).toThrow();
 		expect(withFixtures({ Meta: {} })).toThrow();

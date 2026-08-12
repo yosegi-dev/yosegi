@@ -90,8 +90,71 @@ export function bindingRootIdentifier(expression: string): string | null {
 // schema and the writer can't drift apart.
 const JS_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+// ECMAScript ReservedWords, which match the identifier pattern but cannot be
+// declared (`const class = ...` is a SyntaxError). The list is the spec's
+// ReservedWord production plus the names that are additionally reserved in
+// strict mode — a generated Story is a module, and modules are always strict.
+const JS_RESERVED_WORDS: ReadonlySet<string> = new Set([
+	// ReservedWord (ECMA-262 §12.7.2)
+	"await",
+	"break",
+	"case",
+	"catch",
+	"class",
+	"const",
+	"continue",
+	"debugger",
+	"default",
+	"delete",
+	"do",
+	"else",
+	"enum",
+	"export",
+	"extends",
+	"false",
+	"finally",
+	"for",
+	"function",
+	"if",
+	"import",
+	"in",
+	"instanceof",
+	"new",
+	"null",
+	"return",
+	"super",
+	"switch",
+	"this",
+	"throw",
+	"true",
+	"try",
+	"typeof",
+	"var",
+	"void",
+	"while",
+	"with",
+	"yield",
+	// Reserved only in strict mode
+	"implements",
+	"interface",
+	"let",
+	"package",
+	"private",
+	"protected",
+	"public",
+	"static",
+	// Not ReservedWords, but strict mode forbids binding them, so a
+	// `const eval = ...` declaration is just as much a SyntaxError.
+	"arguments",
+	"eval",
+]);
+
+export function isJsReservedWord(name: string): boolean {
+	return JS_RESERVED_WORDS.has(name);
+}
+
 export function isJsIdentifier(name: string): boolean {
-	return JS_IDENTIFIER_PATTERN.test(name);
+	return JS_IDENTIFIER_PATTERN.test(name) && !JS_RESERVED_WORDS.has(name);
 }
 
 // Identifiers the emitted Story itself always declares: `const meta` and the
@@ -141,6 +204,14 @@ export const fixturesSchema = z
 	.record(z.string(), jsonValueSchema)
 	.superRefine((fixtures, ctx) => {
 		for (const name of Object.keys(fixtures)) {
+			if (isJsReservedWord(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [name],
+					message: `Fixture name "${name}" is a reserved word in JavaScript, so it cannot be declared as a const. Rename the fixture.`,
+				});
+				continue;
+			}
 			if (!isJsIdentifier(name)) {
 				ctx.addIssue({
 					code: "custom",

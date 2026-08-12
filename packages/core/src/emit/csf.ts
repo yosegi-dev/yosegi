@@ -749,7 +749,7 @@ export function emitCsf(
 	const storyName = options.storyName ?? DEFAULT_STORY_NAME;
 	if (!isJsIdentifier(storyName)) {
 		throw new Error(
-			`Story name "${storyName}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", and do not start with a digit.`,
+			`Story name "${storyName}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", do not start with a digit, and avoid reserved words.`,
 		);
 	}
 	const fixtures = options.fixtures ?? {};
