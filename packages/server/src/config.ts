@@ -9,7 +9,11 @@ import {
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseComponentRegistry } from "@yosegi/core";
+import {
+	ComposerError,
+	parseComponentRegistry,
+	SERVICE_CODES,
+} from "@yosegi/core";
 import { Composer, FileScreenRepository } from "@yosegi/core/app";
 
 // Package root (one level above src/). fileURLToPath also handles Windows/URL encoding correctly.
@@ -101,8 +105,15 @@ export async function loadRegistry(dataDir = DEFAULT_DATA_DIR) {
 		return parseComponentRegistry(JSON.parse(raw));
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			throw new Error(
+			// REGISTRY_NOT_FOUND rather than a bare Error (which every adapter would report
+			// as INTERNAL_ERROR): the fix is always the same rebuild command, and the
+			// structured path/dataDir spare the reader from parsing the message to see
+			// which --data-dir was actually consulted.
+			throw new ComposerError(
+				SERVICE_CODES.REGISTRY_NOT_FOUND,
 				`Registry not found at ${path}. Generate it with: yosegi registry build --source <glob> --tsconfig <path>`,
+				null,
+				{ details: { path, dataDir } },
 			);
 		}
 		throw error;

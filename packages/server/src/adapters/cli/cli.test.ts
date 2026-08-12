@@ -1410,7 +1410,8 @@ describe("runCli", () => {
 		expect(output()).toContain('"anyShapedProps": 2');
 	});
 
-	it("registry build --source は --tsconfig 無しだとエラーになる", async () => {
+	// A fixable invocation must not read as an internal failure.
+	it("registry build --source は --tsconfig 無しだと INVALID_ARGUMENT になる", async () => {
 		const code = await runCli([
 			"registry",
 			"build",
@@ -1421,6 +1422,53 @@ describe("runCli", () => {
 		]);
 		expect(code).toBe(1);
 		expect(output()).toContain("--tsconfig");
+		expect(output()).toContain("INVALID_ARGUMENT");
+		expect(output()).not.toContain("INTERNAL_ERROR");
+	});
+
+	// The structured path / dataDir let an agent see which --data-dir was consulted
+	// without parsing the message.
+	it("registry が無ければ REGISTRY_NOT_FOUND と path / dataDir を返す", async () => {
+		const emptyDir = join(dataDir, "empty");
+		const code = await runCli(["component", "list", "--data-dir", emptyDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; path: string; dataDir: string };
+		};
+		expect(parsed.error.code).toBe("REGISTRY_NOT_FOUND");
+		expect(parsed.error.path).toBe(join(emptyDir, "registry.json"));
+		expect(parsed.error.dataDir).toBe(emptyDir);
+	});
+
+	it("component inspect の未登録 id は COMPONENT_NOT_FOUND を返す", async () => {
+		const code = await runCli([
+			"component",
+			"inspect",
+			"Nope",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("COMPONENT_NOT_FOUND");
+	});
+
+	// The CLI's payloads are files: "Request payload" wording would point the reader
+	// at a request that doesn't exist.
+	it("スキーマ違反のファイルは Input file の文言で INVALID_REQUEST になる", async () => {
+		const screenFile = join(dataDir, "bad.json");
+		await writeFile(screenFile, JSON.stringify({ schemaVersion: "1.0" }));
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			join(dataDir, "out.stories.tsx"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("INVALID_REQUEST");
+		expect(output()).toContain("Input file failed schema validation.");
 	});
 
 	// Components whose props can't be read from types can only be supplemented via

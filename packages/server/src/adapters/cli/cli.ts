@@ -3,11 +3,12 @@ import { basename, dirname, join, resolve } from "node:path";
 import {
 	type ComponentManifest,
 	type ComponentRegistry,
+	ComposerError,
 	componentManifestSchema,
-	didYouMean,
 	parseComponentRegistry,
 	parseScreenDefinition,
 	parseScreenOperations,
+	SERVICE_CODES,
 	validateScreen,
 	withSyntheticComponents,
 } from "@yosegi/core";
@@ -249,26 +250,22 @@ function inspectComponent(
 	flags: CliFlags,
 ): number {
 	const asJson = flagBoolean(flags, "json");
-	const knownIds = composer.components
-		.listComponents()
-		.map((manifest) => manifest.id);
 	let exitCode = 0;
 	const results: unknown[] = [];
 	const blocks: string[] = [];
 	for (const componentId of componentIds) {
-		const component = composer.components.getComponent(componentId);
-		if (!component) {
-			// Catch typos here, suggesting the closest existing id from the registry.
-			const suggestion = didYouMean(componentId, knownIds);
-			const error = {
-				error: `component "${componentId}" not found`,
-				suggestion: suggestion ?? null,
-			};
+		let component: ComponentManifest;
+		try {
+			// requireComponent owns the not-found representation (code + did-you-mean
+			// candidates), so the CLI reports the same error CLI/MCP/HTTP all share.
+			component = composer.components.requireComponent(componentId);
+		} catch (error) {
+			const { body } = toErrorResponse(error);
 			exitCode = 1;
 			if (asJson) {
-				results.push(error);
+				results.push(body);
 			} else {
-				blocks.push(JSON.stringify(error, null, 2));
+				blocks.push(JSON.stringify(body, null, 2));
 			}
 			continue;
 		}
@@ -372,7 +369,8 @@ async function generateMetadata(
 	// Both the glob and the id's module path are resolved with the same base as registry build.
 	const projectRoot = resolveProjectRoot(flags);
 	if (!projectRoot) {
-		throw new Error(
+		throw new ComposerError(
+			SERVICE_CODES.INVALID_ARGUMENT,
 			"registry metadata requires --tsconfig <path> or --project-root <dir> (the base for --source globs and for component id module paths).",
 		);
 	}
@@ -838,7 +836,12 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 	if (sources.length > 0) {
 		const tsconfigPath = flagString(flags, "tsconfig");
 		if (!tsconfigPath) {
-			throw new Error("--source requires --tsconfig <path>.");
+			// INVALID_ARGUMENT rather than a bare Error: the caller can fix the invocation,
+			// so it must not read as an internal failure.
+			throw new ComposerError(
+				SERVICE_CODES.INVALID_ARGUMENT,
+				"--source requires --tsconfig <path>.",
+			);
 		}
 		// The base for globs and ids. Defaults to the directory containing tsconfig (i.e.
 		// the host's package root) when unspecified.
@@ -1071,7 +1074,9 @@ export async function runCli(argv: string[]): Promise<number> {
 		print(usage());
 		return 1;
 	} catch (error) {
-		const { body } = toErrorResponse(error);
+		// The CLI's payloads come from files, so schema/JSON failures must not talk
+		// about a "request".
+		const { body } = toErrorResponse(error, { payloadSource: "file" });
 		print(body);
 		return 1;
 	}
