@@ -41,6 +41,9 @@ props まで型から取得、出力は決定的。詳細は [`docs/ja/registry.
 
 詳細は [`docs/ja/workflows.md`](./docs/ja/workflows.md)。
 
+Storybook 10.3 以降は公式の MCP サーバーと Component Manifest を同梱する。Yosegi は競合ではなく
+補完関係にあり、棲み分けは [`docs/ja/storybook-mcp.md`](./docs/ja/storybook-mcp.md) にまとめている。
+
 ## インストール
 
 Node.js 20 以上。パッケージマネージャは何でもよい。Registry は TypeScript 6.x のコンパイラ API を
@@ -113,6 +116,7 @@ cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 | --- | --- |
 | [はじめに](./docs/ja/getting-started.md) | チームでのセットアップと通しの手順 |
 | [ワークフロー](./docs/ja/workflows.md) | ユースケース、上流・下流のループ、エラー code |
+| [Storybook MCP と Yosegi](./docs/ja/storybook-mcp.md) | 公式 Storybook MCP との重なりと棲み分け |
 | [Screen JSON](./docs/ja/screen-json.md) | コンポーネント id、合成プリミティブ、bindings / events |
 | [CLI リファレンス](./docs/ja/cli.md) | 全コマンドとフラグ、および MCP ツール |
 | [開発](./docs/ja/development.md) | パッケージ構成、ビルド、公開前検証 |
