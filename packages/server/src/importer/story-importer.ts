@@ -904,6 +904,90 @@ function findMetaObject(
 
 // ---- Fixtures (top-level consts) ----
 
+// Method names that mutate their receiver in place. A call like
+// `customers.push(...)` after `const customers = []` means the initializer is
+// not the value the Story actually rendered with.
+const MUTATING_METHOD_NAMES: ReadonlySet<string> = new Set([
+	"push",
+	"pop",
+	"shift",
+	"unshift",
+	"splice",
+	"sort",
+	"reverse",
+	"fill",
+	"copyWithin",
+]);
+
+// The identifier a property / element access chain hangs off
+// (`customers.items[0].name` -> "customers"). null when the chain does not
+// bottom out in a plain identifier.
+function rootIdentifierOfChain(expression: ts.Expression): string | null {
+	let current: ts.Expression = expression;
+	while (
+		ts.isPropertyAccessExpression(current) ||
+		ts.isElementAccessExpression(current) ||
+		ts.isNonNullExpression(current) ||
+		ts.isParenthesizedExpression(current)
+	) {
+		current = current.expression;
+	}
+	return ts.isIdentifier(current) ? current.text : null;
+}
+
+// Best-effort scan for identifiers whose value is mutated after
+// initialization. Snapshotting the initializer of such a const would re-emit a
+// value the Story never rendered with, so those names are excluded from the
+// fixtures. Detected: assignments (plain and compound) to a property or
+// element of the identifier, `delete`, the known in-place array methods, and
+// `Object.assign` with the identifier as target. Full mutation detection is
+// statically impossible — a mutation through an alias
+// (`const rows = customers; rows.push(...)`) or inside a helper the value is
+// passed to still slips through — which matches the read-back contract:
+// best-effort, with the host's review of the Story as the final check.
+// Shadowing is not tracked either; a local variable sharing a fixture's name
+// counts against it, which errs on the side of importing less.
+function collectMutatedIdentifiers(sourceFile: ts.SourceFile): Set<string> {
+	const mutated = new Set<string>();
+	const add = (root: string | null): void => {
+		if (root !== null) {
+			mutated.add(root);
+		}
+	};
+	const visit = (node: ts.Node): void => {
+		if (
+			ts.isBinaryExpression(node) &&
+			node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+			node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+			(ts.isPropertyAccessExpression(node.left) ||
+				ts.isElementAccessExpression(node.left))
+		) {
+			add(rootIdentifierOfChain(node.left));
+		} else if (ts.isDeleteExpression(node)) {
+			add(rootIdentifierOfChain(node.expression));
+		} else if (ts.isCallExpression(node)) {
+			const callee = node.expression;
+			if (ts.isPropertyAccessExpression(callee)) {
+				if (MUTATING_METHOD_NAMES.has(callee.name.text)) {
+					add(rootIdentifierOfChain(callee.expression));
+				} else if (
+					callee.name.text === "assign" &&
+					ts.isIdentifier(callee.expression) &&
+					callee.expression.text === "Object"
+				) {
+					const target = node.arguments[0];
+					if (target !== undefined) {
+						add(rootIdentifierOfChain(target));
+					}
+				}
+			}
+		}
+		ts.forEachChild(node, visit);
+	};
+	visit(sourceFile);
+	return mutated;
+}
+
 // Reads top-level, non-exported variable declarations back as fixtures. emit
 // writes them between the imports and meta, but the position is not enforced on
 // read-back — a const's value does not depend on where it sits, and hand-edited
@@ -915,6 +999,7 @@ function collectFixtures(
 	meta: ts.ObjectLiteralExpression | null,
 ): Record<string, unknown> {
 	const fixtures: Record<string, unknown> = {};
+	const mutatedIdentifiers = collectMutatedIdentifiers(context.sourceFile);
 	for (const statement of context.sourceFile.statements) {
 		if (!ts.isVariableStatement(statement)) {
 			continue;
@@ -962,6 +1047,18 @@ function collectFixtures(
 					context,
 					"OPAQUE_FIXTURE",
 					`Top-level "${name}" has no initializer, so it was not imported as a fixture`,
+					declaration,
+				);
+				continue;
+			}
+			// A const whose value the module then mutates (`customers.push(...)`)
+			// would be snapshotted at its initializer — a value the Story never
+			// rendered with — so it is skipped instead.
+			if (mutatedIdentifiers.has(name)) {
+				warn(
+					context,
+					"OPAQUE_FIXTURE",
+					`Top-level "${name}" is mutated after initialization, so it was not imported as a fixture (its initializer is not the rendered value)`,
 					declaration,
 				);
 				continue;

@@ -725,6 +725,58 @@ describe("importStory", () => {
 			expect(imported.fixtures).toEqual({});
 		});
 
+		it("初期化後に変異された const は OPAQUE_FIXTURE として警告し fixture に読まない", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const customers = [];",
+				'const settings = { theme: "light" };',
+				"const rows = [1, 2];",
+				"const totals = { a: 1 };",
+				"const extra = { a: 1 };",
+				"const keep = [3, 4];",
+				'customers.push({ name: "Sato" });',
+				'settings.theme = "dark";',
+				"rows[0] = 9;",
+				"Object.assign(totals, { b: 2 });",
+				"delete extra.a;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+			]);
+			for (const warning of imported.warnings) {
+				expect(warning.message).toContain("mutated after initialization");
+			}
+			expect(imported.fixtures).toEqual({ keep: [3, 4] });
+		});
+
+		it("変異しないメソッド呼び出しやプロパティ参照は fixture を保つ", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				'const customers = [{ name: "Sato" }];',
+				"customers.map((c) => c.name);",
+				"customers.length;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table rows={customers} /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.fixtures).toEqual({ customers: [{ name: "Sato" }] });
+			expect(imported.root?.bindings).toEqual({ rows: "customers" });
+		});
+
 		it("let / var 宣言は OPAQUE_FIXTURE として警告し fixture に読まない", () => {
 			const source = [
 				'import { Table } from "~/components/table";',

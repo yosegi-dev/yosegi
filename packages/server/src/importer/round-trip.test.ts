@@ -511,6 +511,36 @@ describe("fixtures のラウンドトリップ", () => {
 		expect(second).toBe(first);
 	});
 
+	// A const the module mutates after initialization must not survive the
+	// round trip as a fixture: snapshotting its initializer would re-emit a
+	// value the original Story never rendered with.
+	it("変異された const は fixture として戻らず、再出力にも現れない", () => {
+		const source = [
+			'import { Card } from "./ui/card";',
+			"const customers = [];",
+			'customers.push({ name: "Sato" });',
+			'const meta: Meta = { title: "S/T" };',
+			"export default meta;",
+			"export const Default: StoryObj = { render: () => <Card /> };",
+		].join("\n");
+
+		const imported = importStory({ source, registry });
+		expect(imported.fixtures).toEqual({});
+		expect(
+			imported.warnings.some(
+				(warning) =>
+					warning.code === "OPAQUE_FIXTURE" &&
+					warning.message.includes("mutated after initialization"),
+			),
+		).toBe(true);
+
+		const second = emitCsf(imported.root as ScreenNode, registry, {
+			title: "S/T",
+			fixtures: imported.fixtures,
+		});
+		expect(second).not.toContain("const customers");
+	});
+
 	// repeat is one-way by design: the Story carries the expanded copies, and the
 	// importer reads them back as plain nodes.
 	it("repeat は展開済みノードとして戻る（不可逆）", () => {
