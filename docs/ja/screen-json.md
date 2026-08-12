@@ -63,8 +63,8 @@ Screen JSON は中間表現。一時ファイルとして扱ってよく、成�
 
 必須フィールドの欠落は検証の警告ではなく `INVALID_REQUEST` になる。
 
-ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須。ノードの
-`id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の slot 名は
+ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須。ノード
+の `id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の slot 名は
 prop として渡される。
 
 ## コンポーネント id
@@ -76,16 +76,16 @@ app/components/ui/button#Button
 app/components/ui/card#CardHeader
 ```
 
-この id をそのまま `component` に書く。1 ファイルが複数の部品を export する場合（`Card` /
-`CardHeader` / `CardBody`）でも一意に定まるのは、export 名だけでは足りないから。`CardHeader` とだけ
-書くと `COMPONENT_NOT_FOUND` になり、候補として完全な id が返る。
+この id をそのまま `component` に書く。1 ファイルが複数のコンポーネントを export する場合（`Card` /
+`CardHeader` / `CardBody`）でも一意に定まるのはこの形だけで、export 名だけでは区別できない。
+`CardHeader` とだけ書くと `COMPONENT_NOT_FOUND` になり、候補として完全な id が返る。
 
 `--index` 単独モードは互換のため短い id（`Button`）のまま。[Component Registry](./registry.md)
 を参照。
 
 ## 合成プリミティブ
 
-Registry に無くても使える構造用の部品。import を必要としない。
+Registry に無くても使える構造用のコンポーネント。import を必要としない。
 
 | id | props | 出力 |
 | --- | --- | --- |
@@ -93,12 +93,13 @@ Registry に無くても使える構造用の部品。import を必要としな�
 | `Box` | `className` | `<div className=...>`（`slots.children` を持てる） |
 | `Heading` | `text` | `<h1 className="font-bold text-2xl tracking-tight">` |
 
-実部品のラベルは、その `children` slot に `Text` を置いて表現する。
+実コンポーネントのラベルは、その `children` slot に `Text` を置いて表現する。
 
-合成プリミティブは id の長さで見分ける。短い id（`"Text"`）は常にプリミティブを指し、ホストの部品は
-完全な id（`"app/components/typography#Text"`）を使う。同名の部品が Registry にもある場合、検証は
-完全な id を候補に添えた `SYNTHETIC_NAME_SHADOWED` 警告を出す。プリミティブを使うこと自体は正当な
-ので error ではない。`Heading` も同様に、見出し部品を持たないホスト向けの既定にすぎない。見た目は
+合成プリミティブは id の長さで見分ける。短い id（`"Text"`）は常にプリミティブを指し、ホストの
+コンポーネントは完全な id（`"app/components/typography#Text"`）を使う。同名のコンポーネントが
+Registry にもある場合、検証は完全
+な id を候補に添えた `SYNTHETIC_NAME_SHADOWED` 警告を出す。プリミティブを使うこと自体は正当なのでエ
+ラーではない。`Heading` も同様に、見出しコンポーネントを持たないホスト向けの既定にすぎない。見た目は
 Yosegi の既定であって、ホストのタイポグラフィ定義には従わない。
 
 ## bindings / events
@@ -114,15 +115,15 @@ Yosegi の既定であって、ホストのタイポグラフィ定義には従�
 `bindings` の値は文字列そのもの。`{ "expression": "..." }` のようにオブジェクトで包むとスキーマ違反
 （`INVALID_REQUEST`。正しい形は `hints` に出る）。`events` の `arguments` は省略できる。
 
-どちらのキーも Manifest と突き合わせて検証される。存在しない prop を指す `bindings` のキーは error
-（`UNKNOWN_BINDING_TARGET`）。存在しない prop に値を書くのと同じ間違いだからである。`events` のキーは
-warning どまり（`UNKNOWN_EVENT_TARGET`）で、これは Manifest がイベントの一覧を持たず、ハンドラが
-関数型の prop としてしか現れないため。
+どちらのキーも Manifest と突き合わせて検証される。存在しない prop を指す `bindings` のキーは
+エラー（`UNKNOWN_BINDING_TARGET`）。存在しない prop に値を書くのと同じ間違いだからである。`events`
+のキーは警告どまり（`UNKNOWN_EVENT_TARGET`）で、これは Manifest がイベントの一覧を持たず、ハンドラ
+が関数型の prop としてしか現れないため。
 
 binding の宛先は prop でなければならない。型から作られた Registry では `ReactNode` の prop は prop
 ではなく **slot** になる。`children` も同様である。ノードのテキストをデータ由来にしたい場合は、その
-部品が実際に宣言している文字列の prop へ binding するか、テキストは `slots.children` へ置いたまま
-実装時に結線する。
+コンポーネントが実際に宣言している文字列の prop へ binding するか、テキストは `slots.children` へ置
+いたまま実装時に結線する。
 
 `bindings` を持つ prop は型検証の対象外になる。値が具体化するのは実装時だからである。
 
@@ -141,11 +142,11 @@ binding の宛先は prop でなければならない。型から作られた Re
 ### binding はモックの値ではない
 
 binding は「実装時にどこから値が来るか」の宣言であって、モックが表示できる値は持たない。optional な
-prop なら prop が出力されないだけでモックは描画できる。**required** な prop の場合、エミッタは prop を
-落とさずに式そのものを JSX へ書き（`rows={customers}`）、検証は `BOUND_REQUIRED_PROP` を警告する。その
-名前は Story に存在しないので、ホストの型検査はそこで止まる。required な prop には `props` にモック値も
-与え、binding は意図として残す。例外は required なハンドラで、何もしない `() => {}` が埋められるため
-`events` への宣言だけでよい。
+prop なら prop が出力されないだけでモックは描画できる。**required** な prop の場合、エミッタは prop
+を落とさずに式そのものを JSX へ書き（`rows={customers}`）、検証は `BOUND_REQUIRED_PROP` を警告する。
+その名前は Story に存在しないので、ホストの型検査はそこで止まる。required な prop には `props` にモ
+ック値も与え、binding は意図として残す。例外は required なハンドラで、何もしない `() => {}` が埋めら
+れるため `events` への宣言だけでよい。
 
 ## when / each
 

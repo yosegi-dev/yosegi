@@ -49,7 +49,7 @@ yosegi registry build --source <glob> --tsconfig <path> [options]
 | `--project-root <dir>` | path | `--tsconfig` のあるディレクトリ | `--source` の glob とコンポーネント id のモジュールパスの基準。cwd は基準にしない |
 | `--index <path\|url>` | path または URL | — | Storybook の `index.json`。Story 由来のカテゴリ・`curation.recommended`・Story タイトルが付く |
 | `--storybook-url <url>` | URL | — | `--index` の取得元 Storybook のベース URL。ディープリンクを付ける。`--index` 併用時のみ効く |
-| `--metadata <file>` | path | — | 型から読めなかった部品の props を手で補う。`--source` / `--index` どちらの経路でも効く |
+| `--metadata <file>` | path | — | 型から読めなかったコンポーネントの props を手で補う。`--source` / `--index` どちらの経路でも効く |
 | `--import-map <from=to,...>` | string | tsconfig の `paths` | Registry に保存する import specifier を上書きする。ホストの alias が tsconfig に無い場合のみ必要 |
 | `--report <path>` | path | — | `{ stats, missed, undocumented }` を書き出す。抽出できなかった export と、JSDoc を書く価値のある props を優先順に並べたもの |
 | `--out <path>` | path | `--data-dir` 直下の `registry.json` | Registry の書き出し先。中間ディレクトリは自動作成 |
@@ -63,15 +63,15 @@ yosegi registry build \
   --data-dir .yosegi
 ```
 
-実行の最後に統計が出る。`files: 0` は glob が 1 件も拾えなかったということ（警告も出るが、合成
-プリミティブ 3 件入りの Registry は書かれてしまう）。`componentCandidates` は React コンポーネント
-と判定した export の件数。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆っていない
-（警告も出る。`.tsx` を含んでいるか確認する）。`withNodeSlots: 0` かつ `anyShapedProps` が高い場合、
+実行の最後に統計が出る。`files: 0` は glob が 1 件も拾えなかったということ（警告も出るが、合成プリミ
+ティブ 3 件入りの Registry はそのまま書き出される）。`componentCandidates` は React コンポーネントと
+判定した export の件数。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆っていない（警告も
+出る。`.tsx` を含んでいるか確認する）。`withNodeSlots: 0` かつ `anyShapedProps` が高い場合、
 `--tsconfig` から `@types/react` が解決できていない。ReactNode の props は `json` / `shape: any` に
-劣化し、slot は 1 つも検出されない（警告が直し方を示す）。`propsUnreadable` が高い場合、渡した tsconfig
-がホストのものではない可能性が高い。`props` に対する `documentedProps` は JSDoc の付いている props の
-割合。`undocumentedRequiredOpaqueProps` は「必須で、リテラルでは値を書けず、どこにも説明が無い」
-props の件数。
+劣化し、slot は 1 つも検出されない（警告が直し方を示す）。`propsUnreadable` が高い場合、渡した
+tsconfig がホストのものではない可能性が高い。`props` に対する `documentedProps` は JSDoc の付いてい
+る props の割合。`undocumentedRequiredOpaqueProps` は「必須で、リテラルでは値を書けず、どこにも説明
+が無い」props の件数。
 
 `--report` の `undocumented` セクションがその props を列挙する。1 件は
 `{ component, prop, kind, priority, recommended, shape? }` の形。並びは `required-opaque` /
@@ -111,7 +111,7 @@ yosegi registry metadata "app/components/ui/badge#Badge" \
 
 ## `registry status`
 
-Registry がホストのソースに対して今も current かどうかを、作り直さずに報告する。
+Registry がホストのソースに対して今も最新かどうかを、作り直さずに報告する。
 
 ```sh
 yosegi registry status [options]
@@ -119,7 +119,7 @@ yosegi registry status [options]
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--json` | boolean | `false` | テキスト要約ではなく Manifest を返す |
+| `--json` | boolean | `false` | テキスト要約ではなく Manifest そのものを返す |
 
 ```sh
 yosegi registry status --data-dir .yosegi
@@ -131,7 +131,7 @@ Registry は `source: unknown` を返す。再計算する元が無いため。
 
 ## `component list`
 
-登録されている部品を一覧する。
+登録されているコンポーネントを一覧する。
 
 ```sh
 yosegi component list [options]
@@ -147,17 +147,17 @@ yosegi component list [options]
 yosegi component list --query card --data-dir .yosegi
 ```
 
-見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出る。この行は結果を
-左右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープ
-リンクを再現できる。`--json` では `version` / `generatedAt` / `builtWith`（生成した Yosegi）/ `inputs`
-が返る。記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの Yosegi
-が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出す。Registry が実際に stale か
-どうかは、この見出しを目で判断せず `registry status`（上記）で確認する。
+見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出る。この行は結果を左
+右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープリン
+クを再現できる。`--json` では `version` / `generatedAt` / `builtWith`（生成した Yosegi）/ `inputs`
+が返る。記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの
+Yosegi が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出す。Registry が実際に古く
+なっているかどうかは、この見出しを目で判断せず `registry status`（上記）で確認する。
 
 ## `component inspect`
 
-1 部品の import 文・props（型・required・既定値・enum の全選択肢・description）・slots を返す。
-登録されていない id には最も近い候補が返る。
+1 コンポーネントの import 文・props（type・required・default・enum の選択肢・description）・slots を
+返す。登録されていない id には最も近い候補が返る。
 
 ```sh
 yosegi component inspect <componentId> [--json]
@@ -288,10 +288,10 @@ claude mcp add yosegi -- npx yosegi mcp
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
 `generate_story` が取る `root` は ScreenNode 単体であって Screen JSON 全体ではない。`importMap` は
-CLI と同じ文字列で、オブジェクトではない。`search_components` は `limit`（既定 50、上限 200）で打ち切った
-要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返す。
-`registry build`・`registry metadata`・`story import` は CLI にしか無く、`--meta-template` に相当する
-MCP の口も無い。
+CLI と同じ文字列で、オブジェクトではない。`search_components` は `limit`（既定 50、上限 200）で打ち
+切った要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返す。
+`registry build`・`registry metadata`・`story import` は CLI にしか無く、`--meta-template` に相当す
+る MCP の口も無い。
 
 ## 次に読む
 
