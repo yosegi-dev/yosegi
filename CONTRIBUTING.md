@@ -64,4 +64,5 @@ the right one rather than restating the diff.
 ## Pull requests
 
 Say what changed and why, and include the output of any command whose behaviour you changed. If the
-change is user-visible, update the docs in the same pull request — both languages.
+change is user-visible, update the docs in the same pull request — both languages. The pull request
+template asks for exactly that; fill in its checklist rather than removing it.
