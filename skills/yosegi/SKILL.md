@@ -5,7 +5,7 @@ description: Build a screen mock or screen proposal (画面モック) out of the
 
 # Yosegi — building screens from a host's own components
 
-> **Version: 2026-08-11.** An agent harness can load a stale copy of a skill without saying so. If
+> **Version: 2026-08-12.** An agent harness can load a stale copy of a skill without saying so. If
 > this date is older than the one in the repository's `skills/yosegi/SKILL.md`, you are reading an
 > out-of-date copy — re-install it before going further.
 
@@ -114,6 +114,11 @@ Read the statistics it prints:
 
 - `files: 0` → the glob matched nothing. The command still succeeds and writes a registry holding
   only the three synthetic primitives, so do not read "Wrote 3 components" as success.
+- `componentCandidates: 0` with `files` positive, or `withNodeSlots: 0` with a high
+  `anyShapedProps` → the build degraded even though it succeeded. The first means the glob covered
+  no React components; the second means `@types/react` did not resolve, so every `ReactNode` prop
+  flattened to `json` and no slots were detected. A `Warning:` line names the fix in both cases —
+  resolve it and rebuild before going further.
 - `propsUnreadable` high relative to `extractedComponents` → the tsconfig is probably wrong. Resolve
   it now (`references/cli.md`, `registry metadata`); a component in that state rejects perfectly
   real props later.

@@ -164,6 +164,8 @@ These carry no `code`, and every one of them appears alongside a *successful* ex
 | Line | Meaning | What to do |
 | --- | --- | --- |
 | `Warning: --source matched no files (--project-root: <dir>)` | The glob's base is wrong | Globs resolve against `--project-root`, which defaults to the tsconfig's directory — never the cwd. The command still succeeded and wrote a registry of three synthetic primitives, so do not read `Wrote 3 components` as success |
+| `Warning: <n> files were read but no React component exports were found` | The glob matched files, but none of them exports a React component | Check that the glob covers the host's `.tsx` component files and that the project uses React. The registry written holds nothing usable |
+| `Warning: React's type definitions did not resolve ...` | `@types/react` is not reachable from the host's tsconfig (pnpm's strict `node_modules`, or no direct dependency on it) | Every `ReactNode` prop flattened to `json` / `shape: any` and no slots were detected — the stats show it as `withNodeSlots: 0` with a high `anyShapedProps`. Make `@types/react` resolvable from the host (install it as a direct dependency), then rebuild |
 | `Warning: these --metadata ids matched no component: <ids>` | Those ids are mistyped | Nothing was applied for them. Copy the id from `component list` |
 | `Note: the template only covers cva variants...` | Printed by every `registry metadata` run | The scaffold is incomplete by construction. Add the non-variant props from the source |
 | `Note: <path>` from `registry metadata` | The variants could not be read | You get an empty scaffold. Write that component's props by hand from the named source |

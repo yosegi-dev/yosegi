@@ -58,7 +58,11 @@ yosegi registry build \
 ```
 
 実行の最後に統計が出る。`files: 0` は glob が 1 件も拾えなかったということ（警告も出るが、合成
-プリミティブ 3 件入りの Registry は書かれてしまう）。`propsUnreadable` が高い場合、渡した tsconfig
+プリミティブ 3 件入りの Registry は書かれてしまう）。`componentCandidates` は React コンポーネント
+と判定した export の件数。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆っていない
+（警告も出る。`.tsx` を含んでいるか確認する）。`withNodeSlots: 0` かつ `anyShapedProps` が高い場合、
+`--tsconfig` から `@types/react` が解決できていない。ReactNode の props は `json` / `shape: any` に
+劣化し、slot は 1 つも検出されない（警告が直し方を示す）。`propsUnreadable` が高い場合、渡した tsconfig
 がホストのものではない可能性が高い。`props` に対する `documentedProps` は JSDoc の付いている props の
 割合。`undocumentedRequiredOpaqueProps` は「必須で、リテラルでは値を書けず、どこにも説明が無い」
 props の件数。
