@@ -1435,6 +1435,89 @@ describe("runCli", () => {
 		expect(output()).toContain('"anyShapedProps": 2');
 	});
 
+	// --json folds the text output's mixed stream (Wrote line / warnings / stats / hints)
+	// into one machine-readable object.
+	it("registry build --json は結果を単一の JSON オブジェクトで返す", async () => {
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const outFile = join(dataDir, "json-registry.json");
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"nowhere/**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--out",
+			outFile,
+			"--json",
+			"--data-dir",
+			join(dataDir, "empty"),
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			out: string;
+			version: string;
+			count: number;
+			stats: { files: number };
+			warnings: string[];
+			hints: string[];
+		};
+		expect(parsed.out).toBe(outFile);
+		expect(parsed.count).toBeGreaterThan(0);
+		expect(parsed.stats.files).toBe(0);
+		expect(parsed.warnings.join("\n")).toContain("--source matched no files");
+		expect(output()).not.toContain("Wrote ");
+	});
+
+	it("registry build --json は --index 単独でも同じ形で返す", async () => {
+		const indexFile = join(dataDir, "json-index.json");
+		await writeFile(
+			indexFile,
+			JSON.stringify({
+				v: 5,
+				entries: {
+					"components-badge--default": {
+						type: "story",
+						id: "components-badge--default",
+						name: "Default",
+						title: "Components/Badge",
+						importPath: "./badge.stories.tsx",
+					},
+				},
+			}),
+		);
+		const outFile = join(dataDir, "json-index-registry.json");
+		const code = await runCli([
+			"registry",
+			"build",
+			"--index",
+			indexFile,
+			"--out",
+			outFile,
+			"--json",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			out: string;
+			count: number;
+			stats: null;
+			warnings: string[];
+			hints: string[];
+		};
+		expect(parsed.out).toBe(outFile);
+		expect(parsed.count).toBeGreaterThan(0);
+		// The index-only path has no extraction statistics.
+		expect(parsed.stats).toBe(null);
+	});
+
 	// A fixable invocation must not read as an internal failure.
 	it("registry build --source は --tsconfig 無しだと INVALID_ARGUMENT になる", async () => {
 		const code = await runCli([

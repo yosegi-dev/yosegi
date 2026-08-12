@@ -1018,15 +1018,14 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		});
 		const registry = withBuildProvenance(built, flags);
 		await writeFile(out, `${JSON.stringify(registry, null, "\t")}\n`);
-		print(
-			`Wrote ${registry.components.length} components to ${out} (version ${registry.version})`,
-		);
+		const warnings: string[] = [];
+		const hints: string[] = [];
 		// Even if the glob matched zero files, a registry made up of only synthetic
 		// primitives can still be written, so "Wrote 3 components" can look like a success.
 		// Without a flag here, work could start on a screen with no real components, so
 		// spell out the suspected misconfiguration explicitly.
 		if (stats.files === 0) {
-			print(
+			warnings.push(
 				`Warning: --source matched no files (--project-root: ${projectRoot}). Globs are relative to that directory.`,
 			);
 		}
@@ -1050,16 +1049,15 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// A --metadata id that matched nothing is almost certainly a typo. Dropping it
 		// silently would hide the reason the supplement had no effect, so name it explicitly.
 		if (unusedMetadataIds.length > 0) {
-			print(
+			warnings.push(
 				`Warning: these --metadata ids matched no component: ${unusedMetadataIds.join(", ")}`,
 			);
 		}
-		print(stats);
 		// Prop JSDoc is the single input that most improves registry quality, and only the
 		// host can write it. Even someone who doesn't pass --report should still learn
 		// there's a place to write it.
 		if (stats.withUndocumentedRequiredOpaqueProps > 0) {
-			print(
+			hints.push(
 				`Hint: ${stats.undocumentedRequiredOpaqueProps} required props across ${stats.withUndocumentedRequiredOpaqueProps} components take a value no literal can express and carry no description. Add JSDoc to them; --report <path> lists which.`,
 			);
 		}
@@ -1067,7 +1065,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// pointer in the Registry at all, so this is worth surfacing even to someone who
 		// doesn't pass --report.
 		if (outsideSources.totalCount > 0) {
-			print(
+			hints.push(
 				`Hint: ${outsideSources.totalCount} host files are referenced by props but not covered by --source; see --report.`,
 			);
 		}
@@ -1080,6 +1078,32 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 				reportPath,
 				`${JSON.stringify({ stats, missed, undocumented, outsideSources }, null, "\t")}\n`,
 			);
+		}
+		// --json folds everything — including the warnings and hints the text output
+		// interleaves — into one machine-readable object, so a caller doesn't have to
+		// parse a mixed text/JSON stream.
+		if (flagBoolean(flags, "json")) {
+			print({
+				out,
+				version: registry.version,
+				count: registry.components.length,
+				stats,
+				warnings,
+				hints,
+			});
+			return;
+		}
+		print(
+			`Wrote ${registry.components.length} components to ${out} (version ${registry.version})`,
+		);
+		for (const warning of warnings) {
+			print(warning);
+		}
+		print(stats);
+		for (const hint of hints) {
+			print(hint);
+		}
+		if (reportPath) {
 			print(`Wrote extraction report to ${reportPath}`);
 		}
 		return;
@@ -1100,6 +1124,19 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		{ ...flags, index: indexPath },
 	);
 	await writeFile(out, `${JSON.stringify(registry, null, "\t")}\n`);
+	if (flagBoolean(flags, "json")) {
+		// The index-only path has no extraction statistics; stats is null rather than
+		// absent so the object's shape stays the same on both paths.
+		print({
+			out,
+			version: registry.version,
+			count: registry.components.length,
+			stats: null,
+			warnings: [],
+			hints: [],
+		});
+		return;
+	}
 	print(
 		`Wrote ${registry.components.length} components to ${out} (version ${registry.version})`,
 	);
