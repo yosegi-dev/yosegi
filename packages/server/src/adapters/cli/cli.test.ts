@@ -839,6 +839,10 @@ describe("runCli", () => {
 		);
 		expect(card?.props.variant?.kind).toBe("enum");
 		expect(await Bun.file(reportFile).exists()).toBe(true);
+		// The fixtures resolve the workspace's @types/react, so the degraded-build
+		// warnings must stay silent on a healthy host.
+		expect(output()).not.toContain("React's type definitions did not resolve");
+		expect(output()).not.toContain("no React component exports were found");
 	});
 
 	// version is a content hash, so it can't distinguish a rebuild that produced the same
@@ -1327,6 +1331,83 @@ describe("runCli", () => {
 		]);
 		expect(code).toBe(0);
 		expect(output()).toContain("--source matched no files");
+	});
+
+	// A glob that matches files but no component exports (a non-React project, or globs
+	// covering only utilities) used to look identical to a successful build.
+	it("registry build --source がコンポーネントを1つも見つけないときは警告を出す", async () => {
+		const hostRoot = join(dataDir, "nonreact-host");
+		await mkdir(join(hostRoot, "src"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["src"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "src", "util.ts"),
+			"export function formatLabel(label: string): string {\n\treturn label.trim();\n}\n",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"src/**/*.ts",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--data-dir",
+			join(dataDir, "nonreact-data"),
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain("no React component exports were found");
+		// The glob did match, so the files: 0 warning must stay silent.
+		expect(output()).not.toContain("--source matched no files");
+	});
+
+	// A host whose @types/react does not resolve (pnpm's strict node_modules, or a host
+	// without a direct dependency on it) degrades silently: ReactNode props flatten to
+	// json and slots vanish while every count looks healthy. The temp directory is what
+	// keeps the workspace's own @types/react out of reach.
+	it("registry build --source は @types/react が解決できないときに警告を出す", async () => {
+		const hostRoot = join(dataDir, "no-react-types-host");
+		await mkdir(join(hostRoot, "components"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["components"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "components", "button.tsx"),
+			[
+				'import type { ReactNode } from "react";',
+				"export type ButtonProps = { icon?: ReactNode; children?: ReactNode };",
+				"export function Button({ children }: ButtonProps) {",
+				"\treturn <button>{children}</button>;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"components/**/*.tsx",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--data-dir",
+			join(dataDir, "no-react-types-data"),
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain(
+			"check that the host's @types/react resolves through --tsconfig",
+		);
+		// Components were found, so the no-component warning must not also fire.
+		expect(output()).not.toContain("no React component exports were found");
+		// The degraded shape count is what --report readers correlate the warning with.
+		expect(output()).toContain('"anyShapedProps": 2');
 	});
 
 	it("registry build --source は --tsconfig 無しだとエラーになる", async () => {

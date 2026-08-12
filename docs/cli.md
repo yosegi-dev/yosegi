@@ -59,10 +59,14 @@ yosegi registry build \
 ```
 
 Statistics are printed at the end. `files: 0` means the glob matched nothing (a warning says so, and
-the registry still gets written with the three synthetic primitives in it). A high `propsUnreadable`
-usually means the tsconfig is not the host's. `documentedProps` out of `props` is the share of props
-carrying JSDoc. `undocumentedRequiredOpaqueProps` counts the required props that take a value no
-literal can express and that go undocumented.
+the registry still gets written with the three synthetic primitives in it). `componentCandidates`
+counts the exports judged to be React components; zero with `files` positive means the glob covered
+no components (a warning says so — check that it includes `.tsx` files). `withNodeSlots: 0` with a
+high `anyShapedProps` means `@types/react` did not resolve through `--tsconfig`: ReactNode props
+degrade to `json` / `shape: any` and slot detection finds nothing, with a warning naming the fix. A
+high `propsUnreadable` usually means the tsconfig is not the host's. `documentedProps` out of
+`props` is the share of props carrying JSDoc. `undocumentedRequiredOpaqueProps` counts the required
+props that take a value no literal can express and that go undocumented.
 
 `--report`'s `undocumented` section lists those props, one entry per `{ component, prop, kind,
 priority, recommended, shape? }`. Entries are ordered `required-opaque`, `optional-opaque`,
