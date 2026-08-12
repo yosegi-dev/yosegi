@@ -15,6 +15,9 @@ export const VALIDATION_CODES = {
 	MISSING_REQUIRED_PROP: "MISSING_REQUIRED_PROP",
 	// A value is written for a function-typed prop. Handlers can't be represented in props.
 	FUNCTION_PROP_VALUE: "FUNCTION_PROP_VALUE",
+	// A value is written for a reserved prop name (children / key / ref). Emit never
+	// writes these as JSX attributes, so the value would be silently dropped.
+	RESERVED_PROP: "RESERVED_PROP",
 	SLOT_NOT_FOUND: "SLOT_NOT_FOUND",
 	SLOT_COMPONENT_NOT_ALLOWED: "SLOT_COMPONENT_NOT_ALLOWED",
 	SLOT_MAX_ITEMS_EXCEEDED: "SLOT_MAX_ITEMS_EXCEEDED",

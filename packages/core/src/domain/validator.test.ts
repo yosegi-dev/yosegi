@@ -627,3 +627,201 @@ describe("validateScreen: bindings / events targets", () => {
 		);
 	});
 });
+
+// Emit never writes children / key / ref as JSX attributes, so a value under one of
+// these names would vanish from the Story without a trace. It used to slip through as
+// (at most) a NOT_EDITABLE_PROP_VALUE warning claiming the value is "written as-is".
+describe("validateScreen: reserved prop names", () => {
+	function reservedRegistry(): ComponentRegistry {
+		return parseComponentRegistry({
+			version: "custom:v1",
+			components: [
+				{
+					id: "Button",
+					name: "Button",
+					import: { packageName: "x", exportName: "Button" },
+					props: {
+						label: { kind: "string" },
+						children: { kind: "reactNode", editable: false, required: true },
+					},
+					slots: { children: {} },
+				},
+			],
+		});
+	}
+
+	it("props.children yields RESERVED_PROP with a move-to-slots suggestion", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Button",
+				props: { children: "Save" },
+				slots: {},
+			}),
+			reservedRegistry(),
+		);
+		expect(result.valid).toBe(false);
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.RESERVED_PROP,
+		);
+		expect(issue?.suggestion).toContain('"slots": { "children"');
+		// The old NOT_EDITABLE_PROP_VALUE warning claimed the value reaches the Story
+		// as-is, which contradicts emit dropping it.
+		expect(
+			result.warnings.some(
+				(w) => w.code === VALIDATION_CODES.NOT_EDITABLE_PROP_VALUE,
+			),
+		).toBe(false);
+	});
+
+	it("props.key / props.ref yield RESERVED_PROP", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Button",
+				props: { key: "k", ref: "r" },
+				slots: {},
+			}),
+			reservedRegistry(),
+		);
+		expect(
+			result.errors.filter((e) => e.code === VALIDATION_CODES.RESERVED_PROP),
+		).toHaveLength(2);
+	});
+
+	// A required children prop can never be satisfied through props, so demanding a
+	// value there would only lead back into RESERVED_PROP.
+	it("a required children prop is not reported missing", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Button",
+				props: { label: "Save" },
+				slots: {},
+			}),
+			reservedRegistry(),
+		);
+		expect(
+			result.errors.some(
+				(e) => e.code === VALIDATION_CODES.MISSING_REQUIRED_PROP,
+			),
+		).toBe(false);
+	});
+});
+
+// A bracket lookup keyed by a screen-supplied name walks the prototype chain, so
+// names like "toString" used to resolve to Object.prototype and pass as defined.
+describe("validateScreen: prototype-derived names", () => {
+	function protoRegistry(): ComponentRegistry {
+		return parseComponentRegistry({
+			version: "custom:v1",
+			components: [
+				{
+					id: "Card",
+					name: "Card",
+					import: { packageName: "x", exportName: "Card" },
+					props: { title: { kind: "string" } },
+					slots: { children: {} },
+				},
+			],
+		});
+	}
+
+	it("a slot named toString yields SLOT_NOT_FOUND", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Card",
+				props: {},
+				slots: {
+					toString: [{ id: "c", component: "Card", props: {}, slots: {} }],
+				},
+			}),
+			protoRegistry(),
+		);
+		expect(result.valid).toBe(false);
+		expect(
+			result.errors.some((e) => e.code === VALIDATION_CODES.SLOT_NOT_FOUND),
+		).toBe(true);
+	});
+
+	it("a prop named hasOwnProperty yields UNKNOWN_PROP", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Card",
+				props: { hasOwnProperty: "x" },
+				slots: {},
+			}),
+			protoRegistry(),
+		);
+		expect(result.valid).toBe(false);
+		expect(
+			result.errors.some((e) => e.code === VALIDATION_CODES.UNKNOWN_PROP),
+		).toBe(true);
+	});
+
+	it("a binding to valueOf yields UNKNOWN_BINDING_TARGET", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Card",
+				props: {},
+				slots: {},
+				bindings: { valueOf: "data.x" },
+			}),
+			protoRegistry(),
+		);
+		expect(result.valid).toBe(false);
+		expect(
+			result.errors.some(
+				(e) => e.code === VALIDATION_CODES.UNKNOWN_BINDING_TARGET,
+			),
+		).toBe(true);
+	});
+
+	it("an event named toString yields an UNKNOWN_EVENT_TARGET warning", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Card",
+				props: {},
+				slots: {},
+				events: { toString: { action: "go" } },
+			}),
+			protoRegistry(),
+		);
+		expect(
+			result.warnings.some(
+				(w) => w.code === VALIDATION_CODES.UNKNOWN_EVENT_TARGET,
+			),
+		).toBe(true);
+	});
+
+	// A required prop must not be treated as present just because its name exists on
+	// Object.prototype.
+	it("a required prop named constructor is still reported missing", () => {
+		const registry = parseComponentRegistry({
+			version: "custom:v1",
+			components: [
+				{
+					id: "Odd",
+					name: "Odd",
+					import: { packageName: "x", exportName: "Odd" },
+					props: { constructor: { kind: "string", required: true } },
+					slots: {},
+				},
+			],
+		});
+		const result = validateScreen(
+			screenWith({ id: "r", component: "Odd", props: {}, slots: {} }),
+			registry,
+		);
+		expect(result.valid).toBe(false);
+		expect(
+			result.errors.some(
+				(e) => e.code === VALIDATION_CODES.MISSING_REQUIRED_PROP,
+			),
+		).toBe(true);
+	});
+});

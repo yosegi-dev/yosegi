@@ -16,6 +16,25 @@ function node(
 	return { id, component, props: {}, slots: {}, ...extra };
 }
 
+// A one-component registry for local-name collision cases.
+function singleComponentRegistry(
+	exportName: string,
+	id = exportName,
+): ComponentRegistry {
+	return parseComponentRegistry({
+		version: "v1",
+		components: [
+			{
+				id,
+				name: exportName,
+				import: { packageName: "~/x", exportName },
+				props: {},
+				slots: {},
+			},
+		],
+	});
+}
+
 function emit(
 	root: ScreenNode,
 	registry: ComponentRegistry = sampleRegistry(),
@@ -713,6 +732,22 @@ describe("buildImportMapResolver", () => {
 			'Invalid import map entry "./app". Expected "<from>=<to>".',
 		);
 	});
+
+	// A prefix must only match on a path-segment boundary — "./app" rewriting
+	// "./application/x" to "~lication/x" corrupts the specifier.
+	it("パス境界のないプレフィックス一致はしない", () => {
+		const resolve = buildImportMapResolver("./app=~");
+		expect(resolve("./application/x")).toBe("./application/x");
+		expect(resolve("./apple/x")).toBe("./apple/x");
+		expect(resolve("./app/x")).toBe("~/x");
+		expect(resolve("./app")).toBe("~");
+	});
+
+	it("スラッシュで終わる from はそのまま境界になる", () => {
+		const resolve = buildImportMapResolver("./app/=~/");
+		expect(resolve("./app/x")).toBe("~/x");
+		expect(resolve("./application/x")).toBe("./application/x");
+	});
 });
 
 describe("emitCsf の default export", () => {
@@ -789,5 +824,84 @@ describe("emitCsf の default export", () => {
 		expect(source).toContain(
 			'import { EmptyStateIllustration } from "@acme/ui/components/examples/empty-state";',
 		);
+	});
+});
+
+// JSX decodes HTML entities in raw text and double-quoted attribute values, so a
+// value containing "&" must be escaped into an expression container — otherwise
+// "AT&T &amp; more" renders as "AT&T & more".
+describe("emitCsf の HTML エンティティ", () => {
+	function textRegistry(): ComponentRegistry {
+		return parseComponentRegistry({
+			version: "v1",
+			components: [
+				{
+					id: "Card",
+					name: "Card",
+					import: { packageName: "~/card", exportName: "Card" },
+					props: { title: { kind: "string" } },
+					slots: { children: {} },
+				},
+			],
+		});
+	}
+
+	it("& を含むテキストは式コンテナへ退避する", () => {
+		const source = emit(
+			node("card", "Card", {
+				slots: {
+					children: [node("t", "Text", { props: { text: "5 &lt; 10" } })],
+				},
+			}),
+			textRegistry(),
+		);
+		expect(source).toContain('<Card>{"5 &lt; 10"}</Card>');
+	});
+
+	it("& を含む属性値は式コンテナ + JSON リテラルになる", () => {
+		const source = emit(
+			node("card", "Card", { props: { title: "AT&T &amp; more" } }),
+			textRegistry(),
+		);
+		expect(source).toContain('<Card title={"AT&T &amp; more"} />');
+	});
+});
+
+// The generated file itself declares `const meta`, imports the Meta / StoryObj types,
+// and exports the Story name. A host export sharing one of those names used to be
+// imported verbatim, producing a duplicate identifier the host cannot compile.
+describe("emitCsf のローカル名衝突", () => {
+	it("ホストの export 名 Meta は Meta2 に退避する", () => {
+		const source = emit(node("root", "Meta"), singleComponentRegistry("Meta"));
+		expect(source).toContain('import { Meta as Meta2 } from "~/x";');
+		expect(source).toContain("<Meta2 />");
+		expect(source).toContain("const meta: Meta = {");
+	});
+
+	it("小文字の export 名は大文字始まりの別名を得る", () => {
+		// A lowercase JSX tag is read as an HTML intrinsic element, so `meta` must not
+		// appear in a tag position — and `Meta` is taken by the type import.
+		const source = emit(node("root", "meta"), singleComponentRegistry("meta"));
+		expect(source).toContain('import { meta as Meta2 } from "~/x";');
+		expect(source).toContain("<Meta2 />");
+	});
+
+	it("StoryObj と衝突する export 名は StoryObj2 に退避する", () => {
+		const source = emit(
+			node("root", "StoryObj"),
+			singleComponentRegistry("StoryObj"),
+		);
+		expect(source).toContain('import { StoryObj as StoryObj2 } from "~/x";');
+		expect(source).toContain("<StoryObj2 />");
+	});
+
+	it("Story の export 名と衝突する export 名は退避する", () => {
+		const source = emitCsf(
+			node("root", "Default"),
+			withSyntheticComponents(singleComponentRegistry("Default")),
+			{ title: "S/T" },
+		);
+		expect(source).toContain('import { Default as Default2 } from "~/x";');
+		expect(source).toContain("export const Default: StoryObj = {");
 	});
 });

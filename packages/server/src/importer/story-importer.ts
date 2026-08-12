@@ -77,6 +77,9 @@ export type StoryImportWarningCode =
 	| "OPAQUE_ELEMENT"
 	// {...props} can't be expanded.
 	| "SPREAD_ATTRIBUTE"
+	// An intent comment had no single element to attach to (e.g. it preceded a
+	// Fragment that expanded into several nodes), so the declaration was dropped.
+	| "INTENT_NOT_APPLIED"
 	// Multiple roots existed, so they were wrapped in a Box.
 	| "MULTIPLE_ROOTS";
 
@@ -728,7 +731,6 @@ function readJsxComment(
 function convertExpression(
 	context: ImportContext,
 	child: ts.JsxExpression,
-	intent: Intent | null,
 ): ScreenNode[] {
 	const expression = child.expression;
 	if (!expression) {
@@ -740,18 +742,14 @@ function convertExpression(
 		ts.isJsxSelfClosingElement(expression) ||
 		ts.isJsxFragment(expression)
 	) {
-		return convertJsx(context, expression, intent);
+		return convertJsx(context, expression);
 	}
 	const evaluated = evaluate(expression);
 	if (
 		evaluated.ok &&
 		(typeof evaluated.value === "string" || typeof evaluated.value === "number")
 	) {
-		const node = textNode(context, String(evaluated.value));
-		if (intent) {
-			applyIntent(node, intent);
-		}
-		return [node];
+		return [textNode(context, String(evaluated.value))];
 	}
 	warn(
 		context,
@@ -762,18 +760,15 @@ function convertExpression(
 	return [];
 }
 
-// Converts a single JSX node into a ScreenNode array (a Fragment expands into zero or more).
-// A non-JSX node yields an empty array (the caller treats it as "couldn't be reconstructed").
-function convertJsx(
-	context: ImportContext,
-	child: ts.Node,
-	intent: Intent | null = null,
-): ScreenNode[] {
+// The conversion body, without intent handling. Split out so convertJsx can attach a
+// pending intent uniformly to whatever a node — element, Fragment, text, expression —
+// reconstructed into.
+function convertJsxNodes(context: ImportContext, child: ts.Node): ScreenNode[] {
 	if (ts.isJsxFragment(child)) {
 		return convertChildren(context, child.children);
 	}
 	if (ts.isJsxExpression(child)) {
-		return convertExpression(context, child, intent);
+		return convertExpression(context, child);
 	}
 	if (ts.isJsxText(child)) {
 		const text = normalizeJsxText(child.text);
@@ -785,12 +780,37 @@ function convertJsx(
 
 	const parts = readElement(context, child);
 	// A tag starting with a lowercase letter is a DOM element.
-	const nodes = /^[a-z]/.test(parts.tagName)
+	return /^[a-z]/.test(parts.tagName)
 		? convertIntrinsic(context, child, parts)
 		: convertComponent(context, child, parts);
-	if (intent && nodes.length === 1) {
-		applyIntent(nodes[0], intent);
+}
+
+// Converts a single JSX node into a ScreenNode array (a Fragment expands into zero or more).
+// A non-JSX node yields an empty array (the caller treats it as "couldn't be reconstructed").
+function convertJsx(
+	context: ImportContext,
+	child: ts.Node,
+	intent: Intent | null = null,
+): ScreenNode[] {
+	const nodes = convertJsxNodes(context, child);
+	if (intent === null || nodes.length === 0) {
+		return nodes;
 	}
+	// The comment sat directly before this node, so with exactly one reconstructed
+	// element the intent's target is unambiguous — this also covers a Fragment or raw
+	// text that collapsed into a single node. With several nodes there is no way to
+	// pick one, and the file-top contract says nothing gets dropped in silence.
+	if (nodes.length === 1) {
+		applyIntent(nodes[0], intent);
+		return nodes;
+	}
+	warn(
+		context,
+		"INTENT_NOT_APPLIED",
+		`An intent comment preceded ${nodes.length} sibling nodes, so its bindings/events could not be attached to any of them`,
+		child,
+		nodes[0].id,
+	);
 	return nodes;
 }
 

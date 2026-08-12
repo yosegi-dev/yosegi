@@ -47,6 +47,7 @@ This loop needs no confirmation from anyone. Run it to completion.
 | `INVALID_PROP_VALUE` | The value does not match the type or the enum | Pick from the options in `suggestion` |
 | `MISSING_REQUIRED_PROP` | A required prop has no value | Supply one. A binding alone is not a value: it only satisfies the prop when its expression is a plain identifier path (`table`, `query.data.rows`), and even then see `BOUND_REQUIRED_PROP` below |
 | `FUNCTION_PROP_VALUE` | A value was written into a function-kind prop | Handlers cannot be expressed in `props` at all. Move the declaration to `events` (`{ "action": "..." }`) or to `bindings`, and delete it from `props`. The Story gets a no-op handler so it still renders |
+| `RESERVED_PROP` | A value was written into `children`, `key`, or `ref` under `props` | These names are never emitted as JSX attributes, so the value would silently vanish from the Story. Move the content to `slots.children` (plain text becomes a `Text` node); delete `key` / `ref`, which React manages and a Screen JSON cannot set |
 | `UNKNOWN_BINDING_TARGET` | A `bindings` key names a prop the component does not have | Correct it to the name in `suggestion`. Remember that a `ReactNode` prop is a **slot**, not a prop, so `children` is never a valid binding target on a registry built from types |
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect` and fix the name. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's own constraints reject these children | `suggestion` names what is allowed |
@@ -124,6 +125,7 @@ shape is only decided at runtime cannot be read**.
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box`, but the tag name is lost |
 | `SPREAD_ATTRIBUTE` | `{...args}` cannot be expanded |
+| `INTENT_NOT_APPLIED` | A `TODO(yosegi)` intent comment had no single element to attach to (it preceded several siblings), so its `bindings` / `events` were dropped. Re-declare them on the right node |
 | `COMPONENT_NOT_RESOLVED` | The import statement does not lead to a registry id. The node keeps its local name, so validation will offer candidates |
 | `COMPONENT_AMBIGUOUS` | Several registry entries share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |

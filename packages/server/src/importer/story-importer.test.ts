@@ -464,6 +464,73 @@ describe("importStory", () => {
 		expect(child?.events).toBeUndefined();
 	});
 
+	// A Fragment used to swallow the intent before it (the comment applied to nothing,
+	// with no warning either). One reconstructed node gets the intent; several get a warning.
+	describe("Fragment 直前の意図コメント", () => {
+		function fragmentSource(children: string[]): string {
+			return [
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = {",
+				"\trender: () => (",
+				"\t\t<div>",
+				'\t\t\t{/* TODO(yosegi): {"bindings":{"label":"row.name"}} */}',
+				"\t\t\t<>",
+				...children.map((child) => `\t\t\t\t${child}`),
+				"\t\t\t</>",
+				"\t\t</div>",
+				"\t),",
+				"};",
+			].join("\n");
+		}
+
+		it("1 ノードに展開される Fragment には intent を引き継ぐ", () => {
+			const imported = importSource(fragmentSource(['<div className="a" />']));
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.root?.slots.children[0]?.bindings).toEqual({
+				label: "row.name",
+			});
+		});
+
+		it("複数ノードに展開される Fragment では INTENT_NOT_APPLIED を警告する", () => {
+			const imported = importSource(
+				fragmentSource(['<div className="a" />', '<div className="b" />']),
+			);
+
+			expect(codes(imported.warnings)).toEqual(["INTENT_NOT_APPLIED"]);
+			const children = imported.root?.slots.children ?? [];
+			expect(children).toHaveLength(2);
+			expect(children[0]?.bindings).toBeUndefined();
+			expect(children[1]?.bindings).toBeUndefined();
+		});
+	});
+
+	// emit writes the intent comment directly before a Text node's raw text, so the
+	// read side has to attach it there too — it used to be dropped in silence.
+	it("生テキスト直前の意図コメントを Text ノードへ引き継ぐ", () => {
+		const source = [
+			'const meta: Meta = { title: "S/T" };',
+			"export default meta;",
+			"export const Default: StoryObj = {",
+			"\trender: () => (",
+			"\t\t<div>",
+			'\t\t\t{/* TODO(yosegi): {"bindings":{"text":"user.name"}} */}',
+			"\t\t\tHello",
+			"\t\t</div>",
+			"\t),",
+			"};",
+		].join("\n");
+
+		const imported = importSource(source);
+
+		expect(imported.warnings).toEqual([]);
+		expect(imported.root?.slots.children[0]?.component).toBe("Text");
+		expect(imported.root?.slots.children[0]?.bindings).toEqual({
+			text: "user.name",
+		});
+	});
+
 	describe("手書き Story", () => {
 		it("テキストだけのインライン要素は Text へ畳む", () => {
 			const source = [

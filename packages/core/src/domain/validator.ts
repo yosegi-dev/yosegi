@@ -33,6 +33,19 @@ export type ValidationResult = {
 // legitimately valid values like `{ a: number } | null`.
 const UNCHECKED_PROP_KINDS = new Set(["json", "reactNode", "function"]);
 
+// Prop names emit never writes as JSX attributes: children is a Slot, and key / ref
+// are managed by React. A value written under one of these would be silently dropped
+// from the generated Story, so the validator rejects it up front. Emit shares this
+// set so the two sides can't drift apart.
+export const RESERVED_PROP_NAMES = new Set(["children", "key", "ref"]);
+
+// Manifests are plain objects, so a bracket lookup keyed by a screen-supplied name
+// still walks the prototype chain — a slot or prop named "toString" would resolve to
+// Object.prototype and count as defined. Every name-keyed lookup goes through this guard.
+function ownEntry<T>(record: Record<string, T>, key: string): T | undefined {
+	return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
 // Whether a prop value is consistent with its definition's kind. Kinds that aren't
 // editable (function/reactNode) are not validated.
 function isPropValueValid(def: PropDefinition, value: unknown): boolean {
@@ -64,7 +77,7 @@ function validateSlots(
 	warnings: ValidationIssue[],
 ): void {
 	for (const [slotName, children] of Object.entries(node.slots)) {
-		const slotDef = manifest.slots[slotName];
+		const slotDef = ownEntry(manifest.slots, slotName);
 		if (!slotDef) {
 			errors.push({
 				nodeId: node.id,
@@ -116,7 +129,7 @@ function validateProps(
 	// so if the target doesn't exist there's nothing to wire it to. This is the same
 	// mistake as writing a value directly (UNKNOWN_PROP), so it's an error too.
 	for (const propName of boundProps) {
-		if (!manifest.props[propName]) {
+		if (!ownEntry(manifest.props, propName)) {
 			errors.push({
 				nodeId: node.id,
 				code: VALIDATION_CODES.UNKNOWN_BINDING_TARGET,
@@ -129,7 +142,7 @@ function validateProps(
 	// function-typed prop. A Registry not built from types has no way to catch this
 	// case, so it stays a warning rather than an error.
 	for (const eventName of Object.keys(node.events ?? {})) {
-		if (!manifest.props[eventName]) {
+		if (!ownEntry(manifest.props, eventName)) {
 			warnings.push({
 				nodeId: node.id,
 				code: VALIDATION_CODES.UNKNOWN_EVENT_TARGET,
@@ -139,7 +152,21 @@ function validateProps(
 		}
 	}
 	for (const [propName, value] of Object.entries(node.props)) {
-		const def = manifest.props[propName];
+		// Checked before the manifest lookup: even when the manifest declares e.g. a
+		// children prop, emit still never writes it, so the value is lost either way.
+		if (RESERVED_PROP_NAMES.has(propName)) {
+			errors.push({
+				nodeId: node.id,
+				code: VALIDATION_CODES.RESERVED_PROP,
+				message: `Prop "${propName}" of "${manifest.id}" is never written into the Story, so its value would be silently lost.`,
+				suggestion:
+					propName === "children"
+						? `Move the content to "slots": { "children": [...] } — plain text becomes a Text node: { "component": "Text", "props": { "text": "..." } }.`
+						: `Remove it. "${propName}" is managed by React and cannot be set from a Screen Definition.`,
+			});
+			continue;
+		}
+		const def = ownEntry(manifest.props, propName);
 		if (!def) {
 			errors.push({
 				nodeId: node.id,
@@ -188,7 +215,13 @@ function validateProps(
 		}
 	}
 	for (const [propName, def] of Object.entries(manifest.props)) {
-		if (!def.required || propName in node.props) {
+		if (!def.required || Object.hasOwn(node.props, propName)) {
+			continue;
+		}
+		// A reserved name can never be satisfied through props (emit drops it), so
+		// requiring a value here would contradict RESERVED_PROP. children is
+		// expressed through slots instead.
+		if (RESERVED_PROP_NAMES.has(propName)) {
 			continue;
 		}
 		validateRequiredProp(node, manifest, propName, def, errors, warnings);
@@ -207,14 +240,14 @@ function validateRequiredProp(
 	warnings: ValidationIssue[],
 ): void {
 	const declared =
-		node.bindings?.[propName] !== undefined ||
-		node.events?.[propName] !== undefined;
+		ownEntry(node.bindings ?? {}, propName) !== undefined ||
+		ownEntry(node.events ?? {}, propName) !== undefined;
 	// Handlers can't be written into props, so if a declaration exists, emit fills it
 	// with a no-op function.
 	if (def.kind === "function" && declared) {
 		return;
 	}
-	const expression = node.bindings?.[propName];
+	const expression = ownEntry(node.bindings ?? {}, propName);
 	if (expression !== undefined && isEmittableBindingExpression(expression)) {
 		warnings.push({
 			nodeId: node.id,

@@ -104,6 +104,7 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | `INVALID_PROP_VALUE` | The value does not match the type or enum | Pick from the options in `suggestion` |
 | `MISSING_REQUIRED_PROP` | A required prop is unset | Supply a value. A binding only satisfies it when the expression is a plain identifier path |
 | `FUNCTION_PROP_VALUE` | A value was written into a function-kind prop | Move the declaration to `events` (or `bindings`) and delete it from `props` |
+| `RESERVED_PROP` | A value was written into `children`, `key`, or `ref` under `props` | These are never emitted as JSX attributes. Move the content to `slots.children`; delete `key` / `ref` |
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect`. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's constraints reject these children | `suggestion` lists what is allowed |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | The parent/child pairing is constrained | `suggestion` lists the allowed components |
@@ -165,6 +166,7 @@ warning is absent from the Screen JSON**, so read the original Story for those p
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box` but the tag name is lost |
 | `SPREAD_ATTRIBUTE` | `{...args}` cannot be expanded |
+| `INTENT_NOT_APPLIED` | An intent comment preceded several siblings, so its `bindings` / `events` had no single element to attach to and were dropped |
 | `COMPONENT_NOT_RESOLVED` | The import statement does not lead to a registry id. The node keeps its local name, so validation will offer candidates |
 | `COMPONENT_AMBIGUOUS` | Several candidates share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |

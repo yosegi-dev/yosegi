@@ -7,7 +7,7 @@ import {
 	withSyntheticComponents,
 } from "@yosegi/core";
 import { buildImportMapResolver, emitCsf } from "@yosegi/core/emit";
-import type { StorybookIndex } from "@yosegi/core/registry";
+import type { ComposerMetadata, StorybookIndex } from "@yosegi/core/registry";
 import {
 	buildRegistryFromSource,
 	type SourceRegistryResult,
@@ -804,5 +804,116 @@ describe("buildRegistryFromSource の --source 外参照", () => {
 			"components/tag#Tag",
 		);
 		expect(manifest?.props.icon?.shape?.type).toBe("IconMeta");
+	});
+});
+
+// DEPRECATED_COMPONENT is documented for both registry routes, but the --source route
+// used to read neither the "deprecated" Story tag nor the JSDoc @deprecated.
+describe("buildRegistryFromSource の deprecated", () => {
+	const DEPRECATED_FIXTURE_ROOT = join(
+		import.meta.dir,
+		"__deprecated-fixtures__",
+	);
+
+	function buildDeprecatedFixtures(
+		options: {
+			index?: StorybookIndex;
+			metadata?: Record<string, ComposerMetadata>;
+		} = {},
+	): SourceRegistryResult {
+		return buildRegistryFromSource({
+			projectRoot: DEPRECATED_FIXTURE_ROOT,
+			sources: ["**/*.tsx"],
+			tsconfigPath: join(DEPRECATED_FIXTURE_ROOT, "tsconfig.json"),
+			...options,
+		});
+	}
+
+	function taggedIndex(tags: string[]): StorybookIndex {
+		return {
+			v: 5,
+			entries: {
+				"components-taggedcard--default": {
+					type: "story",
+					id: "components-taggedcard--default",
+					name: "Default",
+					title: "Components/TaggedCard",
+					importPath: "./tagged-card.stories.tsx",
+					componentPath: "./tagged-card.tsx",
+					tags,
+				},
+			},
+		};
+	}
+
+	it("JSDoc の @deprecated を constraints.deprecated に反映する", () => {
+		const manifests = indexRegistry(buildDeprecatedFixtures().registry);
+		expect(manifests.get("legacy#LegacyBanner")?.constraints?.deprecated).toBe(
+			true,
+		);
+		expect(
+			manifests.get("legacy#FreshBanner")?.constraints?.deprecated,
+		).toBeUndefined();
+	});
+
+	it("index.json の deprecated タグを constraints.deprecated に反映する", () => {
+		const manifests = indexRegistry(
+			buildDeprecatedFixtures({ index: taggedIndex(["deprecated"]) }).registry,
+		);
+		expect(
+			manifests.get("tagged-card#TaggedCard")?.constraints?.deprecated,
+		).toBe(true);
+	});
+
+	it("deprecated タグの無い Story では constraints を付けない", () => {
+		const manifests = indexRegistry(
+			buildDeprecatedFixtures({ index: taggedIndex(["autodocs"]) }).registry,
+		);
+		expect(
+			manifests.get("tagged-card#TaggedCard")?.constraints,
+		).toBeUndefined();
+	});
+
+	// The same precedence as buildRegistryFromStorybook: explicit metadata wins.
+	it("--metadata の明示指定はホスト側の deprecated より優先する", () => {
+		const manifests = indexRegistry(
+			buildDeprecatedFixtures({
+				metadata: {
+					"legacy#LegacyBanner": { constraints: { deprecated: false } },
+				},
+			}).registry,
+		);
+		expect(manifests.get("legacy#LegacyBanner")?.constraints?.deprecated).toBe(
+			false,
+		);
+	});
+
+	// index.json tags identify a file, not an export. In a module with several
+	// component exports the tag only reaches the export the Story title names.
+	it("複数 export のモジュールではタグが displayName の一致する export にだけ付く", () => {
+		const manifests = indexRegistry(
+			buildDeprecatedFixtures({
+				index: {
+					v: 5,
+					entries: {
+						"components-mixedcard--default": {
+							type: "story",
+							id: "components-mixedcard--default",
+							name: "Default",
+							title: "Components/MixedCard",
+							importPath: "./mixed-cards.stories.tsx",
+							componentPath: "./mixed-cards.tsx",
+							tags: ["deprecated"],
+						},
+					},
+				},
+			}).registry,
+		);
+		expect(
+			manifests.get("mixed-cards#MixedCard")?.constraints?.deprecated,
+		).toBe(true);
+		expect(
+			manifests.get("mixed-cards#MixedCardFooter")?.constraints?.deprecated,
+		).toBeUndefined();
 	});
 });

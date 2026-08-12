@@ -18,7 +18,7 @@ import {
 	systemActor,
 } from "./actor.ts";
 import type { ComponentService } from "./component-service.ts";
-import type { ScreenRepository, ScreenSummary } from "./screen-repository.ts";
+import type { ScreenList, ScreenRepository } from "./screen-repository.ts";
 
 // Communicates that a save was rejected due to a validation error, including the validation result.
 export class ValidationFailedError extends ComposerError {
@@ -86,7 +86,7 @@ export class ScreenService {
 		return result;
 	}
 
-	async listScreens(): Promise<ScreenSummary[]> {
+	async listScreens(): Promise<ScreenList> {
 		return this.repository.list();
 	}
 

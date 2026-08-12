@@ -16,6 +16,7 @@ import {
 	isSyntheticComponentId,
 	isSyntheticManifest,
 } from "../domain/synthetics.ts";
+import { RESERVED_PROP_NAMES } from "../domain/validator.ts";
 
 // Converts a Screen Definition tree into Storybook CSF (Component Story Format)
 // source. The output is a ".stories.tsx" file that can be dropped straight into
@@ -32,8 +33,10 @@ export const SYNTHETIC_HEADING_CLASS_NAME = "font-bold text-2xl tracking-tight";
 export const INTENT_COMMENT_PREFIX = "TODO(yosegi):";
 // Name of the JSX children slot. Every other Slot is passed as an attribute.
 const CHILDREN_SLOT = "children";
-// Props that are never emitted as JSX attributes. children is a Slot; key/ref are reserved by React.
-const RESERVED_PROPS = new Set(["children", "key", "ref"]);
+// Props that are never emitted as JSX attributes. children is a Slot; key/ref are
+// reserved by React. The set lives in the validator (which rejects values written
+// under these names as RESERVED_PROP) so the two sides can't drift apart.
+const RESERVED_PROPS = RESERVED_PROP_NAMES;
 // Extensions stripped from the import specifier, restoring the form the host's bundler resolves.
 const IMPORT_EXTENSION_PATTERN = /\.(tsx|ts|jsx|js)$/;
 // In a Registry without componentPath, the story file's path ends up in packageName.
@@ -41,11 +44,17 @@ const STORY_SUFFIX_PATTERN = /\.stories$/;
 // Characters that can't be written as raw JSX text; when present, escape into an
 // expression container instead. Newlines are included because JSX collapses raw
 // text newlines into a single space, which would change the value on read-back.
-const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n]/;
+// "&" is included because JSX decodes HTML entities in raw text and attribute
+// values — "&amp;" would render as "&", silently changing the value.
+const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n&]/;
 // Characters that can't be left inside a double-quoted JSX attribute value.
-const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n]/;
+const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n&]/;
 // A form that can be written as-is in an identifier position (a Story's export name, an import's local name).
 const JS_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+// Local names the emitted file itself declares: `const meta` and the Meta / StoryObj
+// type imports. A host export with one of these names must take a suffixed alias, or
+// the generated Story declares the same identifier twice and cannot compile.
+const EMIT_DECLARED_LOCAL_NAMES = ["meta", "Meta", "StoryObj"];
 // Mocks have no handler implementation. The "do nothing" value placed on a required function prop.
 const NOOP_HANDLER = "() => {}";
 
@@ -101,8 +110,16 @@ export function buildImportMapResolver(
 		// For containment relationships like "./app" vs "./app/ui", let the more specific one win.
 		.sort((a, b) => b.from.length - a.from.length);
 
+	// A bare startsWith would let "./app" swallow "./application/x" and rewrite it to
+	// "~lication/x", so a rule only matches on a whole path segment: an exact match,
+	// or a prefix followed by "/". A rule already ending in "/" carries its own boundary.
+	const matches = (packageName: string, from: string): boolean =>
+		from.endsWith("/")
+			? packageName.startsWith(from)
+			: packageName === from || packageName.startsWith(`${from}/`);
+
 	return (packageName) => {
-		const rule = rules.find((r) => packageName.startsWith(r.from));
+		const rule = rules.find((r) => matches(packageName, r.from));
 		return rule
 			? `${rule.to}${packageName.slice(rule.from.length)}`
 			: packageName;
@@ -223,11 +240,16 @@ export function planImports(
 	root: ScreenNode,
 	registry: ComponentRegistry,
 	resolveImport?: (packageName: string) => string,
+	// Extra identifiers the surrounding file declares (e.g. the Story's export name).
+	reservedLocalNames: Iterable<string> = [],
 ): ImportPlan {
 	const manifests = indexRegistry(registry);
 	const specifiers = new Map<string, ImportBinding[]>();
 	const localNames = new Map<string, string>();
-	const usedLocalNames = new Set<string>();
+	const usedLocalNames = new Set<string>([
+		...EMIT_DECLARED_LOCAL_NAMES,
+		...reservedLocalNames,
+	]);
 
 	for (const node of walkNodes(root)) {
 		const manifest = manifests.get(node.component) ?? null;
@@ -256,9 +278,15 @@ export function planImports(
 			localNames.set(node.component, existing.localName);
 			continue;
 		}
-		let localName = exportName;
+		// A JSX tag starting with a lowercase letter is read as an HTML intrinsic
+		// element rather than the imported component, so a lowercase export gets a
+		// capitalized alias for its tag position.
+		const base = /^[a-z]/.test(exportName)
+			? `${exportName.charAt(0).toUpperCase()}${exportName.slice(1)}`
+			: exportName;
+		let localName = base;
 		for (let suffix = 2; usedLocalNames.has(localName); suffix += 1) {
-			localName = `${exportName}${suffix}`;
+			localName = `${base}${suffix}`;
 		}
 		usedLocalNames.add(localName);
 		bindings.push({ exportName, localName, kind });
@@ -330,7 +358,9 @@ function requiredPropExpression(
 	if (def.kind === "function") {
 		return NOOP_HANDLER;
 	}
-	const expression = node.bindings?.[propName];
+	const expression = Object.hasOwn(node.bindings ?? {}, propName)
+		? node.bindings?.[propName]
+		: undefined;
 	if (expression === undefined || !isEmittableBindingExpression(expression)) {
 		return null;
 	}
@@ -611,12 +641,16 @@ function renderNode(node: ScreenNode, context: RenderContext): RenderedNode {
 		...Object.keys(node.events ?? {}),
 	]);
 	for (const propName of declaredPropNames) {
-		if (RESERVED_PROPS.has(propName) || propName in node.props) {
+		if (RESERVED_PROPS.has(propName) || Object.hasOwn(node.props, propName)) {
 			continue;
 		}
+		// Guarded with hasOwn: a plain bracket lookup keyed by a screen-supplied name
+		// walks the prototype chain, so a prop named "toString" would look defined.
 		const expression = requiredPropExpression(
 			node,
-			manifest?.props[propName],
+			manifest && Object.hasOwn(manifest.props, propName)
+				? manifest.props[propName]
+				: undefined,
 			propName,
 		);
 		if (expression !== null) {
@@ -669,8 +703,6 @@ export function emitCsf(
 	options: EmitCsfOptions,
 ): string {
 	const manifests = indexRegistry(registry);
-	const plan = planImports(root, registry, options.resolveImport);
-	const context: RenderContext = { manifests, localNames: plan.localNames };
 	// The Story name becomes the export's identifier. Since arbitrary strings can
 	// arrive from the CLI / MCP, only accept a form that's writable as an identifier
 	// (otherwise arbitrary code could get mixed into the generated output).
@@ -680,6 +712,10 @@ export function emitCsf(
 			`Story name "${storyName}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", and do not start with a digit.`,
 		);
 	}
+	// The Story's export name is an identifier this file declares, so a component
+	// import must not take the same local name.
+	const plan = planImports(root, registry, options.resolveImport, [storyName]);
+	const context: RenderContext = { manifests, localNames: plan.localNames };
 
 	const generatedImports = [
 		`import type { Meta, StoryObj } from ${JSON.stringify(options.frameworkPackage ?? DEFAULT_FRAMEWORK_PACKAGE)};`,
