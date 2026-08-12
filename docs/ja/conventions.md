@@ -65,8 +65,9 @@ bun add -d @yosegi/yosegi
 
 ## 英語 / 日本語の対応
 
-英語が正。ページや差分はまず英語で書き、そのあと日本語へ訳し、両方を同じコミットに載せる。訳した日本語は
-`docs/ja/**` を対象に `bun run textlint`（`.textlintrc.json`）でチェックする。英語ページは対象外。
+英語が正。ページや差分はまず英語で書き、そのあと日本語へ訳し、両方を同じコミットに載せる。訳した日本語
+（`README.ja.md` と `docs/ja/**`）は `bun run textlint`（`.textlintrc.json`）でチェックする。英語ページは
+対象外。
 
 - `docs/x.md` には必ず `docs/ja/x.md` の対があり、`README.md` にはリポジトリ直下に並ぶ `README.ja.md`
   がある。両方を同じコミットで変更する。

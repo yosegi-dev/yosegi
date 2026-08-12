@@ -68,8 +68,8 @@ bun add -d @yosegi/yosegi
 ## English / Japanese parity
 
 English is the source. Write a page or an edit in English first, translate it to Japanese, and land
-both in the same commit. `bun run textlint` checks the translated Japanese under `docs/ja/**`
-(`.textlintrc.json`); English pages are not linted.
+both in the same commit. `bun run textlint` checks the translated Japanese — `README.ja.md` and
+everything under `docs/ja/**` (`.textlintrc.json`); English pages are not linted.
 
 - Every `docs/x.md` has a twin at `docs/ja/x.md`, and `README.md` has `README.ja.md` next to it at
   the repository root. Both change in the same commit.
