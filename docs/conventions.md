@@ -135,42 +135,15 @@ node <repo>/packages/server/bin/yosegi.js registry build \
   --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --data-dir .yosegi
 ```
 
-Then, from the repository root, check that links and anchors resolve and that the twins line up:
+Then, from the repository root, check that links and anchors resolve, that the twins line up
+(same headings, fences, and table rows), and that lines stay within 100 columns counted in East
+Asian character width (tables, code blocks, and front matter are exempt):
 
 ```sh
-python3 - <<'PY'
-import pathlib, re, sys
-
-md = sorted(pathlib.Path(".").glob("*.md")) + sorted(pathlib.Path("docs").glob("**/*.md"))
-raw = {f: f.read_text() for f in md}
-prose = {f: re.sub(r"^`{3}.*?^`{3}", "", t, flags=re.M | re.S) for f, t in raw.items()}
-links = {f: re.sub(r"`[^`]*`", "", p) for f, p in prose.items()}
-slug = lambda h: re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", h.strip().lower()))
-heads = {f.resolve(): [slug(m) for m in re.findall(r"^#+\s+(.*)$", p, re.M)] for f, p in prose.items()}
-bad = []
-for f in md:
-	for link in re.findall(r"\]\((?!https?:|mailto:)([^)\s]+)\)", links[f]):
-		path, _, anchor = link.partition("#")
-		target = (f.parent / path if path else f).resolve()
-		if not target.exists():
-			bad.append(f"{f}: missing file -> {link}")
-		elif anchor and anchor not in heads.get(target, []):
-			bad.append(f"{f}: missing anchor -> {link}")
-for en in md:
-	if en.parent.name == "ja" or not (en.parent.name == "docs" or en.name == "README.md"):
-		continue
-	ja = en.parent / "README.ja.md" if en.name == "README.md" else en.parent / "ja" / en.name
-	if not ja.exists():
-		bad.append(f"{en}: no Japanese twin")
-	else:
-		for label, pat, src in (("headings", r"^#+\s", prose), ("fences", r"^`{3}", raw), ("table rows", r"^\|", prose)):
-			a, b = (len(re.findall(pat, src[p], re.M)) for p in (en, ja))
-			if a != b:
-				bad.append(f"{en.name} vs {ja.name}: {label} {a} != {b}")
-print("\n".join(bad) or "docs ok")
-sys.exit(1 if bad else 0)
-PY
+bun run check:docs
 ```
+
+The script is `scripts/check-docs.ts`, and CI runs it on every push.
 
 If `docs/ja/**` changed — authored or re-translated — run `bun run textlint` and fix every
 violation. It is the self-review on the translated output; do not commit with violations.

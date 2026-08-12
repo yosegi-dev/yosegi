@@ -21,6 +21,7 @@
 		"lint:fix": "bun --smol biome check --write .",
 		"textlint": "textlint \"README.ja.md\" \"docs/ja/**/*.md\"",
 		"textlint:fix": "textlint --fix \"README.ja.md\" \"docs/ja/**/*.md\"",
+		"check:docs": "bun run scripts/check-docs.ts",
 		"docs:assets": "mkdir -p docs/public/brand && cp assets/brand/*.svg docs/public/brand/",
 		"docs:dev": "bun run docs:assets && vitepress dev docs",
 		"docs:build": "bun run docs:assets && vitepress build docs",
