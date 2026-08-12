@@ -133,3 +133,26 @@ jobs:
             echo "Publishing $tarball"
             npm publish "$tarball" --provenance
           done < "$RUNNER_TEMP/tarballs.txt"
+
+  # A separate job rather than a step in publish: creating a release needs
+  # contents: write, and the job holding id-token: write should not also be
+  # able to write to the repository. Running after publish means a GitHub
+  # Release only ever points at a version that actually exists on npm.
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Required to create the GitHub Release. Nothing here checks out the
+      # repository or runs its code; gh reads the tag and the notes
+      # configuration (.github/release.yml) through the API.
+      contents: write
+    steps:
+      - name: Create GitHub Release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes
