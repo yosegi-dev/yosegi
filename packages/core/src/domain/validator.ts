@@ -17,6 +17,10 @@ import { isSyntheticComponentId, isSyntheticManifest } from "./synthetics.ts";
 // A single validation result item. Shared shape for both error and warning.
 export type ValidationIssue = {
 	nodeId: string | null;
+	// Where the node sits in the tree (`$.children[0].children[1]`), the same shape as
+	// the implementation context's StructureNode.path. nodeId alone cannot locate a node
+	// once ids collide, and an agent editing the JSON navigates by position anyway.
+	path?: string;
 	code: ValidationCode;
 	message: string;
 	suggestion?: string;
@@ -44,6 +48,17 @@ export const RESERVED_PROP_NAMES = new Set(["children", "key", "ref"]);
 // Object.prototype and count as defined. Every name-keyed lookup goes through this guard.
 function ownEntry<T>(record: Record<string, T>, key: string): T | undefined {
 	return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+// ScreenNode fields that live next to props, not inside them. Writing them inside
+// props passes the schema (props is a free-form record), so the mistake surfaces here
+// as UNKNOWN_PROP and deserves a pointed fix rather than a fuzzy-match miss.
+const NODE_LEVEL_FIELDS = new Set(["bindings", "events", "when", "each"]);
+
+// Enum options rendered with their type visible ("primary" vs 1 vs true) — the same
+// JSON.stringify rendering component inspect uses for options.
+function formatEnumOptions(options: readonly unknown[] | undefined): string {
+	return (options ?? []).map((option) => JSON.stringify(option)).join(", ");
 }
 
 // Whether a prop value is consistent with its definition's kind. Kinds that aren't
@@ -172,7 +187,12 @@ function validateProps(
 				nodeId: node.id,
 				code: VALIDATION_CODES.UNKNOWN_PROP,
 				message: `Component "${manifest.id}" has no prop "${propName}".`,
-				suggestion: didYouMean(propName, Object.keys(manifest.props)),
+				// A node-level field written inside props is a frequent mistake, and the
+				// fuzzy matcher would never suggest the fix (no prop resembles "bindings"),
+				// so it gets its own suggestion instead.
+				suggestion: NODE_LEVEL_FIELDS.has(propName)
+					? `"${propName}" is not a prop. Move it out of "props" and place it directly on the node: { "id": ..., "component": ..., "props": { ... }, "${propName}": ... }.`
+					: didYouMean(propName, Object.keys(manifest.props)),
 			});
 			continue;
 		}
@@ -203,13 +223,16 @@ function validateProps(
 			});
 		}
 		if (!isPropValueValid(def, value)) {
+			// The received value rides along so the fix is decidable from the error alone —
+			// without it, "primary" vs primary vs 1 all read the same and the reader can't
+			// tell a wrong value from a wrong type.
 			errors.push({
 				nodeId: node.id,
 				code: VALIDATION_CODES.INVALID_PROP_VALUE,
-				message: `Value for "${manifest.id}.${propName}" does not match kind "${def.kind}".`,
+				message: `Value for "${manifest.id}.${propName}" does not match kind "${def.kind}" (received: ${JSON.stringify(value)}).`,
 				suggestion:
 					def.kind === "enum"
-						? `Use one of: ${(def.options ?? []).join(", ")}`
+						? `Use one of: ${formatEnumOptions(def.options)}`
 						: undefined,
 			});
 		}
@@ -257,14 +280,18 @@ function validateRequiredProp(
 		});
 		return;
 	}
+	// The kind (and, for an enum, the options) ride along so supplying the value doesn't
+	// require a component inspect round-trip first.
 	errors.push({
 		nodeId: node.id,
 		code: VALIDATION_CODES.MISSING_REQUIRED_PROP,
-		message: `Required prop "${propName}" of "${manifest.id}" is not set.`,
+		message: `Required prop "${propName}" of "${manifest.id}" is not set (kind "${def.kind}").`,
 		suggestion:
-			expression === undefined
-				? undefined
-				: `Binding expression "${expression}" is not a plain identifier path, so it cannot be written into the Story. Set props.${propName} to a mock value and keep the binding as the implementation intent.`,
+			expression !== undefined
+				? `Binding expression "${expression}" is not a plain identifier path, so it cannot be written into the Story. Set props.${propName} to a mock value and keep the binding as the implementation intent.`
+				: def.kind === "enum"
+					? `Set it to one of: ${formatEnumOptions(def.options)}`
+					: undefined,
 	});
 }
 
@@ -298,6 +325,23 @@ function validateParentChild(
 			suggestion: `Allowed children: ${parentManifest.constraints.allowedChildren.join(", ")}`,
 		});
 	}
+}
+
+// Node -> tree path, keyed by object identity so the location survives duplicated ids.
+// The path shape (`$.children[0]`) matches the implementation context's
+// StructureNode.path, so both outputs address a node the same way.
+function indexNodePaths(root: ScreenNode): Map<ScreenNode, string> {
+	const paths = new Map<ScreenNode, string>();
+	const visit = (node: ScreenNode, path: string): void => {
+		paths.set(node, path);
+		for (const [slotName, children] of Object.entries(node.slots)) {
+			children.forEach((child, index) => {
+				visit(child, `${path}.${slotName}[${index}]`);
+			});
+		}
+	};
+	visit(root, "$");
+	return paths;
 }
 
 // Builds a name -> id index of host components that share a name with a synthetic
@@ -350,18 +394,24 @@ export function validateScreen(
 	const shadowedSyntheticNames = indexShadowedSyntheticNames(registry);
 	const reportedShadowedNames = new Set<string>();
 	const nodes = walkNodes(screen.root);
+	const nodePaths = indexNodePaths(screen.root);
 
-	// Node ID duplication check.
-	const seen = new Set<string>();
+	// Node ID duplication check. Both colliding paths are named — the id alone can't say
+	// which of the two nodes to rename.
+	const seenPathById = new Map<string, string>();
 	for (const node of nodes) {
-		if (seen.has(node.id)) {
+		const path = nodePaths.get(node) ?? "$";
+		const firstPath = seenPathById.get(node.id);
+		if (firstPath !== undefined) {
 			errors.push({
 				nodeId: node.id,
+				path,
 				code: VALIDATION_CODES.DUPLICATE_NODE_ID,
-				message: `Node id "${node.id}" is used more than once.`,
+				message: `Node id "${node.id}" is used more than once (at ${firstPath} and ${path}).`,
 			});
+			continue;
 		}
-		seen.add(node.id);
+		seenPathById.set(node.id, path);
 	}
 
 	for (const node of nodes) {
@@ -410,5 +460,19 @@ export function validateScreen(
 		}
 	}
 
-	return { valid: errors.length === 0, errors, warnings };
+	// Issues are pushed with nodeId only (the helpers don't know tree positions), so the
+	// path is filled in here from the id. Ambiguity under duplicated ids resolves to the
+	// first occurrence; the DUPLICATE_NODE_ID issues above carry their exact paths already.
+	const locate = (issue: ValidationIssue): ValidationIssue => {
+		if (issue.path !== undefined || issue.nodeId === null) {
+			return issue;
+		}
+		const path = seenPathById.get(issue.nodeId);
+		return path === undefined ? issue : { ...issue, path };
+	};
+	return {
+		valid: errors.length === 0,
+		errors: errors.map(locate),
+		warnings: warnings.map(locate),
+	};
 }

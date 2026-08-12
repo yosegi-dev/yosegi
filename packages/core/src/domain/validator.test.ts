@@ -825,3 +825,131 @@ describe("validateScreen: prototype-derived names", () => {
 		).toBe(true);
 	});
 });
+
+// Everything the error needs so an agent can self-correct without a component inspect
+// round-trip: the received value, the typed options, the prop's kind, and the node's
+// position in the tree.
+describe("validateScreen: self-correction info", () => {
+	it("INVALID_PROP_VALUE carries the received value and typed enum options", () => {
+		const screen = applyOperation(sampleScreen(), {
+			type: "setProps",
+			nodeId: "node-table",
+			props: { loading: "yes" },
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.INVALID_PROP_VALUE,
+		);
+		// The stringified value makes a wrong type readable ("yes" vs yes vs 1).
+		expect(issue?.message).toContain('received: "yes"');
+	});
+
+	it("INVALID_PROP_VALUE renders enum options with their type visible", () => {
+		const screen = applyOperation(sampleScreen(), {
+			type: "addNode",
+			target: { parentNodeId: "node-page", slot: "body" },
+			node: {
+				id: "node-btn",
+				component: "Button",
+				props: { variant: "danger" },
+				slots: {},
+			},
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.INVALID_PROP_VALUE,
+		);
+		expect(issue?.suggestion).toBe(
+			'Use one of: "default", "destructive", "secondary", "ghost", "link"',
+		);
+	});
+
+	it("MISSING_REQUIRED_PROP names the prop's kind", () => {
+		const screen = applyOperation(sampleScreen(), {
+			type: "setProps",
+			nodeId: "node-header",
+			props: {},
+			merge: false,
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.MISSING_REQUIRED_PROP,
+		);
+		expect(issue?.message).toContain('(kind "string")');
+	});
+
+	it("a missing required enum prop suggests its options", () => {
+		const registry = parseComponentRegistry({
+			version: "enum:v1",
+			components: [
+				{
+					id: "Badge",
+					name: "Badge",
+					category: "x",
+					import: { packageName: "x", exportName: "Badge" },
+					props: {
+						tone: { kind: "enum", required: true, options: ["info", "warn"] },
+					},
+					slots: {},
+				},
+			],
+		});
+		const screen = parseScreenDefinition({
+			schemaVersion: "1.0",
+			id: "s",
+			name: "s",
+			componentRegistryVersion: "enum:v1",
+			revision: 0,
+			root: { id: "r", component: "Badge", props: {}, slots: {} },
+		});
+		const issue = validateScreen(screen, registry).errors.find(
+			(e) => e.code === VALIDATION_CODES.MISSING_REQUIRED_PROP,
+		);
+		expect(issue?.suggestion).toBe('Set it to one of: "info", "warn"');
+	});
+
+	it("a node-level field inside props gets a dedicated UNKNOWN_PROP suggestion", () => {
+		const screen = applyOperation(sampleScreen(), {
+			type: "setProps",
+			nodeId: "node-header",
+			props: { bindings: { title: "page.title" } },
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.UNKNOWN_PROP,
+		);
+		expect(issue?.suggestion).toContain('"bindings" is not a prop');
+		expect(issue?.suggestion).toContain("place it directly on the node");
+	});
+
+	it("issues carry the node's tree path", () => {
+		const screen = applyOperation(sampleScreen(), {
+			type: "setProps",
+			nodeId: "node-keyword",
+			props: { titel: "x" },
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.UNKNOWN_PROP,
+		);
+		expect(issue?.path).toBe("$.body[0].fields[0]");
+	});
+
+	// Built by hand — applyOperation rejects a duplicate id before validation would see it.
+	it("DUPLICATE_NODE_ID names both colliding paths", () => {
+		const base = sampleScreen();
+		base.root.slots.body.push({
+			id: "node-header",
+			component: "PageHeader",
+			props: { title: "again" },
+			slots: {},
+		});
+		const result = validateScreen(base, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.DUPLICATE_NODE_ID,
+		);
+		expect(issue?.message).toContain("$.header[0]");
+		expect(issue?.message).toContain("$.body[2]");
+		expect(issue?.path).toBe("$.body[2]");
+	});
+});
