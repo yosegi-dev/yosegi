@@ -643,4 +643,111 @@ describe("importStory", () => {
 			expect(imported.root?.component).toBe("Card");
 		});
 	});
+
+	describe("fixtures の読み戻し", () => {
+		it("トップレベルの const を JSON リテラルとして復元する", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"",
+				'const customers = [\n\t{\n\t\t"name": "Sato"\n\t},\n\t{\n\t\t"name": "Suzuki"\n\t}\n];',
+				"const pageSize = 20;",
+				"",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.fixtures).toEqual({
+				customers: [{ name: "Sato" }, { name: "Suzuki" }],
+				pageSize: 20,
+			});
+		});
+
+		// The inverse of emit writing a fixture-backed binding as `prop={expression}`.
+		it("fixture を参照する属性式は binding として読み戻す", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const customers = [];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table rows={customers} /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.root?.bindings).toEqual({ rows: "customers" });
+			expect(imported.root?.props).toEqual({});
+		});
+
+		it("fixture に無い識別子の属性式は従来どおり OPAQUE_PROP", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const customers = [];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table rows={orders} /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual(["OPAQUE_PROP"]);
+			expect(imported.root?.bindings).toBeUndefined();
+		});
+
+		it("const meta は fixture として読まない", () => {
+			const screen = sampleScreen();
+			const source = emitCsf(screen.root, registry(), { title: "S/T" });
+
+			expect(importSource(source).fixtures).toEqual({});
+		});
+
+		it("JSON リテラルでない const は OPAQUE_FIXTURE として警告する", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const rows = buildRows();",
+				"const helper = () => 1;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+			]);
+			expect(imported.warnings[0].message).toContain('"rows"');
+			expect(imported.fixtures).toEqual({});
+		});
+
+		it("export された const は fixture として読まない", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"export const shared = [1, 2];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			expect(importSource(source).fixtures).toEqual({});
+		});
+
+		it("render を読めなくても fixtures は返す", () => {
+			const source = [
+				"const customers = [];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.root).toBeNull();
+			expect(imported.fixtures).toEqual({ customers: [] });
+		});
+	});
 });

@@ -731,6 +731,54 @@ describe("runCli", () => {
 		);
 	});
 
+	// Fixtures ride the whole loop: Screen JSON -> const declarations in the Story
+	// -> back into the restored Screen JSON.
+	it("screen generate は fixtures を const として書き出し、story import が読み戻す", async () => {
+		const screen = {
+			...sampleScreen(),
+			fixtures: { customers: [{ name: "Sato" }, { name: "Suzuki" }] },
+		};
+		const screenFile = join(dataDir, "fixtures-screen.json");
+		await writeFile(screenFile, JSON.stringify(screen));
+		const storyFile = join(dataDir, "customer-list.stories.tsx");
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			storyFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+
+		const source = await Bun.file(storyFile).text();
+		expect(source).toContain("const customers = [");
+		// The fixture-backed binding is written into the JSX even though rows is optional.
+		expect(source).toContain("rows={customers}");
+
+		logs = [];
+		const restoredFile = join(dataDir, "restored-fixtures", "screen.json");
+		const importCode = await runCli([
+			"story",
+			"import",
+			storyFile,
+			"--out",
+			restoredFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(importCode).toBe(0);
+		expect(output()).toContain('"warnings": []');
+		const restored = JSON.parse(await Bun.file(restoredFile).text()) as {
+			fixtures?: Record<string, unknown>;
+		};
+		expect(restored.fixtures).toEqual({
+			customers: [{ name: "Sato" }, { name: "Suzuki" }],
+		});
+	});
+
 	it("story import は --out 無しなら screen と warnings を標準出力へ返す", async () => {
 		const storyFile = join(dataDir, "hand-written.stories.tsx");
 		await writeFile(

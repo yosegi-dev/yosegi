@@ -3,6 +3,7 @@ import type {
 	EventDefinition,
 	ScreenNode,
 } from "@yosegi/core";
+import { bindingRootIdentifier } from "@yosegi/core";
 import {
 	decodeIntent,
 	INTENT_COMMENT_PREFIX,
@@ -80,6 +81,9 @@ export type StoryImportWarningCode =
 	// An intent comment had no single element to attach to (e.g. it preceded a
 	// Fragment that expanded into several nodes), so the declaration was dropped.
 	| "INTENT_NOT_APPLIED"
+	// A top-level const whose initializer is not a JSON literal, so it could not
+	// be read back as a fixture.
+	| "OPAQUE_FIXTURE"
 	// Multiple roots existed, so they were wrapped in a Box.
 	| "MULTIPLE_ROOTS";
 
@@ -108,6 +112,9 @@ export type ImportedStory = {
 	storyName: string | null;
 	// The reconstructed tree. null if the JSX couldn't be read.
 	root: ScreenNode | null;
+	// Top-level consts read back as the screen's fixtures, in source order. Empty
+	// when the Story declares none.
+	fixtures: Record<string, unknown>;
 	imports: ImportedBinding[];
 	warnings: StoryImportWarning[];
 };
@@ -131,6 +138,10 @@ type ImportContext = {
 	warnings: StoryImportWarning[];
 	// Builds node ids using a counter per component id.
 	counters: Map<string, number>;
+	// Fixtures already collected from the file's top-level consts. An attribute
+	// expression whose head names one of these reads back as a binding rather than
+	// an opaque prop.
+	fixtures: Record<string, unknown>;
 };
 
 // ---- Static evaluation ----
@@ -510,15 +521,20 @@ function textNode(context: ImportContext, text: string): ScreenNode {
 	return makeNode(context, "Text", { text });
 }
 
-// An attribute's value. One containing JSX is a Slot, one that reads statically is a prop, and anything else is opaque.
+// An attribute's value. One containing JSX is a Slot, one that reads statically
+// is a prop, one referencing a fixture is a binding, and anything else is opaque.
 type Attribute =
 	| { kind: "prop"; name: string; value: unknown }
 	| { kind: "slot"; name: string; children: ScreenNode[] }
+	| { kind: "binding"; name: string; expression: string }
 	| { kind: "opaque" };
 
 function readAttribute(
 	context: ImportContext,
 	attribute: ts.JsxAttribute,
+	// Bindings only exist on component elements. On an intrinsic tag the same
+	// shape still falls through to OPAQUE_PROP, so nothing is dropped in silence.
+	allowBindings: boolean,
 ): Attribute {
 	const name = ts.isIdentifier(attribute.name)
 		? attribute.name.text
@@ -554,6 +570,16 @@ function readAttribute(
 	}
 	const evaluated = evaluate(expression);
 	if (!evaluated.ok) {
+		// The inverse of emit writing a fixture-backed binding as `prop={expression}`:
+		// when the expression's head names a fixture this file declares, the value is
+		// known to exist, so it reads back as the binding rather than an opaque prop.
+		if (allowBindings) {
+			const text = expression.getText(context.sourceFile);
+			const head = bindingRootIdentifier(text);
+			if (head !== null && Object.hasOwn(context.fixtures, head)) {
+				return { kind: "binding", name, expression: text };
+			}
+		}
 		warn(
 			context,
 			"OPAQUE_PROP",
@@ -569,6 +595,7 @@ type ElementParts = {
 	tagName: string;
 	props: Record<string, unknown>;
 	slots: Record<string, ScreenNode[]>;
+	bindings: Record<string, string>;
 	children: ScreenNode[];
 };
 
@@ -577,8 +604,12 @@ function readElement(
 	element: ts.JsxElement | ts.JsxSelfClosingElement,
 ): ElementParts {
 	const opening = ts.isJsxElement(element) ? element.openingElement : element;
+	const tagName = opening.tagName.getText(context.sourceFile);
 	const props: Record<string, unknown> = {};
 	const slots: Record<string, ScreenNode[]> = {};
+	const bindings: Record<string, string> = {};
+	// A tag starting with a lowercase letter is a DOM element.
+	const isComponent = !/^[a-z]/.test(tagName);
 	for (const attribute of opening.attributes.properties) {
 		if (ts.isJsxSpreadAttribute(attribute)) {
 			warn(
@@ -589,20 +620,23 @@ function readElement(
 			);
 			continue;
 		}
-		const read = readAttribute(context, attribute);
+		const read = readAttribute(context, attribute, isComponent);
 		if (read.kind === "prop") {
 			props[read.name] = read.value;
 		} else if (read.kind === "slot") {
 			slots[read.name] = read.children;
+		} else if (read.kind === "binding") {
+			bindings[read.name] = read.expression;
 		}
 	}
 	const children = ts.isJsxElement(element)
 		? convertChildren(context, element.children)
 		: [];
 	return {
-		tagName: opening.tagName.getText(context.sourceFile),
+		tagName,
 		props,
 		slots,
+		bindings,
 		children,
 	};
 }
@@ -691,7 +725,11 @@ function convertComponent(
 	if (parts.children.length > 0) {
 		slots[CHILDREN_SLOT] = parts.children;
 	}
-	return [makeNode(context, component, parts.props, slots)];
+	const node = makeNode(context, component, parts.props, slots);
+	if (Object.keys(parts.bindings).length > 0) {
+		node.bindings = parts.bindings;
+	}
+	return [node];
 }
 
 // Converts a sequence of JSX children into a ScreenNode array. An intent comment is applied to the element right after it.
@@ -864,6 +902,72 @@ function findMetaObject(
 	return objects.get("meta") ?? null;
 }
 
+// ---- Fixtures (top-level consts) ----
+
+// Reads top-level, non-exported variable declarations back as fixtures. emit
+// writes them between the imports and meta, but the position is not enforced on
+// read-back — a const's value does not depend on where it sits, and hand-edited
+// Stories reorder freely. The meta object's own declaration is excluded by node
+// identity, which also covers an export-default-referenced name that isn't
+// called "meta".
+function collectFixtures(
+	context: ImportContext,
+	meta: ts.ObjectLiteralExpression | null,
+): Record<string, unknown> {
+	const fixtures: Record<string, unknown> = {};
+	for (const statement of context.sourceFile.statements) {
+		if (!ts.isVariableStatement(statement)) {
+			continue;
+		}
+		// Story exports (and anything else exported) are not fixtures.
+		const exported = statement.modifiers?.some(
+			(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+		);
+		if (exported) {
+			continue;
+		}
+		for (const declaration of statement.declarationList.declarations) {
+			if (declaration.initializer === meta) {
+				continue;
+			}
+			if (!ts.isIdentifier(declaration.name)) {
+				warn(
+					context,
+					"OPAQUE_FIXTURE",
+					`A destructuring declaration cannot be read as a fixture: ${declaration.getText(context.sourceFile)}`,
+					declaration,
+				);
+				continue;
+			}
+			const name = declaration.name.text;
+			const initializer = declaration.initializer;
+			if (!initializer) {
+				warn(
+					context,
+					"OPAQUE_FIXTURE",
+					`Top-level "${name}" has no initializer, so it was not imported as a fixture`,
+					declaration,
+				);
+				continue;
+			}
+			const evaluated = evaluate(initializer);
+			if (!evaluated.ok) {
+				// The file-top contract: nothing gets dropped in silence. A helper const
+				// (a function, a computed value) lands here on hand-written Stories.
+				warn(
+					context,
+					"OPAQUE_FIXTURE",
+					`Top-level "${name}" is not a JSON literal, so it was not imported as a fixture: ${initializer.getText(context.sourceFile)}`,
+					declaration,
+				);
+				continue;
+			}
+			fixtures[name] = evaluated.value;
+		}
+	}
+	return fixtures;
+}
+
 type StoryCandidate = {
 	name: string;
 	object: ts.ObjectLiteralExpression;
@@ -986,6 +1090,7 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 		),
 		warnings,
 		counters: new Map(),
+		fixtures: {},
 	};
 
 	const meta = findMetaObject(sourceFile);
@@ -1005,6 +1110,11 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 		}
 	}
 
+	// Collected before the JSX is converted, so attribute expressions can be
+	// matched against the fixture names.
+	const fixtures = collectFixtures(context, meta);
+	context.fixtures = fixtures;
+
 	const stories = findStories(sourceFile);
 	const story = selectStory(stories, options.storyName);
 	if (!story) {
@@ -1016,7 +1126,14 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 				: "No Story with a render function was found",
 			null,
 		);
-		return { title, storyName: null, root: null, imports: bindings, warnings };
+		return {
+			title,
+			storyName: null,
+			root: null,
+			fixtures,
+			imports: bindings,
+			warnings,
+		};
 	}
 
 	const render = objectProperty(story.object, "render");
@@ -1031,6 +1148,7 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 			title,
 			storyName: story.name,
 			root: null,
+			fixtures,
 			imports: bindings,
 			warnings,
 		};
@@ -1048,6 +1166,7 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 			title,
 			storyName: story.name,
 			root: null,
+			fixtures,
 			imports: bindings,
 			warnings,
 		};
@@ -1065,6 +1184,7 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 			title,
 			storyName: story.name,
 			root: null,
+			fixtures,
 			imports: bindings,
 			warnings,
 		};
@@ -1084,5 +1204,12 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 		);
 	}
 
-	return { title, storyName: story.name, root, imports: bindings, warnings };
+	return {
+		title,
+		storyName: story.name,
+		root,
+		fixtures,
+		imports: bindings,
+		warnings,
+	};
 }

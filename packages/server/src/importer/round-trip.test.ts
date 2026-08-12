@@ -473,6 +473,76 @@ describe("emitCsf と importStory のラウンドトリップ", () => {
 	});
 });
 
+describe("fixtures のラウンドトリップ", () => {
+	const fixtures = {
+		customers: [
+			{ name: "Sato", tags: ["a", "b"], limit: null },
+			{ name: 'Su"zuki', note: "line1\nline2" },
+		],
+		pageSize: 20,
+		offset: -1,
+		enabled: false,
+	};
+	const root = node(
+		"card-1",
+		"ui/card#Card",
+		{},
+		{},
+		{ bindings: { title: "customers" } },
+	);
+
+	it("fixtures が構文を保ったまま一致して戻る", () => {
+		const source = emitCsf(root, registry, { title: "S/T", fixtures });
+		expect(syntaxErrors(source)).toEqual([]);
+
+		const imported = importStory({ source, registry });
+		expect(imported.warnings).toEqual([]);
+		expect(imported.fixtures).toEqual(fixtures);
+		expect(shape(imported.root as ScreenNode)).toEqual(shape(root));
+	});
+
+	it("2 周目以降の生成結果が一致する", () => {
+		const first = emitCsf(root, registry, { title: "S/T", fixtures });
+		const imported = importStory({ source: first, registry });
+		const second = emitCsf(imported.root as ScreenNode, registry, {
+			title: "S/T",
+			fixtures: imported.fixtures,
+		});
+		expect(second).toBe(first);
+	});
+
+	// repeat is one-way by design: the Story carries the expanded copies, and the
+	// importer reads them back as plain nodes.
+	it("repeat は展開済みノードとして戻る（不可逆）", () => {
+		const repeated = node(
+			"box-1",
+			"Box",
+			{},
+			{
+				children: [
+					node(
+						"b-1",
+						"ui/button#Button",
+						{ label: "ok" },
+						{},
+						{
+							repeat: 3,
+						},
+					),
+				],
+			},
+		);
+		const source = emitCsf(repeated, registry, { title: "S/T" });
+		expect(syntaxErrors(source)).toEqual([]);
+
+		const imported = importStory({ source, registry });
+		expect(imported.warnings).toEqual([]);
+		const children = (imported.root as ScreenNode).slots.children;
+		expect(children).toHaveLength(3);
+		expect(children.every((child) => child.repeat === undefined)).toBe(true);
+	});
+});
+
 describe("default export のラウンドトリップ", () => {
 	const withDefaultExport: ComponentRegistry = withSyntheticComponents({
 		version: "test:default",
