@@ -49,6 +49,10 @@ const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n]/;
 const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n]/;
 // A form that can be written as-is in an identifier position (a Story's export name, an import's local name).
 const JS_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+// Local names the emitted file itself declares: `const meta` and the Meta / StoryObj
+// type imports. A host export with one of these names must take a suffixed alias, or
+// the generated Story declares the same identifier twice and cannot compile.
+const EMIT_DECLARED_LOCAL_NAMES = ["meta", "Meta", "StoryObj"];
 // Mocks have no handler implementation. The "do nothing" value placed on a required function prop.
 const NOOP_HANDLER = "() => {}";
 
@@ -226,11 +230,16 @@ export function planImports(
 	root: ScreenNode,
 	registry: ComponentRegistry,
 	resolveImport?: (packageName: string) => string,
+	// Extra identifiers the surrounding file declares (e.g. the Story's export name).
+	reservedLocalNames: Iterable<string> = [],
 ): ImportPlan {
 	const manifests = indexRegistry(registry);
 	const specifiers = new Map<string, ImportBinding[]>();
 	const localNames = new Map<string, string>();
-	const usedLocalNames = new Set<string>();
+	const usedLocalNames = new Set<string>([
+		...EMIT_DECLARED_LOCAL_NAMES,
+		...reservedLocalNames,
+	]);
 
 	for (const node of walkNodes(root)) {
 		const manifest = manifests.get(node.component) ?? null;
@@ -259,9 +268,15 @@ export function planImports(
 			localNames.set(node.component, existing.localName);
 			continue;
 		}
-		let localName = exportName;
+		// A JSX tag starting with a lowercase letter is read as an HTML intrinsic
+		// element rather than the imported component, so a lowercase export gets a
+		// capitalized alias for its tag position.
+		const base = /^[a-z]/.test(exportName)
+			? `${exportName.charAt(0).toUpperCase()}${exportName.slice(1)}`
+			: exportName;
+		let localName = base;
 		for (let suffix = 2; usedLocalNames.has(localName); suffix += 1) {
-			localName = `${exportName}${suffix}`;
+			localName = `${base}${suffix}`;
 		}
 		usedLocalNames.add(localName);
 		bindings.push({ exportName, localName, kind });
@@ -678,8 +693,6 @@ export function emitCsf(
 	options: EmitCsfOptions,
 ): string {
 	const manifests = indexRegistry(registry);
-	const plan = planImports(root, registry, options.resolveImport);
-	const context: RenderContext = { manifests, localNames: plan.localNames };
 	// The Story name becomes the export's identifier. Since arbitrary strings can
 	// arrive from the CLI / MCP, only accept a form that's writable as an identifier
 	// (otherwise arbitrary code could get mixed into the generated output).
@@ -689,6 +702,10 @@ export function emitCsf(
 			`Story name "${storyName}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", and do not start with a digit.`,
 		);
 	}
+	// The Story's export name is an identifier this file declares, so a component
+	// import must not take the same local name.
+	const plan = planImports(root, registry, options.resolveImport, [storyName]);
+	const context: RenderContext = { manifests, localNames: plan.localNames };
 
 	const generatedImports = [
 		`import type { Meta, StoryObj } from ${JSON.stringify(options.frameworkPackage ?? DEFAULT_FRAMEWORK_PACKAGE)};`,
