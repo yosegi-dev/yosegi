@@ -18,6 +18,7 @@ links there.
 | `docs/screen-json.md` | The format spec — fields, component ids, synthetic primitives, `bindings` / `events` | Flags, and the loops that produce the file |
 | `docs/workflows.md` | Use cases, the upstream and downstream loops, the error and warning codes | Flag semantics |
 | `docs/registry.md` | How types become a catalog, the measurements, the patterns that do not extract | Command reference |
+| `docs/storybook-mcp.md` | The overlap with Storybook's official MCP, and the split | Anything another page owns; restating Storybook's own docs |
 | `docs/development.md` | Working on this repository: layout, commands, pre-publish verification, release | How to use Yosegi in a host |
 | `docs/ROADMAP.md` | Planned work and open questions | Anything already shipped |
 | `docs/conventions.md` | This page | Coding conventions — those live in [`AGENTS.md`](../AGENTS.md) |

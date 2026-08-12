@@ -31,6 +31,7 @@ const en = [
 		items: [
 			{ text: "Getting started", link: "/getting-started" },
 			{ text: "Workflows", link: "/workflows" },
+			{ text: "Storybook MCP and Yosegi", link: "/storybook-mcp" },
 		],
 	},
 	{
@@ -57,6 +58,7 @@ const ja = [
 		items: [
 			{ text: "はじめに", link: "/ja/getting-started" },
 			{ text: "ワークフロー", link: "/ja/workflows" },
+			{ text: "Storybook MCP と Yosegi", link: "/ja/storybook-mcp" },
 		],
 	},
 	{
@@ -134,7 +136,7 @@ export default defineConfig({
 					{
 						text: "Guide",
 						link: "/getting-started",
-						activeMatch: "/(getting-started|workflows)",
+						activeMatch: "/(getting-started|workflows|storybook-mcp)",
 					},
 					{
 						text: "Reference",
@@ -163,7 +165,7 @@ export default defineConfig({
 					{
 						text: "ガイド",
 						link: "/ja/getting-started",
-						activeMatch: "/ja/(getting-started|workflows)",
+						activeMatch: "/ja/(getting-started|workflows|storybook-mcp)",
 					},
 					{
 						text: "リファレンス",

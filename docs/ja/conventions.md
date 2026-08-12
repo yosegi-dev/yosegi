@@ -16,6 +16,7 @@
 | `docs/screen-json.md` | フォーマット仕様。フィールド・component id・合成プリミティブ・`bindings` / `events` | フラグ、およびこのファイルを生む往復 |
 | `docs/workflows.md` | ユースケース、上流と下流のループ、エラーと警告の code | フラグの意味 |
 | `docs/registry.md` | 型がカタログになる仕組み、実測、抽出できないパターン | コマンドリファレンス |
+| `docs/storybook-mcp.md` | 公式 Storybook MCP との重なりと棲み分け | 他ページが所有する内容、Storybook 自身のドキュメントの再掲 |
 | `docs/development.md` | このリポジトリでの作業。構成・コマンド・公開前の検証・リリース | ホストでの Yosegi の使い方 |
 | `docs/ROADMAP.md` | 予定している作業と未決の論点 | すでに入っているもの |
 | `docs/ja/conventions.md` | このページ | コードの規約。それは [`AGENTS.md`](../../AGENTS.md) にある |
