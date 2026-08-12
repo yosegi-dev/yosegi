@@ -4,6 +4,7 @@
 		"includes": [
 			"**/*.{ts,tsx,js,jsx,json}",
 			"!**/dist",
+			"!**/.vitepress/cache",
 			"!**/data",
 			"!**/seeds",
 			"!**/node_modules",

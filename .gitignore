@@ -12,3 +12,8 @@ packages/server/skills/
 
 # brand asset generation (font is fetched, not committed)
 assets/brand/*.ttf
+
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/public/
