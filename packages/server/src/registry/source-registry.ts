@@ -224,6 +224,18 @@ function readCompilerOptions(rawTsconfigPath: string): {
 	};
 }
 
+// Storybook's tag marking a component as deprecated, same as the --index route reads.
+const DEPRECATED_TAG = "deprecated";
+
+// Whether the JSDoc carries @deprecated. Checked on both the export symbol and the
+// resolved declaration, because a re-export (`export { X } from "./x"`) keeps the
+// JSDoc on the underlying declaration only.
+function hasDeprecatedTag(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+	return symbol
+		.getJsDocTags(checker)
+		.some((tag) => tag.name === DEPRECATED_TAG);
+}
+
 // Whether @yosegi-internal is attached to the JSDoc.
 function hasInternalTag(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
 	return symbol.getJsDocTags(checker).some((tag) => {
@@ -262,6 +274,9 @@ type ExportedSymbol = {
 	// Whether this is a default export. Needed to write the import statement correctly.
 	isDefault: boolean;
 	internal: boolean;
+	// Whether the JSDoc carries @deprecated. Feeds constraints.deprecated, the same
+	// signal the --index route derives from Storybook's "deprecated" tag.
+	deprecated: boolean;
 	// Whether calling this value returns a React element. Used to decide whether an
 	// export react-docgen-typescript couldn't read gets rescued as "a component whose
 	// type just couldn't be extracted" or discarded as a plain type/constant.
@@ -540,6 +555,9 @@ function collectExports(
 				docName,
 				isDefault,
 				internal: hasInternalTag(symbol, checker),
+				deprecated:
+					hasDeprecatedTag(symbol, checker) ||
+					hasDeprecatedTag(resolved, checker),
 				componentLike: isComponentLike(resolved, checker),
 				symbol: resolved,
 				unionProps: hasUnionProps(resolved, checker),
@@ -1048,6 +1066,9 @@ type StoryCuration = {
 	storyFile: string;
 	// Individual Story names, in index.json's original order.
 	storyNames: string[];
+	// Whether any of the component's Stories carries the "deprecated" tag — the same
+	// aggregation the --index route applies.
+	deprecated: boolean;
 };
 
 // Collapses index.json's entries down to one per "implementation file". If componentPath
@@ -1061,10 +1082,12 @@ function collectStoryCuration(
 			continue;
 		}
 		const key = normalizeModulePath(entry.componentPath ?? entry.importPath);
+		const deprecated = (entry.tags ?? []).includes(DEPRECATED_TAG);
 		const existing = byPath.get(key);
 		if (existing) {
 			existing.storyCount += 1;
 			existing.storyNames.push(entry.name);
+			existing.deprecated ||= deprecated;
 			continue;
 		}
 		const segments = entry.title.split("/").filter(Boolean);
@@ -1076,6 +1099,7 @@ function collectStoryCuration(
 			storyCount: 1,
 			storyFile: entry.importPath,
 			storyNames: [entry.name],
+			deprecated,
 		});
 	}
 	return byPath;
@@ -1328,6 +1352,12 @@ export function buildRegistryFromSource(
 			if (curation) {
 				stats.withStory += 1;
 			}
+			// deprecated comes from the host itself — a JSDoc @deprecated on the export
+			// or a "deprecated" Story tag. Explicit metadata wins, mirroring how
+			// buildRegistryFromStorybook resolves the same field.
+			const deprecated =
+				explicit?.constraints?.deprecated ??
+				(exported.deprecated || curation?.deprecated === true || undefined);
 
 			components.push(
 				componentManifestSchema.parse({
@@ -1349,7 +1379,10 @@ export function buildRegistryFromSource(
 					},
 					props,
 					slots,
-					constraints: explicit?.constraints,
+					constraints:
+						deprecated === undefined
+							? explicit?.constraints
+							: { ...explicit?.constraints, deprecated },
 					usage: explicit?.usage,
 					// Whether props could be read all the way through from the type. Used to decide whether inspect shows a caveat.
 					propsFromTypes: Boolean(doc) || Boolean(explicit?.props),
