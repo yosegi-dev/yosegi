@@ -17,16 +17,16 @@ Storybook 10.3（2026 年 4 月）が「Storybook MCP for React」を導入し�
 | 要素 | 内容 |
 | --- | --- |
 | Component Manifest | `/manifests/components.json`。Storybook 内の CSF ファイルの静的解析と `reactDocgen` オプション経由の props 抽出から生成される。プレビュー中のスキーマは「安定しておらず public API とみなすべきではない」と公式が明記している |
-| `@storybook/addon-mcp` | 稼働中の dev サーバーの `/mcp` に立つ MCP サーバー。ツールセットは development（`get-changed-stories`、`get-storybook-story-instructions`、`preview-stories`）、docs（`list-all-documentation`、`get-documentation`、`get-documentation-for-story`）、testing（`run-story-tests`） |
+| `@storybook/addon-mcp` | 稼働中の dev サーバの `/mcp` に立つ MCP サーバ。ツールセットは development（`get-changed-stories`、`get-storybook-story-instructions`、`preview-stories`）、docs（`list-all-documentation`、`get-documentation`、`get-documentation-for-story`）、testing（`run-story-tests`） |
 
-現時点ではどちらも React 専用で、稼働中の Storybook が前提になる。MCP エンドポイントは dev サーバー
-上に立ち、manifest は dev サーバーかビルド済み Storybook が配信する。
+現時点ではどちらも React 専用で、稼働中の Storybook が前提になる。MCP エンドポイントは dev サーバ
+上に立ち、Manifest は dev サーバかビルド済み Storybook が配信する。
 
 ## 重なる部分
 
-型付きのコンポーネントカタログをエージェントに渡すことも、エージェントに Story を書かせることも、
-どちらのツールにもできる。使う部品すべてに Story があり、エージェントの作業中つねに dev サーバーを
-立てられるホストなら、公式 MCP だけで足りる場合がある。
+型付きのコンポーネントカタログをエージェントに渡すことも、エージェントに Story を書かせることも、ど
+ちらのツールにもできる。使うコンポーネントすべてに Story があり、エージェントの作業中つねに dev サー
+バを立てられるホストなら、公式 MCP だけで足りる場合がある。
 
 ## Yosegi にしかないもの
 
@@ -39,10 +39,10 @@ Screen JSON は宣言的な中間表現で、JSX を 1 行も書く前に Regist
 
 ### Story を持たないコンポーネントへの到達
 
-manifest は CSF ファイルから生成されるので、Story の無いコンポーネントには構造的に届かない。
+Manifest は CSF ファイルから生成されるので、Story の無いコンポーネントには構造的に届かない。
 Registry は TypeScript のソースを直接読む。[Component Registry](./registry.md#実測結果) で実測した
 実運用のデザインシステムでは、278 コンポーネント中 60 が自身の Story を持たなかった。`CardHeader`
-のような、組み立てに欠かせない部品がそこに居る。
+のような、組み立てに欠かせないコンポーネントがそこに居る。
 
 ### Story から実装への下り
 
@@ -50,7 +50,7 @@ Registry は TypeScript のソースを直接読む。[Component Registry](./reg
 ストへ展開する。貼れる import 文、使用 props、slot 構造、結線タスクが得られる。公式ツールの範囲は
 Story までで終わる。
 
-### dev サーバー不要
+### dev サーバ不要
 
 Registry はソースファイルと tsconfig から作られる。Storybook の `index.json` は任意のキュレーション
 入力で、静的ファイルでもよい。何も起動していなくてよいので、CI やチェックアウト直後でも使える。
