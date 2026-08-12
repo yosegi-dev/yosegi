@@ -44,9 +44,11 @@ const STORY_SUFFIX_PATTERN = /\.stories$/;
 // Characters that can't be written as raw JSX text; when present, escape into an
 // expression container instead. Newlines are included because JSX collapses raw
 // text newlines into a single space, which would change the value on read-back.
-const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n]/;
+// "&" is included because JSX decodes HTML entities in raw text and attribute
+// values — "&amp;" would render as "&", silently changing the value.
+const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n&]/;
 // Characters that can't be left inside a double-quoted JSX attribute value.
-const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n]/;
+const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n&]/;
 // A form that can be written as-is in an identifier position (a Story's export name, an import's local name).
 const JS_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 // Local names the emitted file itself declares: `const meta` and the Meta / StoryObj

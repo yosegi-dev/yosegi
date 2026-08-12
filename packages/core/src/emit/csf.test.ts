@@ -811,6 +811,46 @@ describe("emitCsf の default export", () => {
 	});
 });
 
+// JSX decodes HTML entities in raw text and double-quoted attribute values, so a
+// value containing "&" must be escaped into an expression container — otherwise
+// "AT&T &amp; more" renders as "AT&T & more".
+describe("emitCsf の HTML エンティティ", () => {
+	function textRegistry(): ComponentRegistry {
+		return parseComponentRegistry({
+			version: "v1",
+			components: [
+				{
+					id: "Card",
+					name: "Card",
+					import: { packageName: "~/card", exportName: "Card" },
+					props: { title: { kind: "string" } },
+					slots: { children: {} },
+				},
+			],
+		});
+	}
+
+	it("& を含むテキストは式コンテナへ退避する", () => {
+		const source = emit(
+			node("card", "Card", {
+				slots: {
+					children: [node("t", "Text", { props: { text: "5 &lt; 10" } })],
+				},
+			}),
+			textRegistry(),
+		);
+		expect(source).toContain('<Card>{"5 &lt; 10"}</Card>');
+	});
+
+	it("& を含む属性値は式コンテナ + JSON リテラルになる", () => {
+		const source = emit(
+			node("card", "Card", { props: { title: "AT&T &amp; more" } }),
+			textRegistry(),
+		);
+		expect(source).toContain('<Card title={"AT&T &amp; more"} />');
+	});
+});
+
 // The generated file itself declares `const meta`, imports the Meta / StoryObj types,
 // and exports the Story name. A host export sharing one of those names used to be
 // imported verbatim, producing a duplicate identifier the host cannot compile.
