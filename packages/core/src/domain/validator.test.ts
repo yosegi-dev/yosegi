@@ -1096,6 +1096,44 @@ describe("validateScreen: repeat", () => {
 		expect(issue?.suggestion).toContain("Box");
 	});
 
+	it("nested repeats over the expansion budget yield REPEAT_EXPANSION_TOO_LARGE", () => {
+		// Three nested repeat: 20 expand to 20 + 400 + 8000 nodes — over the
+		// 2000-node budget even though every declaration is in range.
+		const screen = withBodyNode({
+			id: "node-group",
+			component: "SearchForm",
+			props: {},
+			repeat: 20,
+			slots: {
+				fields: [
+					{
+						id: "node-row",
+						component: "SearchForm",
+						props: {},
+						repeat: 20,
+						slots: {
+							fields: [
+								{
+									id: "node-cell",
+									component: "TextField",
+									props: { label: "cell" },
+									repeat: 20,
+									slots: {},
+								},
+							],
+						},
+					},
+				],
+			},
+		});
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.REPEAT_EXPANSION_TOO_LARGE,
+		);
+		expect(issue?.message).toContain("limit");
+		expect(issue?.suggestion).toContain("2000");
+	});
+
 	it("an expansion id collision yields DUPLICATE_NODE_ID", () => {
 		const screen = withBodyNode({
 			id: "node-row",

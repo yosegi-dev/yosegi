@@ -111,6 +111,7 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | `DUPLICATE_NODE_ID` | 2 つのノードが同じ `id` を持つ。message に衝突した両方の `path` が入る。`repeat` 展開の `-1`〜`-N` サフィックスが既存 id と衝突する場合もここに落ちる | どちらかを変える |
 | `REPEAT_ON_ROOT` | ルートノードに `repeat` がある。複製を収める親 slot が無い | コンテナノードで包み、子へ `repeat` を付ける |
 | `REPEAT_OUT_OF_RANGE` | `repeat` が 2〜20 の整数でない | 数を直すか、1 つで足りるなら `repeat` を消す |
+| `REPEAT_EXPANSION_TOO_LARGE` | すべての `repeat` を展開すると 2000 ノードを超える。ネストした `repeat` は掛け算で増える | 数を下げるか、ネストを解く |
 
 生成を止めない警告:
 

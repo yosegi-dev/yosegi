@@ -59,6 +59,7 @@ This loop needs no confirmation from anyone. Run it to completion.
 | `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s. Also raised when a `repeat` expansion's `-1`…`-N` suffixed ids would collide with an existing id | Change one of them. Node ids must be unique across the whole screen, including after expansion |
 | `REPEAT_ON_ROOT` | `repeat` sits on the root node, which has no parent slot to hold the copies | Wrap the repeated content in a container node (a `Box`, say) and put `repeat` on the child |
 | `REPEAT_OUT_OF_RANGE` | `repeat` is not an integer between 2 and 20 | Fix the count. Remove `repeat` entirely if a single node is enough |
+| `REPEAT_EXPANSION_TOO_LARGE` | Expanding every `repeat` would produce more than 2000 nodes — nested repeats multiply | Lower the counts or un-nest the repeated subtrees |
 
 ### `UNKNOWN_PROP` on a prop that really exists
 

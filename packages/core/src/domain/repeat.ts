@@ -14,6 +14,14 @@ export const MIN_REPEAT_COUNT = 2;
 // mistyped count from inflating the generated file into something no reviewer —
 // human or agent — can read.
 export const MAX_REPEAT_COUNT = 20;
+// The per-declaration cap does not bound the whole tree: nesting multiplies, so
+// eight nested `repeat: 20` would expand into 20^8 (~25 billion) nodes and
+// exhaust memory long before any per-node check ran. This budget bounds the
+// expanded total instead. 2000 nodes is far past anything a generated Story
+// could usefully show, yet cheap to count and to build. The total is computed
+// arithmetically up front, so an over-budget tree fails before a single copy is
+// allocated.
+export const MAX_EXPANDED_NODE_COUNT = 2000;
 
 // Raised when an expanded id collides with another id in the screen. A dedicated
 // class (rather than message parsing) lets the validator map the collision onto
@@ -28,6 +36,56 @@ export class RepeatIdCollisionError extends Error {
 		this.name = "RepeatIdCollisionError";
 		this.nodeId = nodeId;
 	}
+}
+
+// Raised when expanding every repeat would exceed MAX_EXPANDED_NODE_COUNT.
+// A dedicated class (like RepeatIdCollisionError) lets the validator map the
+// overflow onto its own issue code instead of parsing the message.
+export class RepeatBudgetExceededError extends Error {
+	readonly expandedCount: number;
+
+	constructor(expandedCount: number) {
+		super(
+			`Expanding every "repeat" would produce ${expandedCount} nodes; the limit is ${MAX_EXPANDED_NODE_COUNT}.`,
+		);
+		this.name = "RepeatBudgetExceededError";
+		this.expandedCount = expandedCount;
+	}
+}
+
+// The copy count a node's repeat asks for (1 when it declares none). Callers are
+// expected to run validateScreen beforehand; the explicit failure here is a
+// second safety net, matching emit's requireRenderable.
+function repeatCountOf(node: ScreenNode): number {
+	const count = node.repeat;
+	if (count === undefined) {
+		return 1;
+	}
+	if (
+		!Number.isInteger(count) ||
+		count < MIN_REPEAT_COUNT ||
+		count > MAX_REPEAT_COUNT
+	) {
+		throw new Error(
+			`Node "${node.id}" has repeat ${count}; expected an integer between ${MIN_REPEAT_COUNT} and ${MAX_REPEAT_COUNT}.`,
+		);
+	}
+	return count;
+}
+
+// The size of the fully expanded subtree, computed without building it: a
+// child's expanded size times its repeat count, plus one for the node itself.
+// This is what lets expandRepeat reject an over-budget tree before allocating
+// anything — nested counts multiply, so the expanded tree can be astronomically
+// larger than the input.
+function expandedNodeCount(node: ScreenNode): number {
+	let count = 1;
+	for (const children of Object.values(node.slots)) {
+		for (const child of children) {
+			count += expandedNodeCount(child) * repeatCountOf(child);
+		}
+	}
+	return count;
 }
 
 // The k-th copy of a subtree: every id gets a "-k" suffix (the same shape
@@ -63,20 +121,9 @@ function expandNode(node: ScreenNode): ScreenNode {
 					if (childExpanded.repeat === undefined) {
 						return [childExpanded];
 					}
-					const count = childExpanded.repeat;
-					// Callers are expected to run validateScreen beforehand; this fails
-					// explicitly as a second safety net, matching emit's requireRenderable.
-					if (
-						!Number.isInteger(count) ||
-						count < MIN_REPEAT_COUNT ||
-						count > MAX_REPEAT_COUNT
-					) {
-						throw new Error(
-							`Node "${childExpanded.id}" has repeat ${count}; expected an integer between ${MIN_REPEAT_COUNT} and ${MAX_REPEAT_COUNT}.`,
-						);
-					}
-					return Array.from({ length: count }, (_, index) =>
-						suffixSubtree(childExpanded, index + 1),
+					return Array.from(
+						{ length: repeatCountOf(childExpanded) },
+						(_, index) => suffixSubtree(childExpanded, index + 1),
 					);
 				}),
 			]),
@@ -94,7 +141,9 @@ export function hasRepeat(root: ScreenNode): boolean {
 // Expands every repeat in the tree and returns a new root; the input is not
 // mutated. Throws RepeatIdCollisionError when an expanded id collides with any
 // other id in the screen — an expanded tree with duplicate ids would break the
-// same invariant DUPLICATE_NODE_ID protects.
+// same invariant DUPLICATE_NODE_ID protects. Throws RepeatBudgetExceededError —
+// before allocating any copy — when the expanded total would exceed
+// MAX_EXPANDED_NODE_COUNT.
 export function expandRepeat(root: ScreenNode): ScreenNode {
 	// The root has no parent slot to hold its copies, and a screen with N roots is
 	// not a screen. The validator reports this as REPEAT_ON_ROOT before emit.
@@ -102,6 +151,10 @@ export function expandRepeat(root: ScreenNode): ScreenNode {
 		throw new Error(
 			`The root node "${root.id}" cannot carry "repeat" (a screen has a single root).`,
 		);
+	}
+	const expandedCount = expandedNodeCount(root);
+	if (expandedCount > MAX_EXPANDED_NODE_COUNT) {
+		throw new RepeatBudgetExceededError(expandedCount);
 	}
 	const expanded = expandNode(root);
 	const seen = new Set<string>();

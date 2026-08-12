@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { expandRepeat, hasRepeat, RepeatIdCollisionError } from "./repeat.ts";
+import {
+	expandRepeat,
+	hasRepeat,
+	MAX_EXPANDED_NODE_COUNT,
+	RepeatBudgetExceededError,
+	RepeatIdCollisionError,
+} from "./repeat.ts";
 import type { ScreenNode } from "./screen-definition.ts";
 import { collectNodeIds } from "./screen-definition.ts";
 
@@ -116,6 +122,69 @@ describe("expandRepeat", () => {
 		expect(() => expandRepeat(node("root", { repeat: 2 }))).toThrow(
 			'The root node "root" cannot carry "repeat"',
 		);
+	});
+
+	it("rejects nested repeats whose expanded total exceeds the budget", () => {
+		// Three nested repeat: 20 expand to 20 + 400 + 8000 nodes — over 2000.
+		const root = node("root", {
+			slots: {
+				children: [
+					node("group", {
+						repeat: 20,
+						slots: {
+							children: [
+								node("row", {
+									repeat: 20,
+									slots: { children: [node("cell", { repeat: 20 })] },
+								}),
+							],
+						},
+					}),
+				],
+			},
+		});
+		expect(() => expandRepeat(root)).toThrow(RepeatBudgetExceededError);
+	});
+
+	it("fails an astronomically nested expansion before allocating anything", () => {
+		// Eight nested repeat: 20 would be on the order of 20^8 (~25 billion)
+		// nodes. The budget is checked arithmetically, so this returns instantly
+		// instead of exhausting memory.
+		let subtree = node("level-8", { repeat: 20 });
+		for (let level = 7; level >= 1; level--) {
+			subtree = node(`level-${level}`, {
+				repeat: 20,
+				slots: { children: [subtree] },
+			});
+		}
+		const root = node("root", { slots: { children: [subtree] } });
+		let caught: unknown;
+		try {
+			expandRepeat(root);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(RepeatBudgetExceededError);
+		if (caught instanceof RepeatBudgetExceededError) {
+			expect(caught.expandedCount).toBeGreaterThan(20 ** 8);
+			expect(caught.message).toContain(`${MAX_EXPANDED_NODE_COUNT}`);
+		}
+	});
+
+	it("allows an expansion that stays within the budget", () => {
+		// 20 x 20 = 400 leaf copies plus their parents — well under 2000.
+		const root = node("root", {
+			slots: {
+				children: [
+					node("group", {
+						repeat: 20,
+						slots: { children: [node("row", { repeat: 20 })] },
+					}),
+				],
+			},
+		});
+		const expanded = expandRepeat(root);
+		expect(collectNodeIds(expanded)).toHaveLength(1 + 20 + 20 * 20);
 	});
 
 	it("rejects an out-of-range count as a safety net", () => {

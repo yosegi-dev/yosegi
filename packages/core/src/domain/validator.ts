@@ -7,8 +7,10 @@ import {
 import { VALIDATION_CODES, type ValidationCode } from "./errors.ts";
 import {
 	expandRepeat,
+	MAX_EXPANDED_NODE_COUNT,
 	MAX_REPEAT_COUNT,
 	MIN_REPEAT_COUNT,
+	RepeatBudgetExceededError,
 	RepeatIdCollisionError,
 } from "./repeat.ts";
 import {
@@ -480,6 +482,18 @@ function validateRepeat(
 	try {
 		expandRepeat(root);
 	} catch (error) {
+		// expandRepeat rejects an over-budget total arithmetically, before
+		// allocating any copy, so running it here stays cheap even for a tree
+		// whose expansion would be astronomically large.
+		if (error instanceof RepeatBudgetExceededError) {
+			errors.push({
+				nodeId: null,
+				code: VALIDATION_CODES.REPEAT_EXPANSION_TOO_LARGE,
+				message: error.message,
+				suggestion: `Nested repeats multiply. Lower the counts or un-nest the repeated subtrees so the expanded tree stays at or under ${MAX_EXPANDED_NODE_COUNT} nodes.`,
+			});
+			return;
+		}
 		if (!(error instanceof RepeatIdCollisionError)) {
 			throw error;
 		}

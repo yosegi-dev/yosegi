@@ -116,6 +116,7 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s. Also raised when a `repeat` expansion's `-1`…`-N` suffixes would collide with an existing id | Change one of them |
 | `REPEAT_ON_ROOT` | `repeat` sits on the root node, which has no parent slot to hold the copies | Wrap the content in a container node and put `repeat` on the child |
 | `REPEAT_OUT_OF_RANGE` | `repeat` is not an integer between 2 and 20 | Fix the count, or remove `repeat` if one copy is enough |
+| `REPEAT_EXPANSION_TOO_LARGE` | Expanding every `repeat` would produce more than 2000 nodes — nested repeats multiply | Lower the counts or un-nest the repeated subtrees |
 
 Warnings, which do not stop generation:
 

@@ -30,6 +30,10 @@ export const VALIDATION_CODES = {
 	// repeat's value is outside the allowed range (an integer between
 	// MIN_REPEAT_COUNT and MAX_REPEAT_COUNT).
 	REPEAT_OUT_OF_RANGE: "REPEAT_OUT_OF_RANGE",
+	// Expanding every repeat would exceed MAX_EXPANDED_NODE_COUNT. Each
+	// declaration is in range, but nested repeats multiply, so the total needs
+	// its own bound.
+	REPEAT_EXPANSION_TOO_LARGE: "REPEAT_EXPANSION_TOO_LARGE",
 	REGISTRY_VERSION_MISMATCH: "REGISTRY_VERSION_MISMATCH",
 	// warning
 	// The event's target points at a prop that doesn't exist in the Manifest. Since
