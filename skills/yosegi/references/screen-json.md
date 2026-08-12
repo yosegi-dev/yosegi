@@ -9,22 +9,23 @@ below.
 
 ## What Screen JSON cannot express
 
-The format describes a tree of components whose every value is a JSON literal. There is no syntax
-for anything else, and no way to smuggle one in.
+The format describes a tree of components whose every value is a JSON value. There is no syntax for
+anything else, and no way to smuggle one in.
 
 | You need | Screen JSON's answer |
 | --- | --- |
-| A runtime object as a prop (a table instance, a form control, a ref) | None. A `bindings` entry emits the bare name, which does not exist in the Story, so it will not compile |
-| A component reference as a prop (an icon prop taking the component itself) | None. It is a `json` prop, and no JSON literal is a component |
+| Mock data a component maps over (list rows, a config object) | `fixtures` — a named JSON value emitted as a top-level const, referenced from `bindings`. See below |
+| Repetition | `repeat: N` on the node — the Story carries N copies of the subtree. `each` stays the declaration of intent |
+| A runtime object as a prop (a table instance, a form control, a ref) | None. A fixture is JSON, and no JSON value is a table instance; a `bindings` entry without a fixture emits the bare name, which does not exist in the Story |
+| A component reference as a prop (an icon prop taking the component itself) | None. It is a `json` prop, and no JSON value is a component |
 | A `ReactNode` assembled in an expression | None. A slot takes ScreenNodes only |
-| Repetition | `each` is a comment. The Story renders exactly one of the repeated node |
 | A condition | `when` is a comment. Nothing branches |
 | Any JavaScript at all — a handler body, a `map`, a ternary | None |
 
-Repetition and conditions are survivable: duplicate the nodes by hand and keep `each` / `when` as
-the declaration of intent. **A required prop that takes a non-literal value is not.** The generated
-Story references a name that was never defined, the host's type check stops on `Cannot find name`,
-and there is nothing to fix inside the Screen JSON. Go back to step 3 and write the Story directly.
+Conditions are survivable: lay out the shown branch and keep `when` as the declaration of intent.
+**A required prop that takes a value with no JSON form is not.** The generated Story references a
+name that was never defined, the host's type check stops on `Cannot find name`, and there is
+nothing to fix inside the Screen JSON. Go back to step 3 and write the Story directly.
 
 ## Shape
 
@@ -59,7 +60,7 @@ and there is nothing to fix inside the Screen JSON. Go back to step 3 and write 
 
 Every top-level field shown above is required: `schemaVersion` (`"1.0"`), `id`, `name`,
 `componentRegistryVersion`, `revision`, `root`. Omitting one is an `INVALID_REQUEST`, not a warning.
-`status` is the only optional one; it defaults to `"draft"`.
+`status` (defaults to `"draft"`) and `fixtures` (see below) are the optional ones.
 
 The screen `id` may contain **letters, digits, `-` and `_` only** (`/^[A-Za-z0-9_-]+$/`). It becomes
 a file name in the screen store, so a `/` or a `..` is rejected as an `INVALID_REQUEST`.
@@ -166,43 +167,75 @@ The comment left in the generated Story carries the same declaration as JSON:
 A prop that has a `bindings` entry is exempt from type validation (it becomes concrete at
 implementation time).
 
-### A binding is not a mock value
+### A binding is not a mock value — unless a fixture backs it
 
-A binding says where the value comes from when the screen is built; it carries no value the mock can
-show. On an **optional** prop that is harmless — the prop is left out and the Story renders.
+A binding says where the value comes from when the screen is built; on its own it carries no value
+the mock can show. A **fixture of the same name** supplies that value: the const exists in the
+Story, so the binding is written into the JSX and one declaration carries both the mock's data and
+the implementation's wiring target. That is the preferred fix.
 
+Without a fixture, an **optional** prop is harmless — the prop is left out and the Story renders.
 On a **required** prop it is not: the emitter writes the expression itself into the JSX
 (`table={table}`) rather than dropping the prop, and validation warns with `BOUND_REQUIRED_PROP`.
-That name does not exist in the Story, so the host's type check stops there. Give such props a mock
-value in `props` as well and keep the binding:
-
-```json
-{
-  "id": "customer-table",
-  "component": "app/components/table#Table",
-  "props": { "rows": [{ "name": "Sato" }, { "name": "Suzuki" }] },
-  "slots": {},
-  "bindings": { "rows": "customers" }
-}
-```
+That name does not exist in the Story, so the host's type check stops there. Declare a fixture, or
+give the prop a mock value in `props` and keep the binding.
 
 Handlers need no mock value — `function` props are filled with a no-op `() => {}` automatically, so
 declaring them in `events` is enough. **A required prop whose value cannot be written as JSON at all
 has no fix on this route**; that is the case the table at the top of this file rules out.
 
-### `when` / `each`
+## fixtures
 
-Both are free-form strings; there is no grammar and nothing validates them. Write whatever an
-implementer will understand (`"customers.length > 0"`, `"customer in customers"`).
+The screen's mock-data layer. Each entry becomes a top-level `const <name> = <JSON value>;` in the
+generated Story (between the imports and the meta, in the order written), and bindings reference the
+names:
 
-Neither produces any JSX. A Story generated from a screen that declares `each` shows exactly one of
-the repeated node, so if the mock needs to look like a list, duplicate the row nodes by hand with
-distinct ids and keep `each` as the declaration of intent. The declarations ride in the same
-`{/* TODO(yosegi): ... */}` comment:
+```json
+{
+  "fixtures": { "customers": [{ "name": "Sato" }, { "name": "Suzuki" }] },
+  "root": {
+    "id": "customer-table",
+    "component": "app/components/table#Table",
+    "props": {},
+    "slots": {},
+    "bindings": { "rows": "customers" }
+  }
+}
+```
+
+This emits `const customers = [...]` and `rows={customers}` — a fixture-backed binding is written
+into the JSX even on an optional prop, and the `BOUND_REQUIRED_PROP` warning disappears on a
+required one. A member path works too: `"bindings": { "rows": "data.customers" }` matches a fixture
+named `data`. `story import` restores the consts, so the round trip is lossless.
+
+Rules that produce errors:
+
+- A fixture name must be a JavaScript identifier, and must not be `meta` / `Meta` / `StoryObj` (the
+  Story declares those itself). Violations are an `INVALID_REQUEST` from the schema.
+- A name equal to the Story's export name (`Default`, or `--story-name`) is rejected at generation
+  time. A component import colliding with a fixture name is aliased automatically — that one is fine.
+- A fixture no binding references is emitted anyway, with an `UNUSED_FIXTURE` warning.
+
+Match the fixture's shape to the data contract found in step 2 — the fields, their nullability, what
+is absent. The fixture is exactly the place where an invented field ships a defect.
+
+### `when` / `each` / `repeat`
+
+`when` and `each` are free-form strings; there is no grammar and nothing validates them. Write
+whatever an implementer will understand (`"customers.length > 0"`, `"customer in customers"`).
+Neither produces any JSX; both ride in the same `{/* TODO(yosegi): ... */}` comment:
 
 ```tsx
 {/* TODO(yosegi): {"when":"customers.length > 0","each":"customer in customers"} */}
 ```
+
+`repeat` (an integer, 2–20) makes the mock look like a list without duplicating nodes by hand: at
+generation time the subtree is expanded into that many copies, ids suffixed `-1`…`-N`. Declare
+`each` on the same node for the implementation intent — `each` says what repeats, `repeat` says how
+many copies the mock shows. Three errors to know: `REPEAT_ON_ROOT` (the root cannot repeat — wrap
+it), `REPEAT_OUT_OF_RANGE` (not an integer 2–20), and `DUPLICATE_NODE_ID` when a suffixed id
+collides with an existing one. `repeat` is one-way: `story import` reads the expanded Story back as
+that many separate nodes, with no `repeat` field.
 
 ## Common schema errors
 

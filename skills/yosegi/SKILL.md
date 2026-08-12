@@ -5,7 +5,7 @@ description: Build a screen mock or screen proposal (画面モック) out of the
 
 # Yosegi — building screens from a host's own components
 
-> **Version: 2026-08-12.** An agent harness can load a stale copy of a skill without saying so. If
+> **Version: 2026-08-13.** An agent harness can load a stale copy of a skill without saying so. If
 > this date is older than the one in the repository's `skills/yosegi/SKILL.md`, you are reading an
 > out-of-date copy — re-install it before going further.
 
@@ -236,16 +236,21 @@ Both are things to report at the step 4 checkpoint, not to resolve silently.
 
 Two ways to produce the Story. Choose deliberately — they are not interchangeable.
 
-**The test.** Walk the tree you intend to build. Does any component on it need a value that is not a
-literal? That means: a runtime object (a table instance, a form control, a ref), a `ReactNode` built
-in an expression, a component reference (an icon prop that takes the component itself), a list you
-must map over, or a branch. **If yes for even one component, write the Story directly.** Screen JSON
-has no syntax for any of those, and a screen that needs one cannot be expressed in it at all — the
-generated Story will reference a name that does not exist and will not compile.
+**The test.** Walk the tree you intend to build. Does any component on it need a value that has no
+JSON form? That means: a runtime object (a table instance, a form control, a ref), a `ReactNode`
+built in an expression, a component reference (an icon prop that takes the component itself), or a
+branch. **If yes for even one component, write the Story directly.** Screen JSON has no syntax for
+any of those, and a screen that needs one cannot be expressed in it at all — the generated Story
+will reference a name that does not exist and will not compile.
 
-If no — the screen is headings, copy, static props, and fixed children — either route works, and the
-JSON route buys you validation before you write a line of JSX plus the hand-off comments step 5
-reads back.
+Data and repetition are *not* disqualifiers: a list a component maps over, or any JSON-shaped mock
+data, goes in the screen's `fixtures` (named JSON values emitted as consts, referenced from
+`bindings`), and a row shown N times takes `repeat: N` on the node
+(`references/screen-json.md` for both). Shape the fixture after the data contract found in step 2.
+
+If the rest is headings, copy, static props, and fixed children — either route works, and the JSON
+route buys you validation before you write a line of JSX plus the hand-off comments step 5 reads
+back.
 
 ### 3a. Write the Story directly (the default)
 

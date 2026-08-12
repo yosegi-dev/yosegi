@@ -54,10 +54,12 @@ the components you already have.
 The first two steps are the mandatory part: they pin down the real props so a guessed one never
 ships. The screen's skeleton and composition idiom come from the host's own Stories and templates,
 not the registry. How the Story gets written is a choice of format. Write it directly when any
-component on the screen needs a value that is not a JSON literal — a runtime object, a component
-reference, a `ReactNode` built in an expression, repetition, a condition — because Screen JSON has no
-syntax for those. Otherwise Screen JSON buys validation before any JSX exists, plus the hand-off
-comments the downstream half reads back.
+component on the screen needs a value that has no JSON form — a runtime object, a component
+reference, a `ReactNode` built in an expression, a branch — because Screen JSON has no syntax for
+those. Mock data and repetition are expressible: `fixtures` carries named JSON values the bindings
+reference, and `repeat` expands a subtree into list rows (see [Screen JSON](./screen-json.md)).
+Otherwise Screen JSON buys validation before any JSX exists, plus the hand-off comments the
+downstream half reads back.
 
 Either way the host's type check is what confirms the result: it reads the JSX against the real
 component types, which is more than validation against the registry can do.
@@ -111,7 +113,9 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect`. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's constraints reject these children | `suggestion` lists what is allowed |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | The parent/child pairing is constrained | `suggestion` lists the allowed components |
-| `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s | Change one of them |
+| `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s. Also raised when a `repeat` expansion's `-1`…`-N` suffixes would collide with an existing id | Change one of them |
+| `REPEAT_ON_ROOT` | `repeat` sits on the root node, which has no parent slot to hold the copies | Wrap the content in a container node and put `repeat` on the child |
+| `REPEAT_OUT_OF_RANGE` | `repeat` is not an integer between 2 and 20 | Fix the count, or remove `repeat` if one copy is enough |
 
 Warnings, which do not stop generation:
 
@@ -119,7 +123,8 @@ Warnings, which do not stop generation:
 | --- | --- |
 | `REGISTRY_VERSION_MISMATCH` | The screen references a different registry version than the one in use |
 | `MISSING_REQUIRED_SLOT` | A required slot is empty — usually intentional in a mock |
-| `BOUND_REQUIRED_PROP` | A required prop is declared only in `bindings`, so the Story is emitted as `prop={<expression>}` and will not type-check until that name exists in it |
+| `BOUND_REQUIRED_PROP` | A required prop is declared only in `bindings`, so the Story is emitted as `prop={<expression>}` and will not type-check until that name exists in it. Suppressed when the binding's head names a fixture — then it does exist |
+| `UNUSED_FIXTURE` | A fixture no binding references. Still emitted; usually a renamed or dropped binding |
 | `NOT_EDITABLE_PROP_VALUE` | A value was written into a not-editable prop, so it reaches the Story unchecked |
 | `UNKNOWN_EVENT_TARGET` | An `events` key names a prop that is not in the manifest. Only a warning, because a manifest has no event surface to check against |
 | `SYNTHETIC_NAME_SHADOWED` | A short id resolved to a synthetic primitive while the registry also holds a host component of that name |
@@ -170,6 +175,7 @@ warning is absent from the Screen JSON**, so read the original Story for those p
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box` but the tag name is lost |
 | `SPREAD_ATTRIBUTE` | `{...args}` cannot be expanded |
 | `INTENT_NOT_APPLIED` | An intent comment preceded several siblings, so its `bindings` / `events` had no single element to attach to and were dropped |
+| `OPAQUE_FIXTURE` | A top-level const whose initializer is not a JSON literal, so it was not read back as a fixture |
 | `COMPONENT_NOT_RESOLVED` | The import statement does not lead to a registry id. The node keeps its local name, so validation will offer candidates |
 | `COMPONENT_AMBIGUOUS` | Several candidates share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |

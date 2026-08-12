@@ -50,9 +50,11 @@ Story か Screen JSON を直して出し直すだけ。
 
 必須なのは最初の 2 段で、ここで実際の props を確定させ、推測した prop を出荷しないようにする。画面の
 骨格や合成の作法は registry ではなくホスト自身の Story やテンプレートから得る。Story をどう書くか
-は形式の選択でしかない。画面上のどれか 1 つでも JSON リテラルで書けない値を必要とするなら（ランタイム
-のオブジェクト、コンポーネント参照、式で組む `ReactNode`、繰り返し、条件分岐）、Screen JSON には表現する
-構文が無いので直接書く。そうでなければ Screen JSON は、JSX を 1 行も書く前の検証と、下流が読み戻す
+は形式の選択でしかない。画面上のどれか 1 つでも JSON の形を持たない値を必要とするなら（ランタイム
+のオブジェクト、コンポーネント参照、式で組む `ReactNode`、条件分岐）、Screen JSON には表現する構文が
+無いので直接書く。モックデータと繰り返しは表現できる。`fixtures` が binding の参照する名前付き JSON
+値を運び、`repeat` がサブツリーを一覧の行へ展開する（[Screen JSON](./screen-json.md) を参照）。
+そうでなければ Screen JSON は、JSX を 1 行も書く前の検証と、下流が読み戻す
 引き継ぎコメントをくれる。
 
 どちらの経路でも結果を確定させるのはホストの型検査。JSX を実物の型と突き合わせるので、Registry に
@@ -106,7 +108,9 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | `SLOT_NOT_FOUND` | その slot は無い | `component inspect` で slots を確認する。子要素はたいてい `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | slot の制約がその子を許さない | 許されるものは `suggestion` にある |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | 親子の組み合わせに制約がある | 許される部品は `suggestion` にある |
-| `DUPLICATE_NODE_ID` | 2 つのノードが同じ `id` を持つ。message に衝突した両方の `path` が入る | どちらかを変える |
+| `DUPLICATE_NODE_ID` | 2 つのノードが同じ `id` を持つ。message に衝突した両方の `path` が入る。`repeat` 展開の `-1`〜`-N` サフィックスが既存 id と衝突する場合もここに落ちる | どちらかを変える |
+| `REPEAT_ON_ROOT` | ルートノードに `repeat` がある。複製を収める親 slot が無い | コンテナノードで包み、子へ `repeat` を付ける |
+| `REPEAT_OUT_OF_RANGE` | `repeat` が 2〜20 の整数でない | 数を直すか、1 つで足りるなら `repeat` を消す |
 
 生成を止めない警告:
 
@@ -114,7 +118,8 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | --- | --- |
 | `REGISTRY_VERSION_MISMATCH` | 画面が参照する Registry version が、使っている Registry と違う |
 | `MISSING_REQUIRED_SLOT` | 必須の slot が空。モックでは意図的なことが多い |
-| `BOUND_REQUIRED_PROP` | 必須 prop が binding だけで宣言されている。Story には `prop={<式>}` が出るため、その名前が Story に存在するまで型検査を通らない |
+| `BOUND_REQUIRED_PROP` | 必須 prop が binding だけで宣言されている。Story には `prop={<式>}` が出るため、その名前が Story に存在するまで型検査を通らない。binding の先頭が fixture 名なら実在するので出ない |
+| `UNUSED_FIXTURE` | どの binding も参照しない fixture。出力はされる。たいていは binding のリネームか削除の名残 |
 | `NOT_EDITABLE_PROP_VALUE` | not-editable な prop に値を書いている。形が検証されないまま Story へ出る |
 | `UNKNOWN_EVENT_TARGET` | `events` のキーが Manifest に無い prop を指している。Manifest がイベントの一覧を持たないため警告どまり |
 | `SYNTHETIC_NAME_SHADOWED` | 短い id が合成プリミティブに解決されたが、Registry にも同名のホスト部品がある |
@@ -163,6 +168,7 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 | `OPAQUE_ELEMENT` | 対応する合成プリミティブが無い DOM タグ。`Box` として残るがタグ名は失われる |
 | `SPREAD_ATTRIBUTE` | `{...args}` は展開できない |
 | `INTENT_NOT_APPLIED` | intent コメントの直後に兄弟要素が複数あり、`bindings`・`events` を付ける先を決められず落ちた |
+| `OPAQUE_FIXTURE` | トップレベルの const の初期化子が JSON リテラルでなく、fixture として読み戻せなかった |
 | `COMPONENT_NOT_RESOLVED` | import 文から Registry の id へ辿れない。ノードはローカル名のまま残るので、検証が候補を出す |
 | `COMPONENT_AMBIGUOUS` | 同じ export 名の候補が複数ある。`--import-map` で絞る |
 | `IMPORT_PATH_MISMATCH` | export 名は一致するが import 元が Registry と違う。Registry が古い可能性 |

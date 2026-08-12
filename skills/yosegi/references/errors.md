@@ -56,7 +56,9 @@ This loop needs no confirmation from anyone. Run it to completion.
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect` and fix the name. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's own constraints reject these children | `suggestion` names what is allowed |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | The parent/child pairing is constrained | `suggestion` names the allowed components |
-| `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s | Change one of them. Node ids must be unique across the whole screen |
+| `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s. Also raised when a `repeat` expansion's `-1`…`-N` suffixed ids would collide with an existing id | Change one of them. Node ids must be unique across the whole screen, including after expansion |
+| `REPEAT_ON_ROOT` | `repeat` sits on the root node, which has no parent slot to hold the copies | Wrap the repeated content in a container node (a `Box`, say) and put `repeat` on the child |
+| `REPEAT_OUT_OF_RANGE` | `repeat` is not an integer between 2 and 20 | Fix the count. Remove `repeat` entirely if a single node is enough |
 
 ### `UNKNOWN_PROP` on a prop that really exists
 
@@ -94,7 +96,8 @@ was applied.
 | `REGISTRY_VERSION_MISMATCH` | The Screen JSON's `componentRegistryVersion` differs from the registry in use | Rebuild the registry, then re-check the screen against it. The props you wrote may no longer exist |
 | `MISSING_REQUIRED_SLOT` | A required slot has no children | Usually intentional in a mock. Confirm the screen still reads correctly in Storybook |
 | `SYNTHETIC_NAME_SHADOWED` | A synthetic primitive (`Text` / `Box` / `Heading`) was used while the registry holds a component of the same name | If you meant the host's component, replace the short id with the full one from the warning. If you meant the primitive, ignore it. See `screen-json.md` |
-| `BOUND_REQUIRED_PROP` | A required prop is declared only in `bindings` | The Story is emitted as `prop={<expression>}`, and that name does not exist in it, so the host's type check will stop on it. Put a mock value in `props` and keep the binding as the implementation intent. When the value cannot be expressed as JSON at all (a table instance, say), the component cannot be mocked standalone — use one that can, or accept a Story that only type-checks once implemented |
+| `BOUND_REQUIRED_PROP` | A required prop is declared only in `bindings`, and no fixture backs it | The Story is emitted as `prop={<expression>}`, and that name does not exist in it, so the host's type check will stop on it. Declare a fixture named after the binding's head (`screen-json.md`), or put a mock value in `props`, and keep the binding as the implementation intent. When the value cannot be expressed as JSON at all (a table instance, say), the component cannot be mocked standalone — use one that can, or accept a Story that only type-checks once implemented |
+| `UNUSED_FIXTURE` | A fixture no binding references | It is still emitted into the Story. Reference it from a binding, or remove it — usually a binding was renamed or dropped |
 | `NOT_EDITABLE_PROP_VALUE` | A value was written into a not-editable prop | Its shape cannot be checked, so it reaches the Story as-is and often will not match the component's type. Confirm against the host's source, move it to `bindings` if it comes from data, or drop it |
 | `UNKNOWN_EVENT_TARGET` | An `events` key names a prop that is not in the manifest | Only a warning, because a manifest has no event surface to check against — handlers appear only as function-typed props. Take the `suggestion` if there is one; otherwise confirm the handler name against the host's source |
 | `DEPRECATED_COMPONENT` | The component is marked deprecated | Prefer the replacement the host documents |
@@ -133,6 +136,7 @@ shape is only decided at runtime cannot be read**.
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box`, but the tag name is lost |
 | `SPREAD_ATTRIBUTE` | `{...args}` cannot be expanded |
 | `INTENT_NOT_APPLIED` | A `TODO(yosegi)` intent comment had no single element to attach to (it preceded several siblings), so its `bindings` / `events` were dropped. Re-declare them on the right node |
+| `OPAQUE_FIXTURE` | A top-level const whose initializer is not a JSON literal, so it was not read back into `fixtures`. Expect this on hand-written helper consts; a Yosegi-generated Story never triggers it |
 | `COMPONENT_NOT_RESOLVED` | The import statement does not lead to a registry id. The node keeps its local name, so validation will offer candidates |
 | `COMPONENT_AMBIGUOUS` | Several registry entries share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |
