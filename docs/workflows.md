@@ -104,6 +104,7 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | `INVALID_PROP_VALUE` | The value does not match the type or enum | Pick from the options in `suggestion` |
 | `MISSING_REQUIRED_PROP` | A required prop is unset | Supply a value. A binding only satisfies it when the expression is a plain identifier path |
 | `FUNCTION_PROP_VALUE` | A value was written into a function-kind prop | Move the declaration to `events` (or `bindings`) and delete it from `props` |
+| `RESERVED_PROP` | A value was written into `children`, `key`, or `ref` under `props` | These are never emitted as JSX attributes. Move the content to `slots.children`; delete `key` / `ref` |
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect`. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's constraints reject these children | `suggestion` lists what is allowed |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | The parent/child pairing is constrained | `suggestion` lists the allowed components |

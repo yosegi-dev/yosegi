@@ -16,6 +16,7 @@ import {
 	isSyntheticComponentId,
 	isSyntheticManifest,
 } from "../domain/synthetics.ts";
+import { RESERVED_PROP_NAMES } from "../domain/validator.ts";
 
 // Converts a Screen Definition tree into Storybook CSF (Component Story Format)
 // source. The output is a ".stories.tsx" file that can be dropped straight into
@@ -32,8 +33,10 @@ export const SYNTHETIC_HEADING_CLASS_NAME = "font-bold text-2xl tracking-tight";
 export const INTENT_COMMENT_PREFIX = "TODO(yosegi):";
 // Name of the JSX children slot. Every other Slot is passed as an attribute.
 const CHILDREN_SLOT = "children";
-// Props that are never emitted as JSX attributes. children is a Slot; key/ref are reserved by React.
-const RESERVED_PROPS = new Set(["children", "key", "ref"]);
+// Props that are never emitted as JSX attributes. children is a Slot; key/ref are
+// reserved by React. The set lives in the validator (which rejects values written
+// under these names as RESERVED_PROP) so the two sides can't drift apart.
+const RESERVED_PROPS = RESERVED_PROP_NAMES;
 // Extensions stripped from the import specifier, restoring the form the host's bundler resolves.
 const IMPORT_EXTENSION_PATTERN = /\.(tsx|ts|jsx|js)$/;
 // In a Registry without componentPath, the story file's path ends up in packageName.

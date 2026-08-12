@@ -628,6 +628,87 @@ describe("validateScreen: bindings / events targets", () => {
 	});
 });
 
+// Emit never writes children / key / ref as JSX attributes, so a value under one of
+// these names would vanish from the Story without a trace. It used to slip through as
+// (at most) a NOT_EDITABLE_PROP_VALUE warning claiming the value is "written as-is".
+describe("validateScreen: reserved prop names", () => {
+	function reservedRegistry(): ComponentRegistry {
+		return parseComponentRegistry({
+			version: "custom:v1",
+			components: [
+				{
+					id: "Button",
+					name: "Button",
+					import: { packageName: "x", exportName: "Button" },
+					props: {
+						label: { kind: "string" },
+						children: { kind: "reactNode", editable: false, required: true },
+					},
+					slots: { children: {} },
+				},
+			],
+		});
+	}
+
+	it("props.children yields RESERVED_PROP with a move-to-slots suggestion", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Button",
+				props: { children: "Save" },
+				slots: {},
+			}),
+			reservedRegistry(),
+		);
+		expect(result.valid).toBe(false);
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.RESERVED_PROP,
+		);
+		expect(issue?.suggestion).toContain('"slots": { "children"');
+		// The old NOT_EDITABLE_PROP_VALUE warning claimed the value reaches the Story
+		// as-is, which contradicts emit dropping it.
+		expect(
+			result.warnings.some(
+				(w) => w.code === VALIDATION_CODES.NOT_EDITABLE_PROP_VALUE,
+			),
+		).toBe(false);
+	});
+
+	it("props.key / props.ref yield RESERVED_PROP", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Button",
+				props: { key: "k", ref: "r" },
+				slots: {},
+			}),
+			reservedRegistry(),
+		);
+		expect(
+			result.errors.filter((e) => e.code === VALIDATION_CODES.RESERVED_PROP),
+		).toHaveLength(2);
+	});
+
+	// A required children prop can never be satisfied through props, so demanding a
+	// value there would only lead back into RESERVED_PROP.
+	it("a required children prop is not reported missing", () => {
+		const result = validateScreen(
+			screenWith({
+				id: "r",
+				component: "Button",
+				props: { label: "Save" },
+				slots: {},
+			}),
+			reservedRegistry(),
+		);
+		expect(
+			result.errors.some(
+				(e) => e.code === VALIDATION_CODES.MISSING_REQUIRED_PROP,
+			),
+		).toBe(false);
+	});
+});
+
 // A bracket lookup keyed by a screen-supplied name walks the prototype chain, so
 // names like "toString" used to resolve to Object.prototype and pass as defined.
 describe("validateScreen: prototype-derived names", () => {

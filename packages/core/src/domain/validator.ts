@@ -33,6 +33,12 @@ export type ValidationResult = {
 // legitimately valid values like `{ a: number } | null`.
 const UNCHECKED_PROP_KINDS = new Set(["json", "reactNode", "function"]);
 
+// Prop names emit never writes as JSX attributes: children is a Slot, and key / ref
+// are managed by React. A value written under one of these would be silently dropped
+// from the generated Story, so the validator rejects it up front. Emit shares this
+// set so the two sides can't drift apart.
+export const RESERVED_PROP_NAMES = new Set(["children", "key", "ref"]);
+
 // Manifests are plain objects, so a bracket lookup keyed by a screen-supplied name
 // still walks the prototype chain — a slot or prop named "toString" would resolve to
 // Object.prototype and count as defined. Every name-keyed lookup goes through this guard.
@@ -146,6 +152,20 @@ function validateProps(
 		}
 	}
 	for (const [propName, value] of Object.entries(node.props)) {
+		// Checked before the manifest lookup: even when the manifest declares e.g. a
+		// children prop, emit still never writes it, so the value is lost either way.
+		if (RESERVED_PROP_NAMES.has(propName)) {
+			errors.push({
+				nodeId: node.id,
+				code: VALIDATION_CODES.RESERVED_PROP,
+				message: `Prop "${propName}" of "${manifest.id}" is never written into the Story, so its value would be silently lost.`,
+				suggestion:
+					propName === "children"
+						? `Move the content to "slots": { "children": [...] } — plain text becomes a Text node: { "component": "Text", "props": { "text": "..." } }.`
+						: `Remove it. "${propName}" is managed by React and cannot be set from a Screen Definition.`,
+			});
+			continue;
+		}
 		const def = ownEntry(manifest.props, propName);
 		if (!def) {
 			errors.push({
@@ -196,6 +216,12 @@ function validateProps(
 	}
 	for (const [propName, def] of Object.entries(manifest.props)) {
 		if (!def.required || Object.hasOwn(node.props, propName)) {
+			continue;
+		}
+		// A reserved name can never be satisfied through props (emit drops it), so
+		// requiring a value here would contradict RESERVED_PROP. children is
+		// expressed through slots instead.
+		if (RESERVED_PROP_NAMES.has(propName)) {
 			continue;
 		}
 		validateRequiredProp(node, manifest, propName, def, errors, warnings);

@@ -99,6 +99,7 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | `INVALID_PROP_VALUE` | 値が型や enum と合わない | `suggestion` の選択肢から選ぶ |
 | `MISSING_REQUIRED_PROP` | 必須 prop に値が無い | 値を入れる。binding だけで満たせるのは式が識別子パスの場合のみ |
 | `FUNCTION_PROP_VALUE` | 関数型の prop に値を書いている | 宣言を `events`（または `bindings`）へ移し、`props` から消す |
+| `RESERVED_PROP` | `props` の中に `children`・`key`・`ref` を書いている | これらは JSX の属性として出力されない。内容は `slots.children` へ移し、`key`・`ref` は消す |
 | `SLOT_NOT_FOUND` | その slot は無い | `component inspect` で slots を確認する。子要素はたいてい `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | slot の制約がその子を許さない | 許されるものは `suggestion` にある |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | 親子の組み合わせに制約がある | 許される部品は `suggestion` にある |
