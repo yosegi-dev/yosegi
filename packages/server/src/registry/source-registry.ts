@@ -1247,6 +1247,19 @@ export function buildRegistryFromSource(
 		const documented = new Map(
 			(docsByFile.get(file) ?? []).map((doc) => [doc.displayName, doc]),
 		);
+		// A Storybook "deprecated" tag identifies a file, not an export. With several
+		// component exports in one module the tag cannot say which one it means, so it
+		// only applies to an unambiguous export: the module's sole component export, or
+		// the one whose name matches the Story title's display name.
+		const componentExportNames = (exportsByFile.get(file) ?? [])
+			.filter(
+				(e) =>
+					e.name !== null &&
+					/^[A-Z]/.test(e.name) &&
+					!e.internal &&
+					(documented.has(e.docName) || e.componentLike),
+			)
+			.map((e) => e.name);
 
 		for (const exported of exportsByFile.get(file) ?? []) {
 			const doc = documented.get(exported.docName);
@@ -1355,9 +1368,13 @@ export function buildRegistryFromSource(
 			// deprecated comes from the host itself — a JSDoc @deprecated on the export
 			// or a "deprecated" Story tag. Explicit metadata wins, mirroring how
 			// buildRegistryFromStorybook resolves the same field.
+			const storyDeprecated =
+				curation?.deprecated === true &&
+				(componentExportNames.length === 1 ||
+					curation.displayName === exported.name);
 			const deprecated =
 				explicit?.constraints?.deprecated ??
-				(exported.deprecated || curation?.deprecated === true || undefined);
+				(exported.deprecated || storyDeprecated || undefined);
 
 			components.push(
 				componentManifestSchema.parse({

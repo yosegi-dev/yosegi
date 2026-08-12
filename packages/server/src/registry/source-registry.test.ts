@@ -887,4 +887,33 @@ describe("buildRegistryFromSource の deprecated", () => {
 			false,
 		);
 	});
+
+	// index.json tags identify a file, not an export. In a module with several
+	// component exports the tag only reaches the export the Story title names.
+	it("複数 export のモジュールではタグが displayName の一致する export にだけ付く", () => {
+		const manifests = indexRegistry(
+			buildDeprecatedFixtures({
+				index: {
+					v: 5,
+					entries: {
+						"components-mixedcard--default": {
+							type: "story",
+							id: "components-mixedcard--default",
+							name: "Default",
+							title: "Components/MixedCard",
+							importPath: "./mixed-cards.stories.tsx",
+							componentPath: "./mixed-cards.tsx",
+							tags: ["deprecated"],
+						},
+					},
+				},
+			}).registry,
+		);
+		expect(
+			manifests.get("mixed-cards#MixedCard")?.constraints?.deprecated,
+		).toBe(true);
+		expect(
+			manifests.get("mixed-cards#MixedCardFooter")?.constraints?.deprecated,
+		).toBeUndefined();
+	});
 });
