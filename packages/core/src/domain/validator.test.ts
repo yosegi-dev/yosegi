@@ -952,4 +952,22 @@ describe("validateScreen: self-correction info", () => {
 		expect(issue?.message).toContain("$.body[2]");
 		expect(issue?.path).toBe("$.body[2]");
 	});
+
+	// Issues locate their node by object identity. Resolving through nodeId would
+	// send a later duplicate's issues to the first occurrence's path.
+	it("重複 id の後続ノードの issue は自分の path を持つ", () => {
+		const base = sampleScreen();
+		base.root.slots.body.push({
+			id: "node-header",
+			component: "PageHeader",
+			props: { title: "again", titel: "typo" },
+			slots: {},
+		});
+		const result = validateScreen(base, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.UNKNOWN_PROP,
+		);
+		expect(issue?.nodeId).toBe("node-header");
+		expect(issue?.path).toBe("$.body[2]");
+	});
 });
