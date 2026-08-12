@@ -576,7 +576,9 @@ describe("runCli", () => {
 		expect(await Bun.file(outFile).exists()).toBe(false);
 	});
 
-	it("screen generate は --out 無しで usage を表示し exit 1", async () => {
+	// A missing required argument is a coded JSON error, not a usage dump — usage stays
+	// reserved for --help.
+	it("screen generate は --out 無しで MISSING_ARGUMENT を返す", async () => {
 		const screenFile = join(dataDir, "screen.json");
 		await writeFile(screenFile, JSON.stringify(sampleScreen()));
 		const code = await runCli([
@@ -587,7 +589,30 @@ describe("runCli", () => {
 			dataDir,
 		]);
 		expect(code).toBe(1);
-		expect(output()).toContain("Yosegi CLI");
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; message: string; command: string };
+		};
+		expect(parsed.error.code).toBe("MISSING_ARGUMENT");
+		expect(parsed.error.command).toBe("screen generate");
+		expect(parsed.error.message).toContain("--out");
+		expect(output()).not.toContain("Yosegi CLI");
+	});
+
+	it("component inspect は id 無しで MISSING_ARGUMENT を返す", async () => {
+		const code = await runCli(["component", "inspect", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; command: string };
+		};
+		expect(parsed.error.code).toBe("MISSING_ARGUMENT");
+		expect(parsed.error.command).toBe("component inspect");
+	});
+
+	it("screen pull は screenId 無しで MISSING_ARGUMENT を返す", async () => {
+		const code = await runCli(["screen", "pull", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		expect(output()).toContain("MISSING_ARGUMENT");
+		expect(output()).toContain("screenId");
 	});
 
 	it("screen context は import 文・結線タスク・構造サマリを返す", async () => {
@@ -1676,16 +1701,116 @@ export default meta;
 		expect(output()).toContain('Ignored "title" from the meta template');
 	});
 
-	it("未知のコマンドは usage を表示し exit 1", async () => {
-		const code = await runCli(["bogus", "--data-dir", dataDir]);
+	it("未知のコマンドは UNKNOWN_COMMAND と候補を返す", async () => {
+		const code = await runCli(["compnent", "list", "--data-dir", dataDir]);
 		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_COMMAND");
+		expect(parsed.error.suggestion).toContain("component list");
+		expect(output()).not.toContain("Yosegi CLI");
+	});
+
+	// A bare group is answered with that group's subcommands, not a fuzzy guess.
+	it("サブコマンド無しの group はその group の候補を返す", async () => {
+		const code = await runCli(["registry", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_COMMAND");
+		expect(parsed.error.suggestion).toContain("registry build");
+		expect(parsed.error.suggestion).toContain("registry status");
+	});
+
+	// A misspelled flag used to be silently dropped, and the command ran as if it were
+	// never passed — the worst failure mode for an agent, which then trusts the output.
+	it("未知のフラグは UNKNOWN_FLAG と候補を返す", async () => {
+		const code = await runCli(["component", "list", "--datadir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: {
+				code: string;
+				command: string;
+				knownFlags: string[];
+				suggestion?: string;
+			};
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_FLAG");
+		expect(parsed.error.command).toBe("component list");
+		expect(parsed.error.suggestion).toBe("Did you mean: --data-dir?");
+		expect(parsed.error.knownFlags).toContain("--query");
+	});
+
+	// --search is nowhere near --query by edit distance, so it comes from the synonym table.
+	it("--search には --query を候補として返す", async () => {
+		const code = await runCli([
+			"component",
+			"list",
+			"--search",
+			"button",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_FLAG");
+		expect(parsed.error.suggestion).toBe("Did you mean: --query?");
+	});
+
+	it("--help は usage を表示し exit 0", async () => {
+		const code = await runCli(["--help"]);
+		expect(code).toBe(0);
+		expect(output()).toContain("Yosegi CLI");
+		expect(output()).toContain("  mcp");
+		expect(output()).toContain("claude mcp add yosegi -- npx yosegi mcp");
+	});
+
+	it("-h も usage を表示し exit 0", async () => {
+		const code = await runCli(["-h"]);
+		expect(code).toBe(0);
 		expect(output()).toContain("Yosegi CLI");
 	});
 
-	it("usage に mcp サブコマンドが載っている", async () => {
-		await runCli(["bogus", "--data-dir", dataDir]);
-		expect(output()).toContain("  mcp");
-		expect(output()).toContain("claude mcp add yosegi -- npx yosegi mcp");
+	it("--version は version と cliPath を JSON で返し exit 0", async () => {
+		const code = await runCli(["--version"]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as { version: string; cliPath: string };
+		expect(parsed.version).toBe(yosegiVersion());
+		expect(parsed.cliPath).toBe(yosegiCliPath());
+	});
+
+	// With a command present, --version keeps its registry build meaning (a version ref).
+	it("registry build の --version はこれまでどおり版の指定として扱う", async () => {
+		const indexFile = join(dataDir, "index.json");
+		await writeFile(indexFile, JSON.stringify({ v: 5, entries: {} }));
+		const out = join(dataDir, "versioned.json");
+		const code = await runCli([
+			"registry",
+			"build",
+			"--index",
+			indexFile,
+			"--out",
+			out,
+			"--version",
+			"ref:custom",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		const written = JSON.parse(await Bun.file(out).text()) as {
+			version: string;
+		};
+		expect(written.version).toBe("ref:custom");
+	});
+
+	it("引数なしは usage を表示し exit 1", async () => {
+		const code = await runCli([]);
+		expect(code).toBe(1);
+		expect(output()).toContain("Yosegi CLI");
 	});
 });
 

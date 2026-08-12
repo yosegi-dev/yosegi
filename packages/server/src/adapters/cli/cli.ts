@@ -5,6 +5,7 @@ import {
 	type ComponentRegistry,
 	ComposerError,
 	componentManifestSchema,
+	didYouMean,
 	parseComponentRegistry,
 	parseScreenDefinition,
 	parseScreenOperations,
@@ -118,6 +119,136 @@ function flagString(flags: CliFlags, key: string): string | undefined {
 function flagBoolean(flags: CliFlags, key: string): boolean {
 	const value = flags[key];
 	return value === true || value === "true";
+}
+
+// Every command and the flags it understands. parseArgs accepts any --flag, so without
+// this inventory a misspelled flag is silently dropped and the command runs as if it
+// were never passed — the worst failure mode for an agent, which then trusts the output.
+const COMMAND_FLAGS: Record<string, readonly string[]> = {
+	"registry build": [
+		"source",
+		"tsconfig",
+		"project-root",
+		"index",
+		"storybook-url",
+		"metadata",
+		"import-map",
+		"report",
+		"out",
+		"version",
+		"json",
+	],
+	"registry metadata": ["tsconfig", "project-root", "source", "out"],
+	"registry status": ["json"],
+	"component list": ["category", "query", "json", "quiet"],
+	"component inspect": ["json", "quiet"],
+	"screen list": [],
+	"screen pull": [],
+	"screen export": [],
+	"screen validate": [],
+	"screen push": [],
+	"screen apply": [],
+	"screen generate": [
+		"out",
+		"title",
+		"story-name",
+		"import-map",
+		"framework",
+		"meta-template",
+		"registry",
+	],
+	"screen context": [
+		"registry",
+		"import-map",
+		"route",
+		"preferred-path",
+		"out",
+	],
+	"story import": [
+		"registry",
+		"import-map",
+		"story-name",
+		"screen-id",
+		"screen-name",
+		"out",
+	],
+	mcp: [],
+};
+
+// Accepted by every command.
+const COMMON_FLAGS = ["data-dir"];
+
+// Synonyms the edit-distance matcher can't reach (--search is nowhere near --query).
+// Only suggested when the target flag exists on the command at hand.
+const FLAG_SYNONYMS: Record<string, string> = {
+	search: "query",
+	find: "query",
+	filter: "query",
+};
+
+// The uniform shape of a command-level failure: JSON with a code, never bare usage text,
+// so an agent parses the same contract everywhere. Usage stays reserved for --help.
+function commandError(
+	code: "MISSING_ARGUMENT" | "UNKNOWN_COMMAND" | "UNKNOWN_FLAG",
+	message: string,
+	extra: Record<string, unknown> = {},
+): number {
+	print({ error: { code, message, ...extra } });
+	return 1;
+}
+
+function missingArgument(command: string, message: string): number {
+	return commandError(
+		"MISSING_ARGUMENT",
+		`${message} Run "yosegi --help" for usage.`,
+		{ command },
+	);
+}
+
+function unknownCommand(command: string): number {
+	const names = Object.keys(COMMAND_FLAGS);
+	// A bare group ("yosegi registry") lists its subcommands outright; anything else
+	// falls back to fuzzy matching against the full command names.
+	const subcommands = names.filter((name) => name.startsWith(`${command} `));
+	const suggestion =
+		subcommands.length > 0
+			? `Did you mean: ${subcommands.join(", ")}?`
+			: didYouMean(command, names);
+	return commandError(
+		"UNKNOWN_COMMAND",
+		`Unknown command "${command}". Run "yosegi --help" for the command list.`,
+		suggestion ? { suggestion } : {},
+	);
+}
+
+// Rejects flags the command doesn't understand. Returns null when everything is known.
+function checkFlags(command: string, flags: CliFlags): number | null {
+	const known = [...(COMMAND_FLAGS[command] ?? []), ...COMMON_FLAGS];
+	const knownSet = new Set(known);
+	const unknown = Object.keys(flags).filter((name) => !knownSet.has(name));
+	if (unknown.length === 0) {
+		return null;
+	}
+	const first = unknown[0];
+	const synonym = FLAG_SYNONYMS[first];
+	const suggestion =
+		synonym && knownSet.has(synonym)
+			? `Did you mean: --${synonym}?`
+			: didYouMean(
+					`--${first}`,
+					known.map((name) => `--${name}`),
+				);
+	return commandError(
+		"UNKNOWN_FLAG",
+		`Unknown flag${unknown.length > 1 ? "s" : ""} ${unknown
+			.map((name) => `"--${name}"`)
+			.join(", ")} for "${command}".`,
+		{
+			command,
+			knownFlags: known.map((name) => `--${name}`).sort(),
+			...(suggestion ? { suggestion } : {}),
+		},
+	);
 }
 
 // The base directory used to resolve --source globs and component id module paths.
@@ -304,14 +435,22 @@ function inspectComponent(
 
 // Write a Storybook Story (CSF) from a Screen Definition. Yosegi's final deliverable.
 async function generateStory(
-	screenFile: string,
+	screenFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
+	if (screenFile === undefined) {
+		return missingArgument(
+			"screen generate",
+			"screen generate requires a <screen.json> path.",
+		);
+	}
 	const out = flagString(flags, "out");
-	if (typeof screenFile !== "string" || out === undefined) {
-		print(usage());
-		return 1;
+	if (out === undefined) {
+		return missingArgument(
+			"screen generate",
+			"screen generate requires --out <file.stories.tsx>.",
+		);
 	}
 	const screen = parseScreenDefinition(
 		JSON.parse(await readFile(screenFile, "utf8")),
@@ -363,8 +502,10 @@ async function generateMetadata(
 	flags: CliFlags,
 ): Promise<number> {
 	if (componentIds.length === 0) {
-		print(usage());
-		return 1;
+		return missingArgument(
+			"registry metadata",
+			"registry metadata requires at least one <componentId>.",
+		);
 	}
 	// Both the glob and the id's module path are resolved with the same base as registry build.
 	const projectRoot = resolveProjectRoot(flags);
@@ -409,13 +550,15 @@ function defaultScreenId(file: string): string {
 // downstream flow (converting to an implementation). Anything that couldn't be interpreted
 // is recorded in warnings, and the tree is returned as far as it could be read.
 async function importStoryFile(
-	storyFile: string,
+	storyFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
-	if (typeof storyFile !== "string") {
-		print(usage());
-		return 1;
+	if (storyFile === undefined) {
+		return missingArgument(
+			"story import",
+			"story import requires a <file.stories.tsx> path.",
+		);
 	}
 	const registry = await loadEmitRegistry(flags, dataDir);
 	const importMap = flagString(flags, "import-map");
@@ -473,13 +616,15 @@ async function importStoryFile(
 // converting a Story (mock) into a real page. The output is machine-readable JSON, written
 // to stdout or to the --out file.
 async function screenContext(
-	screenFile: string,
+	screenFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
-	if (typeof screenFile !== "string") {
-		print(usage());
-		return 1;
+	if (screenFile === undefined) {
+		return missingArgument(
+			"screen context",
+			"screen context requires a <screen.json> path.",
+		);
 	}
 	const screen = parseScreenDefinition(
 		JSON.parse(await readFile(screenFile, "utf8")),
@@ -962,9 +1107,43 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 
 // The CLI itself: a thin Adapter that just calls the shared Application Service.
 export async function runCli(argv: string[]): Promise<number> {
+	// Help was asked for, so usage exits 0 — unlike an error, where usage never appears
+	// and a coded JSON error does. Checked on the raw argv because parseArgs would fold
+	// "--help <next token>" into a flag value and read "-h" as a positional.
+	if (argv.includes("--help") || argv.includes("-h")) {
+		print(usage());
+		return 0;
+	}
 	const { positionals, flags } = parseArgs(argv);
 	const [group, action, ...rest] = positionals;
 	const dataDir = flagString(flags, "data-dir") ?? DEFAULT_DATA_DIR;
+
+	if (positionals.length === 0) {
+		// Only a bare "yosegi --version" reaches here — with a command present, --version
+		// keeps its registry build meaning (the registry's version ref).
+		if (flagBoolean(flags, "version")) {
+			print({ version: yosegiVersion(), cliPath: yosegiCliPath() });
+			return 0;
+		}
+		// A bare "yosegi" prints the command list, like --help, but exits 1: nothing was done.
+		print(usage());
+		return 1;
+	}
+
+	// "mcp" is the one group-only command; everything else is "<group> <action>".
+	const command =
+		group === "mcp"
+			? "mcp"
+			: action === undefined
+				? group
+				: `${group} ${action}`;
+	if (COMMAND_FLAGS[command] === undefined) {
+		return unknownCommand(command);
+	}
+	const flagFailure = checkFlags(command, flags);
+	if (flagFailure !== null) {
+		return flagFailure;
+	}
 
 	try {
 		// The MCP server doesn't return until the connection closes. The import is kept
@@ -996,8 +1175,10 @@ export async function runCli(argv: string[]): Promise<number> {
 			}
 			if (action === "inspect") {
 				if (rest.length === 0) {
-					print(usage());
-					return 1;
+					return missingArgument(
+						"component inspect",
+						"component inspect requires at least one <componentId>.",
+					);
 				}
 				return inspectComponent(composer, rest, flags);
 			}
@@ -1019,6 +1200,30 @@ export async function runCli(argv: string[]): Promise<number> {
 		}
 
 		if (group === "screen") {
+			// Store commands address a screen by id (or a file by path); reject a missing
+			// one before touching the store, so the error names the argument rather than
+			// surfacing as a downstream read failure.
+			if (
+				(action === "pull" ||
+					action === "export" ||
+					action === "validate" ||
+					action === "push" ||
+					action === "apply") &&
+				rest[0] === undefined
+			) {
+				return missingArgument(
+					`screen ${action}`,
+					action === "push"
+						? "screen push requires a <file.json> path."
+						: `screen ${action} requires a <screenId>.`,
+				);
+			}
+			if (action === "apply" && rest[1] === undefined) {
+				return missingArgument(
+					"screen apply",
+					"screen apply requires an <operations.json> path.",
+				);
+			}
 			const composer = await makeComposer(dataDir);
 			switch (action) {
 				case "list":
@@ -1071,8 +1276,9 @@ export async function runCli(argv: string[]): Promise<number> {
 			}
 		}
 
-		print(usage());
-		return 1;
+		// Unreachable while COMMAND_FLAGS and the dispatch above stay in step; kept so a
+		// drift between them still fails with the shared contract instead of hanging.
+		return unknownCommand(command);
 	} catch (error) {
 		// The CLI's payloads come from files, so schema/JSON failures must not talk
 		// about a "request".
@@ -1148,5 +1354,8 @@ function usage(): string {
 		"      Register it with: claude mcp add yosegi -- npx yosegi mcp",
 		"",
 		"  common: --data-dir <dir>",
+		"",
+		"  --help / -h   Print this list and exit 0.",
+		'  --version     Print { "version", "cliPath" } as JSON and exit 0.',
 	].join("\n");
 }
