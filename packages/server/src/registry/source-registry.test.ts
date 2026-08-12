@@ -998,4 +998,35 @@ describe("buildRegistryFromSource の React 型解決検出", () => {
 		});
 		expect(result.reactTypesResolved).toBe(true);
 	});
+
+	// A glob can span packages whose node_modules trees differ. Resolution succeeding
+	// for the first file must not mask a package where it fails.
+	it("一部のファイルだけ解決に失敗する構成では false を返す", async () => {
+		const typesDir = join(hostRoot, "pkg-a", "node_modules", "@types", "react");
+		await mkdir(typesDir, { recursive: true });
+		await writeFile(
+			join(typesDir, "package.json"),
+			JSON.stringify({ name: "@types/react", types: "index.d.ts" }),
+		);
+		await writeFile(
+			join(typesDir, "index.d.ts"),
+			"export type ReactNode = unknown;\n",
+		);
+		const component = [
+			"export function Chip({ label }: { label?: string }) {",
+			"\treturn <span>{label}</span>;",
+			"}",
+			"",
+		].join("\n");
+		await mkdir(join(hostRoot, "pkg-a", "src"), { recursive: true });
+		await mkdir(join(hostRoot, "pkg-b", "src"), { recursive: true });
+		await writeFile(join(hostRoot, "pkg-a", "src", "chip.tsx"), component);
+		await writeFile(join(hostRoot, "pkg-b", "src", "chip.tsx"), component);
+		const result = buildRegistryFromSource({
+			projectRoot: hostRoot,
+			sources: ["pkg-*/src/**/*.tsx"],
+			tsconfigPath: join(hostRoot, "tsconfig.json"),
+		});
+		expect(result.reactTypesResolved).toBe(false);
+	});
 });

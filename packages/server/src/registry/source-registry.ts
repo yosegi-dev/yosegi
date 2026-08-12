@@ -250,7 +250,7 @@ function hasDeprecatedTag(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
 // package's own index.js, which gives the checker no ReactNode either.
 const TYPE_BEARING_EXTENSION_PATTERN = /\.(d\.[mc]?ts|[mc]?ts|tsx)$/;
 
-// Whether importing "react" reaches its type definitions, checked once with the same
+// Whether importing "react" reaches its type definitions, checked with the same
 // resolution the program itself uses (so paths mappings and typeRoots are honored).
 // Resolution failing is exactly the state that silently flattens ReactNode to `any`, so
 // this is what lets the CLI warn instead of reporting a degraded build as success.
@@ -268,6 +268,29 @@ function reactTypesResolve(
 		resolvedModule !== undefined &&
 		TYPE_BEARING_EXTENSION_PATTERN.test(resolvedModule.resolvedFileName)
 	);
+}
+
+// A source glob can span packages whose node_modules trees differ, so every file is
+// checked, cached per directory (walk-up resolution only depends on the containing
+// directory). One unresolved directory already degrades the manifests built from it,
+// so the aggregate is "all resolve".
+function reactTypesResolveForAll(
+	files: readonly string[],
+	compilerOptions: ts.CompilerOptions,
+): boolean {
+	const byDirectory = new Map<string, boolean>();
+	for (const file of files) {
+		const dir = dirname(file);
+		let resolved = byDirectory.get(dir);
+		if (resolved === undefined) {
+			resolved = reactTypesResolve(file, compilerOptions);
+			byDirectory.set(dir, resolved);
+		}
+		if (!resolved) {
+			return false;
+		}
+	}
+	return true;
 }
 
 // Whether @yosegi-internal is attached to the JSDoc.
@@ -1503,10 +1526,8 @@ export function buildRegistryFromSource(
 		missed,
 		unusedMetadataIds,
 		outsideSources,
-		// Resolution is directory-independent within one host, so the first matched file
-		// stands in for all of them. With no files there is nothing to resolve from (and
-		// the files: 0 warning already covers that state).
-		reactTypesResolved:
-			files.length === 0 || reactTypesResolve(files[0], compilerOptions),
+		// With no files there is nothing to resolve from (and the files: 0 warning
+		// already covers that state), so an empty list reports true.
+		reactTypesResolved: reactTypesResolveForAll(files, compilerOptions),
 	};
 }
