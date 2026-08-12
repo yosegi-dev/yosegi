@@ -3,6 +3,7 @@ import type {
 	ComponentRegistry,
 } from "../domain/component-manifest.ts";
 import { ComposerError, SERVICE_CODES } from "../domain/errors.ts";
+import { didYouMean } from "../domain/suggest.ts";
 
 // A read-only Application Service over the Component Registry.
 // CLI / MCP / HTTP all go through here to fetch component information.
@@ -40,13 +41,17 @@ export class ComponentService {
 	}
 
 	// Throws COMPONENT_NOT_FOUND if it doesn't exist. The not-found representation is
-	// centralized in the Application layer so every Adapter can handle not-found with the same code.
+	// centralized in the Application layer so every Adapter can handle not-found with the
+	// same code — and, since a typo'd id is the common cause, the nearest existing ids
+	// ride along as a suggestion so CLI / MCP / HTTP all offer the same candidates.
 	requireComponent(id: string): ComponentManifest {
 		const component = this.byId.get(id);
 		if (!component) {
 			throw new ComposerError(
 				SERVICE_CODES.COMPONENT_NOT_FOUND,
 				`Component "${id}" was not found in the registry.`,
+				null,
+				{ suggestion: didYouMean(id, this.byId.keys()) ?? null },
 			);
 		}
 		return component;

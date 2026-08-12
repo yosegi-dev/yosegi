@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { screenDefinitionSchema } from "@yosegi/core";
+import {
+	ComposerError,
+	SERVICE_CODES,
+	screenDefinitionSchema,
+} from "@yosegi/core";
 import { toErrorResponse } from "./error-response.ts";
 
 // A Screen JSON schema violation only returns a zod issue, giving no clue to the "correct
@@ -51,5 +55,41 @@ describe("toErrorResponse", () => {
 		const { body } = toErrorResponse(schemaErrorFor(node({ id: 1 })));
 		expect(body.error.code).toBe("INVALID_REQUEST");
 		expect(body.error.hints).toBeUndefined();
+	});
+
+	// suggestion / details live on the ComposerError itself, so every adapter that
+	// funnels through here surfaces them without re-deriving anything.
+	it("ComposerError の suggestion と details を透過する", () => {
+		const { status, body } = toErrorResponse(
+			new ComposerError(
+				SERVICE_CODES.REGISTRY_NOT_FOUND,
+				"Registry not found at /x/registry.json.",
+				null,
+				{
+					suggestion: "Did you mean: Button?",
+					details: { path: "/x/registry.json", dataDir: "/x" },
+				},
+			),
+		);
+		expect(status).toBe(404);
+		expect(body.error.code).toBe("REGISTRY_NOT_FOUND");
+		expect(body.error.suggestion).toBe("Did you mean: Button?");
+		expect(body.error.path).toBe("/x/registry.json");
+		expect(body.error.dataDir).toBe("/x");
+	});
+
+	// The CLI reads files: "Request payload" wording there points the reader at a
+	// request that doesn't exist.
+	it("payloadSource=file はファイル向けの文言に切り替える", () => {
+		const schema = toErrorResponse(schemaErrorFor(node({ id: 1 })), {
+			payloadSource: "file",
+		});
+		expect(schema.body.error.message).toBe(
+			"Input file failed schema validation.",
+		);
+		const json = toErrorResponse(new SyntaxError("bad json"), {
+			payloadSource: "file",
+		});
+		expect(json.body.error.message).toBe("Input file is not valid JSON.");
 	});
 });

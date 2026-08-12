@@ -3,14 +3,18 @@
 Five different things can come back, and they read differently. Identify which one you are looking
 at before fixing anything.
 
-1. **Validation errors** — an array of `{ nodeId, code, message, suggestion }`. Generation stopped;
-   no file was written; exit code 1.
+1. **Validation errors** — an array of `{ nodeId, path, code, message, suggestion }`. `path`
+   (`$.children[0]...`) is the node's position in the tree, so a node is locatable even when ids
+   collide. Generation stopped; no file was written; exit code 1.
 2. **Validation warnings** — the same shape, printed *after* `Wrote <path>`. Generation succeeded.
 3. **A schema violation** — `{ "error": { "code": "INVALID_REQUEST", "issues": [...], "hints": [...] } }`.
    Validation was never reached at all.
-4. **A command error** — `{ "error": { "code": "INTERNAL_ERROR", "message": "..." } }`, exit code 1.
-   The command failed before or outside validation: a missing registry, a bad `--story-name`, an
-   unreadable path. It is JSON with a `code`, so do not go looking for a bare `Error:` line.
+4. **A command error** — `{ "error": { "code": "...", "message": "..." } }`, exit code 1. The
+   command failed before or outside validation, and the code says how: `MISSING_ARGUMENT`,
+   `UNKNOWN_COMMAND`, `UNKNOWN_FLAG`, `REGISTRY_NOT_FOUND`, `INVALID_ARGUMENT`, `INVALID_JSON`,
+   a lookup miss such as `COMPONENT_NOT_FOUND` / `SCREEN_NOT_FOUND`, or `INTERNAL_ERROR` for
+   everything else. It is JSON with a `code`, so do not go looking for a bare `Error:` line. The
+   table at the bottom of this file covers each code.
 5. **Plain-text notices** — `Warning:` or `Note:` lines printed alongside a *successful* run. They
    carry no `code` and are easy to scroll past. They are listed at the bottom of this file.
 
@@ -29,8 +33,8 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 # swap the id and re-run
 [ { "code": "UNKNOWN_PROP", "message": "... has no prop \"titel\".",
     "suggestion": "Did you mean: title?" },
-  { "code": "INVALID_PROP_VALUE", "message": "... variant ... kind \"enum\".",
-    "suggestion": "Use one of: default, danger, success" } ]
+  { "code": "INVALID_PROP_VALUE", "message": "... variant ... kind \"enum\" (received: \"dangr\").",
+    "suggestion": "Use one of: \"default\", \"danger\", \"success\"" } ]
 
 # fix both and re-run
 Wrote <host>/app/components/examples/customer-list.stories.tsx
@@ -43,16 +47,16 @@ This loop needs no confirmation from anyone. Run it to completion.
 | code | Meaning | How to fix |
 | --- | --- | --- |
 | `COMPONENT_NOT_FOUND` | The id is not in the registry | Swap in the candidate id from `suggestion`. With no candidate, search again with `component list --query`. A bare export name (`Button`) instead of the full `<module path>#<name>` id lands here |
-| `UNKNOWN_PROP` | The component has no such prop | Correct it to the prop name in `suggestion`. With no candidate, list the real props with `component inspect`. If inspect prints the `Note: props could not be read from the types.` line, see below — the prop may be real and the registry simply does not know it |
-| `INVALID_PROP_VALUE` | The value does not match the type or the enum | Pick from the options in `suggestion` |
-| `MISSING_REQUIRED_PROP` | A required prop has no value | Supply one. A binding alone is not a value: it only satisfies the prop when its expression is a plain identifier path (`table`, `query.data.rows`), and even then see `BOUND_REQUIRED_PROP` below |
+| `UNKNOWN_PROP` | The component has no such prop | Correct it to the prop name in `suggestion`. A node-level field (`bindings` / `events` / `when` / `each`) written inside `props` also lands here, and `suggestion` says to move it onto the node. With no candidate, list the real props with `component inspect`. If inspect prints the `Note: props could not be read from the types.` line, see below — the prop may be real and the registry simply does not know it |
+| `INVALID_PROP_VALUE` | The value does not match the type or the enum; the message echoes the received value | Pick from the options in `suggestion` |
+| `MISSING_REQUIRED_PROP` | A required prop has no value; the message names its kind | Supply one (`suggestion` lists an enum's options). A binding alone is not a value: it only satisfies the prop when its expression is a plain identifier path (`table`, `query.data.rows`), and even then see `BOUND_REQUIRED_PROP` below |
 | `FUNCTION_PROP_VALUE` | A value was written into a function-kind prop | Handlers cannot be expressed in `props` at all. Move the declaration to `events` (`{ "action": "..." }`) or to `bindings`, and delete it from `props`. The Story gets a no-op handler so it still renders |
 | `RESERVED_PROP` | A value was written into `children`, `key`, or `ref` under `props` | These names are never emitted as JSX attributes, so the value would silently vanish from the Story. Move the content to `slots.children` (plain text becomes a `Text` node); delete `key` / `ref`, which React manages and a Screen JSON cannot set |
 | `UNKNOWN_BINDING_TARGET` | A `bindings` key names a prop the component does not have | Correct it to the name in `suggestion`. Remember that a `ReactNode` prop is a **slot**, not a prop, so `children` is never a valid binding target on a registry built from types |
 | `SLOT_NOT_FOUND` | The component has no such slot | Check the slots in `component inspect` and fix the name. Children usually go in `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | The slot's own constraints reject these children | `suggestion` names what is allowed |
 | `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | The parent/child pairing is constrained | `suggestion` names the allowed components |
-| `DUPLICATE_NODE_ID` | Two nodes share an `id` | Change one of them. Node ids must be unique across the whole screen |
+| `DUPLICATE_NODE_ID` | Two nodes share an `id`; the message names both colliding `path`s | Change one of them. Node ids must be unique across the whole screen |
 
 ### `UNKNOWN_PROP` on a prop that really exists
 
@@ -107,9 +111,12 @@ The frequent causes:
 
 - `bindings` written in the shape of `events` or the reverse. A `bindings` value is a plain string;
   an `events` value is a `{ action, arguments }` object.
-- `bindings` / `events` / `when` / `each` placed inside `props` instead of on the node itself.
 - A slot given a bare node rather than an array of nodes.
 - `props` or `slots` omitted on a leaf node. Both are required even when empty.
+
+`bindings` / `events` / `when` / `each` placed inside `props` is **not** a schema violation —
+`props` is a free-form record — so it does not appear here. It surfaces in validation as
+`UNKNOWN_PROP`, with a `suggestion` to move the field onto the node.
 
 Fix the shape, then enter the validation loop above.
 
@@ -140,18 +147,29 @@ wrapper component — the normal shape of a hand-written Story — imports clean
 with nothing to warn about. Count the nodes against the Story you can see. `implementation.md`
 covers when to use this command at all.
 
-## Command errors (`INTERNAL_ERROR` / `INVALID_JSON`)
+## Command errors
 
 These come back as JSON with a `code`, exit code 1, and no `nodeId` — the command failed before it
-reached the screen. `INVALID_JSON` means the file you passed is not valid JSON. `INTERNAL_ERROR` is
-everything else, with the underlying message attached.
+reached the screen. Every code is self-correcting from the payload alone:
+
+| code | Meaning | What to do |
+| --- | --- | --- |
+| `MISSING_ARGUMENT` | A required positional or flag is missing; `command` names the command | Supply what the message names (`--out` for `screen generate`, an id for `component inspect`, ...) |
+| `UNKNOWN_COMMAND` | The command does not exist | Take the `suggestion` (did-you-mean over the real commands). A bare group (`yosegi registry`) gets its subcommands listed |
+| `UNKNOWN_FLAG` | A flag the command does not understand. It is rejected, never silently ignored | Take the `suggestion`, or pick from `knownFlags` in the payload |
+| `REGISTRY_NOT_FOUND` | No registry where the command looked; `path` and `dataDir` name the location consulted | Either you have not built one yet, or `--data-dir` differs from the one `registry build` wrote to. Check the second before rebuilding — the default (`.yosegi` under the cwd) moves with your working directory |
+| `INVALID_ARGUMENT` | The argument combination is unusable (e.g. `--source` without `--tsconfig`) | Fix the invocation as the message says |
+| `INVALID_JSON` | The file you passed is not valid JSON | Fix the file. The message says "Input file", not "Request body", on the CLI |
+| `COMPONENT_NOT_FOUND` | The id you passed to `component inspect` (or wrote in a screen operation) is not in the registry | Take the `suggestion` (did-you-mean over the registry). A short id (`Button`) may need the full `<module path>#<export>` form from `component list` |
+| `SCREEN_NOT_FOUND` | No saved screen has that id | List the saved screens (`yosegi screen list`) and use an id from there |
+| `INTERNAL_ERROR` | Everything else, with the underlying message attached | Read the message; the table below lists the frequent ones |
+
+The frequent `INTERNAL_ERROR` messages:
 
 | `message` | Meaning | What to do |
 | --- | --- | --- |
-| `Registry not found at <path>. Generate it with: yosegi registry build ...` | No registry at that `--data-dir` | Either you have not built one yet, or `--data-dir` differs from the one `registry build` wrote to. Check the second before rebuilding — the default (`.yosegi` under the cwd) moves with your working directory |
 | `Story name "<name>" is not a valid JavaScript identifier.` | `--story-name` becomes an `export const`, so it has to be an identifier | Use letters, digits, `_` or `$`, and do not start with a digit. `Customer list` → `CustomerList` |
 | `Component "<id>" has export name "<name>", which is not a valid JavaScript identifier.` | The registry entry itself cannot be emitted as JSX | Pick a different component, or fix the export in the host |
-| `--source requires --tsconfig <path>.` | `registry build` got a glob but no tsconfig | Pass the host's tsconfig |
 | `ENOENT` / `no such file` | A path you passed does not exist | Check `--tsconfig`, the Screen JSON path, and `--metadata` |
 
 A malformed screen `id` does **not** land here — it is an `INVALID_REQUEST` from the schema, because

@@ -67,6 +67,12 @@ export const SERVICE_CODES = {
 	// An id that points outside the storage location. Always rejected before read/write.
 	INVALID_SCREEN_ID: "INVALID_SCREEN_ID",
 	COMPONENT_NOT_FOUND: "COMPONENT_NOT_FOUND",
+	// No registry exists where the adapter looked for one. Split from INTERNAL_ERROR so
+	// an agent can branch on it (the fix — run registry build — is always the same).
+	REGISTRY_NOT_FOUND: "REGISTRY_NOT_FOUND",
+	// A structurally valid invocation whose argument combination is unusable
+	// (e.g. --source without --tsconfig). Not INTERNAL_ERROR: the caller can fix it.
+	INVALID_ARGUMENT: "INVALID_ARGUMENT",
 	SCREEN_ALREADY_EXISTS: "SCREEN_ALREADY_EXISTS",
 	REVISION_CONFLICT: "REVISION_CONFLICT",
 	VALIDATION_FAILED: "VALIDATION_FAILED",
@@ -82,16 +88,29 @@ export type ComposerErrorCode = OperationCode | ServiceCode;
 export class ComposerError extends Error {
 	readonly code: ComposerErrorCode;
 	readonly nodeId: string | null;
+	// A "did you mean" line the adapter prints verbatim next to the message. Kept on the
+	// error itself so CLI / MCP / HTTP all surface the same candidates without each
+	// adapter re-deriving them.
+	readonly suggestion: string | null;
+	// Structured fields for the error (e.g. the missing registry's path), so an agent
+	// branches on data instead of parsing the message.
+	readonly details: Record<string, unknown> | null;
 
 	constructor(
 		code: ComposerErrorCode,
 		message: string,
 		nodeId: string | null = null,
+		options: {
+			suggestion?: string | null;
+			details?: Record<string, unknown> | null;
+		} = {},
 	) {
 		super(message);
 		this.name = "ComposerError";
 		this.code = code;
 		this.nodeId = nodeId;
+		this.suggestion = options.suggestion ?? null;
+		this.details = options.details ?? null;
 	}
 }
 

@@ -17,6 +17,10 @@ import { isSyntheticComponentId, isSyntheticManifest } from "./synthetics.ts";
 // A single validation result item. Shared shape for both error and warning.
 export type ValidationIssue = {
 	nodeId: string | null;
+	// Where the node sits in the tree (`$.children[0].children[1]`), the same shape as
+	// the implementation context's StructureNode.path. nodeId alone cannot locate a node
+	// once ids collide, and an agent editing the JSON navigates by position anyway.
+	path?: string;
 	code: ValidationCode;
 	message: string;
 	suggestion?: string;
@@ -46,6 +50,17 @@ function ownEntry<T>(record: Record<string, T>, key: string): T | undefined {
 	return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
+// ScreenNode fields that live next to props, not inside them. Writing them inside
+// props passes the schema (props is a free-form record), so the mistake surfaces here
+// as UNKNOWN_PROP and deserves a pointed fix rather than a fuzzy-match miss.
+const NODE_LEVEL_FIELDS = new Set(["bindings", "events", "when", "each"]);
+
+// Enum options rendered with their type visible ("primary" vs 1 vs true) — the same
+// JSON.stringify rendering component inspect uses for options.
+function formatEnumOptions(options: readonly unknown[] | undefined): string {
+	return (options ?? []).map((option) => JSON.stringify(option)).join(", ");
+}
+
 // Whether a prop value is consistent with its definition's kind. Kinds that aren't
 // editable (function/reactNode) are not validated.
 function isPropValueValid(def: PropDefinition, value: unknown): boolean {
@@ -73,6 +88,7 @@ function isPropValueValid(def: PropDefinition, value: unknown): boolean {
 function validateSlots(
 	node: ScreenNode,
 	manifest: ComponentManifest,
+	pathOf: (node: ScreenNode) => string,
 	errors: ValidationIssue[],
 	warnings: ValidationIssue[],
 ): void {
@@ -81,6 +97,7 @@ function validateSlots(
 		if (!slotDef) {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.SLOT_NOT_FOUND,
 				message: `Component "${manifest.id}" has no slot "${slotName}".`,
 			});
@@ -89,6 +106,7 @@ function validateSlots(
 		if (slotDef.maxItems !== undefined && children.length > slotDef.maxItems) {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.SLOT_MAX_ITEMS_EXCEEDED,
 				message: `Slot "${slotName}" allows at most ${slotDef.maxItems} items but has ${children.length}.`,
 			});
@@ -98,6 +116,7 @@ function validateSlots(
 				if (!slotDef.allowedComponents.includes(child.component)) {
 					errors.push({
 						nodeId: child.id,
+						path: pathOf(child),
 						code: VALIDATION_CODES.SLOT_COMPONENT_NOT_ALLOWED,
 						message: `Component "${child.component}" is not allowed in slot "${slotName}" of "${manifest.id}".`,
 						suggestion: `Allowed: ${slotDef.allowedComponents.join(", ")}`,
@@ -111,6 +130,7 @@ function validateSlots(
 		if (slotDef.required && (node.slots[slotName]?.length ?? 0) === 0) {
 			warnings.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.MISSING_REQUIRED_SLOT,
 				message: `Slot "${slotName}" of "${manifest.id}" is required but empty.`,
 			});
@@ -121,6 +141,7 @@ function validateSlots(
 function validateProps(
 	node: ScreenNode,
 	manifest: ComponentManifest,
+	pathOf: (node: ScreenNode) => string,
 	errors: ValidationIssue[],
 	warnings: ValidationIssue[],
 ): void {
@@ -132,6 +153,7 @@ function validateProps(
 		if (!ownEntry(manifest.props, propName)) {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.UNKNOWN_BINDING_TARGET,
 				message: `Component "${manifest.id}" has no prop "${propName}" to bind to.`,
 				suggestion: didYouMean(propName, Object.keys(manifest.props)),
@@ -145,6 +167,7 @@ function validateProps(
 		if (!ownEntry(manifest.props, eventName)) {
 			warnings.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.UNKNOWN_EVENT_TARGET,
 				message: `Component "${manifest.id}" has no prop "${eventName}" to attach the event to.`,
 				suggestion: didYouMean(eventName, Object.keys(manifest.props)),
@@ -157,6 +180,7 @@ function validateProps(
 		if (RESERVED_PROP_NAMES.has(propName)) {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.RESERVED_PROP,
 				message: `Prop "${propName}" of "${manifest.id}" is never written into the Story, so its value would be silently lost.`,
 				suggestion:
@@ -170,9 +194,15 @@ function validateProps(
 		if (!def) {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.UNKNOWN_PROP,
 				message: `Component "${manifest.id}" has no prop "${propName}".`,
-				suggestion: didYouMean(propName, Object.keys(manifest.props)),
+				// A node-level field written inside props is a frequent mistake, and the
+				// fuzzy matcher would never suggest the fix (no prop resembles "bindings"),
+				// so it gets its own suggestion instead.
+				suggestion: NODE_LEVEL_FIELDS.has(propName)
+					? `"${propName}" is not a prop. Move it out of "props" and place it directly on the node: { "id": ..., "component": ..., "props": { ... }, "${propName}": ... }.`
+					: didYouMean(propName, Object.keys(manifest.props)),
 			});
 			continue;
 		}
@@ -184,6 +214,7 @@ function validateProps(
 		if (def.kind === "function") {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.FUNCTION_PROP_VALUE,
 				message: `Prop "${manifest.id}.${propName}" is a function, so it cannot be given a value in "props".`,
 				suggestion: `Declare it on the node instead: "events": { "${propName}": { "action": "..." } }, or "bindings": { "${propName}": "<expression>" } when it comes from an existing handler.`,
@@ -197,19 +228,24 @@ function validateProps(
 		if (def.editable === false) {
 			warnings.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.NOT_EDITABLE_PROP_VALUE,
 				message: `Prop "${manifest.id}.${propName}" is not editable (kind "${def.kind}"), so the value is written into the Story as-is and is not checked against the component's type.`,
 				suggestion: `Declare it as "bindings": { "${propName}": "<expression>" } if the value comes from data, or drop it if the Story renders without it.`,
 			});
 		}
 		if (!isPropValueValid(def, value)) {
+			// The received value rides along so the fix is decidable from the error alone —
+			// without it, "primary" vs primary vs 1 all read the same and the reader can't
+			// tell a wrong value from a wrong type.
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.INVALID_PROP_VALUE,
-				message: `Value for "${manifest.id}.${propName}" does not match kind "${def.kind}".`,
+				message: `Value for "${manifest.id}.${propName}" does not match kind "${def.kind}" (received: ${JSON.stringify(value)}).`,
 				suggestion:
 					def.kind === "enum"
-						? `Use one of: ${(def.options ?? []).join(", ")}`
+						? `Use one of: ${formatEnumOptions(def.options)}`
 						: undefined,
 			});
 		}
@@ -224,7 +260,15 @@ function validateProps(
 		if (RESERVED_PROP_NAMES.has(propName)) {
 			continue;
 		}
-		validateRequiredProp(node, manifest, propName, def, errors, warnings);
+		validateRequiredProp(
+			node,
+			manifest,
+			propName,
+			def,
+			pathOf,
+			errors,
+			warnings,
+		);
 	}
 }
 
@@ -236,6 +280,7 @@ function validateRequiredProp(
 	manifest: ComponentManifest,
 	propName: string,
 	def: PropDefinition,
+	pathOf: (node: ScreenNode) => string,
 	errors: ValidationIssue[],
 	warnings: ValidationIssue[],
 ): void {
@@ -251,20 +296,26 @@ function validateRequiredProp(
 	if (expression !== undefined && isEmittableBindingExpression(expression)) {
 		warnings.push({
 			nodeId: node.id,
+			path: pathOf(node),
 			code: VALIDATION_CODES.BOUND_REQUIRED_PROP,
 			message: `Required prop "${propName}" of "${manifest.id}" only has a binding, so the Story is emitted as \`${propName}={${expression}}\` and will not type-check until "${expression}" exists in it.`,
 			suggestion: `Set props.${propName} to a mock value to make the Story render; the binding stays as the implementation intent.`,
 		});
 		return;
 	}
+	// The kind (and, for an enum, the options) ride along so supplying the value doesn't
+	// require a component inspect round-trip first.
 	errors.push({
 		nodeId: node.id,
+		path: pathOf(node),
 		code: VALIDATION_CODES.MISSING_REQUIRED_PROP,
-		message: `Required prop "${propName}" of "${manifest.id}" is not set.`,
+		message: `Required prop "${propName}" of "${manifest.id}" is not set (kind "${def.kind}").`,
 		suggestion:
-			expression === undefined
-				? undefined
-				: `Binding expression "${expression}" is not a plain identifier path, so it cannot be written into the Story. Set props.${propName} to a mock value and keep the binding as the implementation intent.`,
+			expression !== undefined
+				? `Binding expression "${expression}" is not a plain identifier path, so it cannot be written into the Story. Set props.${propName} to a mock value and keep the binding as the implementation intent.`
+				: def.kind === "enum"
+					? `Set it to one of: ${formatEnumOptions(def.options)}`
+					: undefined,
 	});
 }
 
@@ -274,6 +325,7 @@ function validateParentChild(
 	parentManifest: ComponentManifest,
 	child: ScreenNode,
 	childManifest: ComponentManifest,
+	pathOf: (node: ScreenNode) => string,
 	errors: ValidationIssue[],
 ): void {
 	if (
@@ -282,6 +334,7 @@ function validateParentChild(
 	) {
 		errors.push({
 			nodeId: child.id,
+			path: pathOf(child),
 			code: VALIDATION_CODES.PARENT_NOT_ALLOWED,
 			message: `Component "${child.component}" cannot be placed under "${parent.component}".`,
 			suggestion: `Allowed parents: ${childManifest.constraints.allowedParents.join(", ")}`,
@@ -293,11 +346,29 @@ function validateParentChild(
 	) {
 		errors.push({
 			nodeId: child.id,
+			path: pathOf(child),
 			code: VALIDATION_CODES.CHILD_NOT_ALLOWED,
 			message: `Component "${parent.component}" cannot contain "${child.component}".`,
 			suggestion: `Allowed children: ${parentManifest.constraints.allowedChildren.join(", ")}`,
 		});
 	}
+}
+
+// Node -> tree path, keyed by object identity so the location survives duplicated ids.
+// The path shape (`$.children[0]`) matches the implementation context's
+// StructureNode.path, so both outputs address a node the same way.
+function indexNodePaths(root: ScreenNode): Map<ScreenNode, string> {
+	const paths = new Map<ScreenNode, string>();
+	const visit = (node: ScreenNode, path: string): void => {
+		paths.set(node, path);
+		for (const [slotName, children] of Object.entries(node.slots)) {
+			children.forEach((child, index) => {
+				visit(child, `${path}.${slotName}[${index}]`);
+			});
+		}
+	};
+	visit(root, "$");
+	return paths;
 }
 
 // Builds a name -> id index of host components that share a name with a synthetic
@@ -350,25 +421,37 @@ export function validateScreen(
 	const shadowedSyntheticNames = indexShadowedSyntheticNames(registry);
 	const reportedShadowedNames = new Set<string>();
 	const nodes = walkNodes(screen.root);
+	const nodePaths = indexNodePaths(screen.root);
 
-	// Node ID duplication check.
-	const seen = new Set<string>();
+	// Node ID duplication check. Both colliding paths are named — the id alone can't say
+	// which of the two nodes to rename.
+	const seenPathById = new Map<string, string>();
 	for (const node of nodes) {
-		if (seen.has(node.id)) {
+		const path = nodePaths.get(node) ?? "$";
+		const firstPath = seenPathById.get(node.id);
+		if (firstPath !== undefined) {
 			errors.push({
 				nodeId: node.id,
+				path,
 				code: VALIDATION_CODES.DUPLICATE_NODE_ID,
-				message: `Node id "${node.id}" is used more than once.`,
+				message: `Node id "${node.id}" is used more than once (at ${firstPath} and ${path}).`,
 			});
+			continue;
 		}
-		seen.add(node.id);
+		seenPathById.set(node.id, path);
 	}
+
+	// Issues carry the path of the exact node they were raised on, keyed by object
+	// identity — resolving through nodeId would send every issue on a duplicated id
+	// to the first occurrence's path.
+	const pathOf = (node: ScreenNode): string => nodePaths.get(node) ?? "$";
 
 	for (const node of nodes) {
 		const manifest = manifests.get(node.component);
 		if (!manifest) {
 			errors.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.COMPONENT_NOT_FOUND,
 				message: `Component "${node.component}" is not registered.`,
 				suggestion: didYouMean(node.component, manifests.keys()),
@@ -384,6 +467,7 @@ export function validateScreen(
 				reportedShadowedNames.add(node.component);
 				warnings.push({
 					nodeId: node.id,
+					path: pathOf(node),
 					code: VALIDATION_CODES.SYNTHETIC_NAME_SHADOWED,
 					message: `Component "${node.component}" resolves to the synthetic primitive, but the registry also has a host component named "${node.component}".`,
 					suggestion: `Write the full id if you meant the host component: ${shadowedIds.join(", ")}`,
@@ -393,22 +477,34 @@ export function validateScreen(
 		if (manifest.constraints?.deprecated) {
 			warnings.push({
 				nodeId: node.id,
+				path: pathOf(node),
 				code: VALIDATION_CODES.DEPRECATED_COMPONENT,
 				message: `Component "${node.component}" is deprecated.`,
 			});
 		}
-		validateProps(node, manifest, errors, warnings);
-		validateSlots(node, manifest, errors, warnings);
+		validateProps(node, manifest, pathOf, errors, warnings);
+		validateSlots(node, manifest, pathOf, errors, warnings);
 
 		for (const children of Object.values(node.slots)) {
 			for (const child of children) {
 				const childManifest = manifests.get(child.component);
 				if (childManifest) {
-					validateParentChild(node, manifest, child, childManifest, errors);
+					validateParentChild(
+						node,
+						manifest,
+						child,
+						childManifest,
+						pathOf,
+						errors,
+					);
 				}
 			}
 		}
 	}
 
-	return { valid: errors.length === 0, errors, warnings };
+	return {
+		valid: errors.length === 0,
+		errors,
+		warnings,
+	};
 }

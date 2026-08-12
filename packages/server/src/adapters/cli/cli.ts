@@ -3,11 +3,13 @@ import { basename, dirname, join, resolve } from "node:path";
 import {
 	type ComponentManifest,
 	type ComponentRegistry,
+	ComposerError,
 	componentManifestSchema,
 	didYouMean,
 	parseComponentRegistry,
 	parseScreenDefinition,
 	parseScreenOperations,
+	SERVICE_CODES,
 	validateScreen,
 	withSyntheticComponents,
 } from "@yosegi/core";
@@ -117,6 +119,136 @@ function flagString(flags: CliFlags, key: string): string | undefined {
 function flagBoolean(flags: CliFlags, key: string): boolean {
 	const value = flags[key];
 	return value === true || value === "true";
+}
+
+// Every command and the flags it understands. parseArgs accepts any --flag, so without
+// this inventory a misspelled flag is silently dropped and the command runs as if it
+// were never passed — the worst failure mode for an agent, which then trusts the output.
+const COMMAND_FLAGS: Record<string, readonly string[]> = {
+	"registry build": [
+		"source",
+		"tsconfig",
+		"project-root",
+		"index",
+		"storybook-url",
+		"metadata",
+		"import-map",
+		"report",
+		"out",
+		"version",
+		"json",
+	],
+	"registry metadata": ["tsconfig", "project-root", "source", "out"],
+	"registry status": ["json"],
+	"component list": ["category", "query", "json", "quiet"],
+	"component inspect": ["json", "quiet"],
+	"screen list": [],
+	"screen pull": [],
+	"screen export": [],
+	"screen validate": [],
+	"screen push": [],
+	"screen apply": [],
+	"screen generate": [
+		"out",
+		"title",
+		"story-name",
+		"import-map",
+		"framework",
+		"meta-template",
+		"registry",
+	],
+	"screen context": [
+		"registry",
+		"import-map",
+		"route",
+		"preferred-path",
+		"out",
+	],
+	"story import": [
+		"registry",
+		"import-map",
+		"story-name",
+		"screen-id",
+		"screen-name",
+		"out",
+	],
+	mcp: [],
+};
+
+// Accepted by every command.
+const COMMON_FLAGS = ["data-dir"];
+
+// Synonyms the edit-distance matcher can't reach (--search is nowhere near --query).
+// Only suggested when the target flag exists on the command at hand.
+const FLAG_SYNONYMS: Record<string, string> = {
+	search: "query",
+	find: "query",
+	filter: "query",
+};
+
+// The uniform shape of a command-level failure: JSON with a code, never bare usage text,
+// so an agent parses the same contract everywhere. Usage stays reserved for --help.
+function commandError(
+	code: "MISSING_ARGUMENT" | "UNKNOWN_COMMAND" | "UNKNOWN_FLAG",
+	message: string,
+	extra: Record<string, unknown> = {},
+): number {
+	print({ error: { code, message, ...extra } });
+	return 1;
+}
+
+function missingArgument(command: string, message: string): number {
+	return commandError(
+		"MISSING_ARGUMENT",
+		`${message} Run "yosegi --help" for usage.`,
+		{ command },
+	);
+}
+
+function unknownCommand(command: string): number {
+	const names = Object.keys(COMMAND_FLAGS);
+	// A bare group ("yosegi registry") lists its subcommands outright; anything else
+	// falls back to fuzzy matching against the full command names.
+	const subcommands = names.filter((name) => name.startsWith(`${command} `));
+	const suggestion =
+		subcommands.length > 0
+			? `Did you mean: ${subcommands.join(", ")}?`
+			: didYouMean(command, names);
+	return commandError(
+		"UNKNOWN_COMMAND",
+		`Unknown command "${command}". Run "yosegi --help" for the command list.`,
+		suggestion ? { suggestion } : {},
+	);
+}
+
+// Rejects flags the command doesn't understand. Returns null when everything is known.
+function checkFlags(command: string, flags: CliFlags): number | null {
+	const known = [...(COMMAND_FLAGS[command] ?? []), ...COMMON_FLAGS];
+	const knownSet = new Set(known);
+	const unknown = Object.keys(flags).filter((name) => !knownSet.has(name));
+	if (unknown.length === 0) {
+		return null;
+	}
+	const first = unknown[0];
+	const synonym = FLAG_SYNONYMS[first];
+	const suggestion =
+		synonym && knownSet.has(synonym)
+			? `Did you mean: --${synonym}?`
+			: didYouMean(
+					`--${first}`,
+					known.map((name) => `--${name}`),
+				);
+	return commandError(
+		"UNKNOWN_FLAG",
+		`Unknown flag${unknown.length > 1 ? "s" : ""} ${unknown
+			.map((name) => `"--${name}"`)
+			.join(", ")} for "${command}".`,
+		{
+			command,
+			knownFlags: known.map((name) => `--${name}`).sort(),
+			...(suggestion ? { suggestion } : {}),
+		},
+	);
 }
 
 // The base directory used to resolve --source globs and component id module paths.
@@ -249,26 +381,22 @@ function inspectComponent(
 	flags: CliFlags,
 ): number {
 	const asJson = flagBoolean(flags, "json");
-	const knownIds = composer.components
-		.listComponents()
-		.map((manifest) => manifest.id);
 	let exitCode = 0;
 	const results: unknown[] = [];
 	const blocks: string[] = [];
 	for (const componentId of componentIds) {
-		const component = composer.components.getComponent(componentId);
-		if (!component) {
-			// Catch typos here, suggesting the closest existing id from the registry.
-			const suggestion = didYouMean(componentId, knownIds);
-			const error = {
-				error: `component "${componentId}" not found`,
-				suggestion: suggestion ?? null,
-			};
+		let component: ComponentManifest;
+		try {
+			// requireComponent owns the not-found representation (code + did-you-mean
+			// candidates), so the CLI reports the same error CLI/MCP/HTTP all share.
+			component = composer.components.requireComponent(componentId);
+		} catch (error) {
+			const { body } = toErrorResponse(error);
 			exitCode = 1;
 			if (asJson) {
-				results.push(error);
+				results.push(body);
 			} else {
-				blocks.push(JSON.stringify(error, null, 2));
+				blocks.push(JSON.stringify(body, null, 2));
 			}
 			continue;
 		}
@@ -307,14 +435,22 @@ function inspectComponent(
 
 // Write a Storybook Story (CSF) from a Screen Definition. Yosegi's final deliverable.
 async function generateStory(
-	screenFile: string,
+	screenFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
+	if (screenFile === undefined) {
+		return missingArgument(
+			"screen generate",
+			"screen generate requires a <screen.json> path.",
+		);
+	}
 	const out = flagString(flags, "out");
-	if (typeof screenFile !== "string" || out === undefined) {
-		print(usage());
-		return 1;
+	if (out === undefined) {
+		return missingArgument(
+			"screen generate",
+			"screen generate requires --out <file.stories.tsx>.",
+		);
 	}
 	const screen = parseScreenDefinition(
 		JSON.parse(await readFile(screenFile, "utf8")),
@@ -366,13 +502,16 @@ async function generateMetadata(
 	flags: CliFlags,
 ): Promise<number> {
 	if (componentIds.length === 0) {
-		print(usage());
-		return 1;
+		return missingArgument(
+			"registry metadata",
+			"registry metadata requires at least one <componentId>.",
+		);
 	}
 	// Both the glob and the id's module path are resolved with the same base as registry build.
 	const projectRoot = resolveProjectRoot(flags);
 	if (!projectRoot) {
-		throw new Error(
+		throw new ComposerError(
+			SERVICE_CODES.INVALID_ARGUMENT,
 			"registry metadata requires --tsconfig <path> or --project-root <dir> (the base for --source globs and for component id module paths).",
 		);
 	}
@@ -411,13 +550,15 @@ function defaultScreenId(file: string): string {
 // downstream flow (converting to an implementation). Anything that couldn't be interpreted
 // is recorded in warnings, and the tree is returned as far as it could be read.
 async function importStoryFile(
-	storyFile: string,
+	storyFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
-	if (typeof storyFile !== "string") {
-		print(usage());
-		return 1;
+	if (storyFile === undefined) {
+		return missingArgument(
+			"story import",
+			"story import requires a <file.stories.tsx> path.",
+		);
 	}
 	const registry = await loadEmitRegistry(flags, dataDir);
 	const importMap = flagString(flags, "import-map");
@@ -475,13 +616,15 @@ async function importStoryFile(
 // converting a Story (mock) into a real page. The output is machine-readable JSON, written
 // to stdout or to the --out file.
 async function screenContext(
-	screenFile: string,
+	screenFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
-	if (typeof screenFile !== "string") {
-		print(usage());
-		return 1;
+	if (screenFile === undefined) {
+		return missingArgument(
+			"screen context",
+			"screen context requires a <screen.json> path.",
+		);
 	}
 	const screen = parseScreenDefinition(
 		JSON.parse(await readFile(screenFile, "utf8")),
@@ -838,7 +981,12 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 	if (sources.length > 0) {
 		const tsconfigPath = flagString(flags, "tsconfig");
 		if (!tsconfigPath) {
-			throw new Error("--source requires --tsconfig <path>.");
+			// INVALID_ARGUMENT rather than a bare Error: the caller can fix the invocation,
+			// so it must not read as an internal failure.
+			throw new ComposerError(
+				SERVICE_CODES.INVALID_ARGUMENT,
+				"--source requires --tsconfig <path>.",
+			);
 		}
 		// The base for globs and ids. Defaults to the directory containing tsconfig (i.e.
 		// the host's package root) when unspecified.
@@ -870,15 +1018,14 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		});
 		const registry = withBuildProvenance(built, flags);
 		await writeFile(out, `${JSON.stringify(registry, null, "\t")}\n`);
-		print(
-			`Wrote ${registry.components.length} components to ${out} (version ${registry.version})`,
-		);
+		const warnings: string[] = [];
+		const hints: string[] = [];
 		// Even if the glob matched zero files, a registry made up of only synthetic
 		// primitives can still be written, so "Wrote 3 components" can look like a success.
 		// Without a flag here, work could start on a screen with no real components, so
 		// spell out the suspected misconfiguration explicitly.
 		if (stats.files === 0) {
-			print(
+			warnings.push(
 				`Warning: --source matched no files (--project-root: ${projectRoot}). Globs are relative to that directory.`,
 			);
 		}
@@ -886,7 +1033,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// exported a React component (a non-React project, or globs that only cover
 		// utilities). Only files: 0 warning would leave this case looking like a success.
 		if (stats.files > 0 && stats.componentCandidates === 0) {
-			print(
+			warnings.push(
 				`Warning: ${stats.files} files were read but no React component exports were found; check that the glob includes .tsx files and the project uses React.`,
 			);
 		}
@@ -895,23 +1042,22 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// propsUnreadable stays at 0. Gated on componentCandidates so a non-React project
 		// gets the warning above rather than both.
 		if (stats.componentCandidates > 0 && !reactTypesResolved) {
-			print(
+			warnings.push(
 				"Warning: React's type definitions did not resolve, so ReactNode props degrade to json and no slots are detected; check that the host's @types/react resolves through --tsconfig.",
 			);
 		}
 		// A --metadata id that matched nothing is almost certainly a typo. Dropping it
 		// silently would hide the reason the supplement had no effect, so name it explicitly.
 		if (unusedMetadataIds.length > 0) {
-			print(
+			warnings.push(
 				`Warning: these --metadata ids matched no component: ${unusedMetadataIds.join(", ")}`,
 			);
 		}
-		print(stats);
 		// Prop JSDoc is the single input that most improves registry quality, and only the
 		// host can write it. Even someone who doesn't pass --report should still learn
 		// there's a place to write it.
 		if (stats.withUndocumentedRequiredOpaqueProps > 0) {
-			print(
+			hints.push(
 				`Hint: ${stats.undocumentedRequiredOpaqueProps} required props across ${stats.withUndocumentedRequiredOpaqueProps} components take a value no literal can express and carry no description. Add JSDoc to them; --report <path> lists which.`,
 			);
 		}
@@ -919,7 +1065,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// pointer in the Registry at all, so this is worth surfacing even to someone who
 		// doesn't pass --report.
 		if (outsideSources.totalCount > 0) {
-			print(
+			hints.push(
 				`Hint: ${outsideSources.totalCount} host files are referenced by props but not covered by --source; see --report.`,
 			);
 		}
@@ -932,6 +1078,32 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 				reportPath,
 				`${JSON.stringify({ stats, missed, undocumented, outsideSources }, null, "\t")}\n`,
 			);
+		}
+		// --json folds everything — including the warnings and hints the text output
+		// interleaves — into one machine-readable object, so a caller doesn't have to
+		// parse a mixed text/JSON stream.
+		if (flagBoolean(flags, "json")) {
+			print({
+				out,
+				version: registry.version,
+				count: registry.components.length,
+				stats,
+				warnings,
+				hints,
+			});
+			return;
+		}
+		print(
+			`Wrote ${registry.components.length} components to ${out} (version ${registry.version})`,
+		);
+		for (const warning of warnings) {
+			print(warning);
+		}
+		print(stats);
+		for (const hint of hints) {
+			print(hint);
+		}
+		if (reportPath) {
 			print(`Wrote extraction report to ${reportPath}`);
 		}
 		return;
@@ -952,6 +1124,19 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		{ ...flags, index: indexPath },
 	);
 	await writeFile(out, `${JSON.stringify(registry, null, "\t")}\n`);
+	if (flagBoolean(flags, "json")) {
+		// The index-only path has no extraction statistics; stats is null rather than
+		// absent so the object's shape stays the same on both paths.
+		print({
+			out,
+			version: registry.version,
+			count: registry.components.length,
+			stats: null,
+			warnings: [],
+			hints: [],
+		});
+		return;
+	}
 	print(
 		`Wrote ${registry.components.length} components to ${out} (version ${registry.version})`,
 	);
@@ -959,9 +1144,43 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 
 // The CLI itself: a thin Adapter that just calls the shared Application Service.
 export async function runCli(argv: string[]): Promise<number> {
+	// Help was asked for, so usage exits 0 — unlike an error, where usage never appears
+	// and a coded JSON error does. Checked on the raw argv because parseArgs would fold
+	// "--help <next token>" into a flag value and read "-h" as a positional.
+	if (argv.includes("--help") || argv.includes("-h")) {
+		print(usage());
+		return 0;
+	}
 	const { positionals, flags } = parseArgs(argv);
 	const [group, action, ...rest] = positionals;
 	const dataDir = flagString(flags, "data-dir") ?? DEFAULT_DATA_DIR;
+
+	if (positionals.length === 0) {
+		// Only a bare "yosegi --version" reaches here — with a command present, --version
+		// keeps its registry build meaning (the registry's version ref).
+		if (flagBoolean(flags, "version")) {
+			print({ version: yosegiVersion(), cliPath: yosegiCliPath() });
+			return 0;
+		}
+		// A bare "yosegi" prints the command list, like --help, but exits 1: nothing was done.
+		print(usage());
+		return 1;
+	}
+
+	// "mcp" is the one group-only command; everything else is "<group> <action>".
+	const command =
+		group === "mcp"
+			? "mcp"
+			: action === undefined
+				? group
+				: `${group} ${action}`;
+	if (COMMAND_FLAGS[command] === undefined) {
+		return unknownCommand(command);
+	}
+	const flagFailure = checkFlags(command, flags);
+	if (flagFailure !== null) {
+		return flagFailure;
+	}
 
 	try {
 		// The MCP server doesn't return until the connection closes. The import is kept
@@ -993,8 +1212,10 @@ export async function runCli(argv: string[]): Promise<number> {
 			}
 			if (action === "inspect") {
 				if (rest.length === 0) {
-					print(usage());
-					return 1;
+					return missingArgument(
+						"component inspect",
+						"component inspect requires at least one <componentId>.",
+					);
 				}
 				return inspectComponent(composer, rest, flags);
 			}
@@ -1016,6 +1237,30 @@ export async function runCli(argv: string[]): Promise<number> {
 		}
 
 		if (group === "screen") {
+			// Store commands address a screen by id (or a file by path); reject a missing
+			// one before touching the store, so the error names the argument rather than
+			// surfacing as a downstream read failure.
+			if (
+				(action === "pull" ||
+					action === "export" ||
+					action === "validate" ||
+					action === "push" ||
+					action === "apply") &&
+				rest[0] === undefined
+			) {
+				return missingArgument(
+					`screen ${action}`,
+					action === "push"
+						? "screen push requires a <file.json> path."
+						: `screen ${action} requires a <screenId>.`,
+				);
+			}
+			if (action === "apply" && rest[1] === undefined) {
+				return missingArgument(
+					"screen apply",
+					"screen apply requires an <operations.json> path.",
+				);
+			}
 			const composer = await makeComposer(dataDir);
 			switch (action) {
 				case "list":
@@ -1068,10 +1313,13 @@ export async function runCli(argv: string[]): Promise<number> {
 			}
 		}
 
-		print(usage());
-		return 1;
+		// Unreachable while COMMAND_FLAGS and the dispatch above stay in step; kept so a
+		// drift between them still fails with the shared contract instead of hanging.
+		return unknownCommand(command);
 	} catch (error) {
-		const { body } = toErrorResponse(error);
+		// The CLI's payloads come from files, so schema/JSON failures must not talk
+		// about a "request".
+		const { body } = toErrorResponse(error, { payloadSource: "file" });
 		print(body);
 		return 1;
 	}
@@ -1143,5 +1391,8 @@ function usage(): string {
 		"      Register it with: claude mcp add yosegi -- npx yosegi mcp",
 		"",
 		"  common: --data-dir <dir>",
+		"",
+		"  --help / -h   Print this list and exit 0.",
+		'  --version     Print { "version", "cliPath" } as JSON and exit 0.',
 	].join("\n");
 }

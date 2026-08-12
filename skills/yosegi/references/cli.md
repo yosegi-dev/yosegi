@@ -47,11 +47,16 @@ user.
 - `--data-dir <dir>` is where the working data lives (default: `.yosegi` under the current
   directory, so it moves with your cwd). **Pass the same value to every command.** Writing
   `registry build`'s output to one location and then passing a different `--data-dir` to
-  `component list` produces "Registry not found". The directory is created if it does not exist.
+  `component list` produces `REGISTRY_NOT_FOUND` (its `path` / `dataDir` fields name the location
+  that was actually consulted). The directory is created if it does not exist.
 - Repeatable flags (`--source`) also accept comma-separated values.
 - **Always quote globs.** `--source app/components/**/*.tsx` is expanded by the shell first and only
   one file reaches the CLI. Write `--source "app/components/**/*.tsx"`.
-- Output is JSON on stdout unless stated otherwise. Errors return exit code 1.
+- Output is JSON on stdout unless stated otherwise. Errors are JSON carrying `error.code` and exit
+  code 1 (`errors.md`): an unknown command or flag is rejected with the nearest candidates
+  (`UNKNOWN_COMMAND` / `UNKNOWN_FLAG` — a misspelled flag is never silently ignored), and a missing
+  required argument returns `MISSING_ARGUMENT`. Usage text only appears via `--help` (`-h`, exit 0);
+  `--version` prints `{ "version", "cliPath" }` with exit 0.
 
 ## `registry build`
 
@@ -82,6 +87,7 @@ to you exactly.
 | `--report <path>` | Writes `{ stats, missed, undocumented }`. In `missed`, `reason: "props-unreadable"` marks the components `--metadata` exists for and `reason: "unnamed-default"` an anonymous `export default` that has no name to use as an id. `undocumented` lists the props worth writing JSDoc on, ranked |
 | `--out <path>` | Overrides the output path (default: `<data-dir>/registry.json`) |
 | `--version <ref>` | Overrides the registry version string |
+| `--json` | Returns `{ out, version, count, stats, warnings, hints }` as one object instead of the mixed text output (`stats` is `null` on the `--index`-only path). The warnings below still appear, inside `warnings` |
 
 Points that decide whether the result is usable:
 
@@ -334,8 +340,10 @@ claude mcp add yosegi -- npx yosegi mcp
 
 | MCP tool | Arguments | CLI equivalent |
 | --- | --- | --- |
-| `search_components` | `query`, `category` | `component list --query --category` |
-| `get_component` | `componentId` | `component inspect` |
+| `search_components` | `query`, `category`, `detail`, `limit` | `component list --query --category` — returns summaries capped at `limit` (default 50, max 200) with `total` / `truncated`; `detail: "full"` returns complete manifests |
+| `get_component` | `componentId` | `component inspect` — an unknown id returns `COMPONENT_NOT_FOUND` with the same did-you-mean `suggestion` |
+| `list_categories` | — | the `categories` field of `component list --json` |
+| `get_registry_status` | — | `registry status`, provenance only: it reports version / build time / inputs and the version-mismatch warning, but does not recompute source drift |
 | `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework` | `screen generate` — but it writes no file and returns the CSF source as a string, so the caller decides where it goes |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
@@ -353,6 +361,8 @@ Two differences from the CLI are easy to get wrong:
 
 `generate_implementation_context` takes a `screenId`, so the screen has to be in the store first
 (`create_screen`). Building the registry (`registry build`), scaffolding metadata
-(`registry metadata`), and reading a Story back (`story import`) are CLI-only, and there is no MCP
-equivalent of `--meta-template`: a Story generated over MCP carries a bare `title` meta, so add the
-host's meta conventions to the source before saving it.
+(`registry metadata`), reading a Story back (`story import`), and the source-drift recompute half of
+`registry status` are CLI-only, and there is no MCP equivalent of `--meta-template`: a Story
+generated over MCP carries a bare `title` meta, so add the host's meta conventions to the source
+before saving it. The CLI's stderr warning about a registry built by a different Yosegi version
+reaches MCP too, as the `warning` field of `get_registry_status`.

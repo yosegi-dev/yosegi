@@ -576,7 +576,9 @@ describe("runCli", () => {
 		expect(await Bun.file(outFile).exists()).toBe(false);
 	});
 
-	it("screen generate は --out 無しで usage を表示し exit 1", async () => {
+	// A missing required argument is a coded JSON error, not a usage dump — usage stays
+	// reserved for --help.
+	it("screen generate は --out 無しで MISSING_ARGUMENT を返す", async () => {
 		const screenFile = join(dataDir, "screen.json");
 		await writeFile(screenFile, JSON.stringify(sampleScreen()));
 		const code = await runCli([
@@ -587,7 +589,30 @@ describe("runCli", () => {
 			dataDir,
 		]);
 		expect(code).toBe(1);
-		expect(output()).toContain("Yosegi CLI");
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; message: string; command: string };
+		};
+		expect(parsed.error.code).toBe("MISSING_ARGUMENT");
+		expect(parsed.error.command).toBe("screen generate");
+		expect(parsed.error.message).toContain("--out");
+		expect(output()).not.toContain("Yosegi CLI");
+	});
+
+	it("component inspect は id 無しで MISSING_ARGUMENT を返す", async () => {
+		const code = await runCli(["component", "inspect", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; command: string };
+		};
+		expect(parsed.error.code).toBe("MISSING_ARGUMENT");
+		expect(parsed.error.command).toBe("component inspect");
+	});
+
+	it("screen pull は screenId 無しで MISSING_ARGUMENT を返す", async () => {
+		const code = await runCli(["screen", "pull", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		expect(output()).toContain("MISSING_ARGUMENT");
+		expect(output()).toContain("screenId");
 	});
 
 	it("screen context は import 文・結線タスク・構造サマリを返す", async () => {
@@ -1410,7 +1435,165 @@ describe("runCli", () => {
 		expect(output()).toContain('"anyShapedProps": 2');
 	});
 
-	it("registry build --source は --tsconfig 無しだとエラーになる", async () => {
+	// The degradation warnings must ride inside the JSON object; a warning line printed
+	// before it would make the output unparseable as one document.
+	it("registry build --json は劣化警告も単一 JSON に畳み込む", async () => {
+		const hostRoot = join(dataDir, "nonreact-host-json");
+		await mkdir(join(hostRoot, "src"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["src"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "src", "util.ts"),
+			"export function formatLabel(label: string): string {\n\treturn label.trim();\n}\n",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"src/**/*.ts",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--json",
+			"--data-dir",
+			join(dataDir, "nonreact-json-data"),
+		]);
+		expect(code).toBe(0);
+		// Parseable as one document — nothing printed outside the object.
+		const parsed = JSON.parse(output()) as { warnings: string[] };
+		expect(parsed.warnings.join("\n")).toContain(
+			"no React component exports were found",
+		);
+	});
+
+	it("registry build --json は @types/react の警告も単一 JSON に畳み込む", async () => {
+		const hostRoot = join(dataDir, "no-react-types-json-host");
+		await mkdir(join(hostRoot, "components"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["components"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "components", "button.tsx"),
+			[
+				'import type { ReactNode } from "react";',
+				"export type ButtonProps = { icon?: ReactNode; children?: ReactNode };",
+				"export function Button({ children }: ButtonProps) {",
+				"\treturn <button>{children}</button>;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"components/**/*.tsx",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--json",
+			"--data-dir",
+			join(dataDir, "no-react-types-json-data"),
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as { warnings: string[] };
+		expect(parsed.warnings.join("\n")).toContain(
+			"@types/react resolves through --tsconfig",
+		);
+	});
+
+	// --json folds the text output's mixed stream (Wrote line / warnings / stats / hints)
+	// into one machine-readable object.
+	it("registry build --json は結果を単一の JSON オブジェクトで返す", async () => {
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const outFile = join(dataDir, "json-registry.json");
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"nowhere/**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--out",
+			outFile,
+			"--json",
+			"--data-dir",
+			join(dataDir, "empty"),
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			out: string;
+			version: string;
+			count: number;
+			stats: { files: number };
+			warnings: string[];
+			hints: string[];
+		};
+		expect(parsed.out).toBe(outFile);
+		expect(parsed.count).toBeGreaterThan(0);
+		expect(parsed.stats.files).toBe(0);
+		expect(parsed.warnings.join("\n")).toContain("--source matched no files");
+		expect(output()).not.toContain("Wrote ");
+	});
+
+	it("registry build --json は --index 単独でも同じ形で返す", async () => {
+		const indexFile = join(dataDir, "json-index.json");
+		await writeFile(
+			indexFile,
+			JSON.stringify({
+				v: 5,
+				entries: {
+					"components-badge--default": {
+						type: "story",
+						id: "components-badge--default",
+						name: "Default",
+						title: "Components/Badge",
+						importPath: "./badge.stories.tsx",
+					},
+				},
+			}),
+		);
+		const outFile = join(dataDir, "json-index-registry.json");
+		const code = await runCli([
+			"registry",
+			"build",
+			"--index",
+			indexFile,
+			"--out",
+			outFile,
+			"--json",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			out: string;
+			count: number;
+			stats: null;
+			warnings: string[];
+			hints: string[];
+		};
+		expect(parsed.out).toBe(outFile);
+		expect(parsed.count).toBeGreaterThan(0);
+		// The index-only path has no extraction statistics.
+		expect(parsed.stats).toBe(null);
+	});
+
+	// A fixable invocation must not read as an internal failure.
+	it("registry build --source は --tsconfig 無しだと INVALID_ARGUMENT になる", async () => {
 		const code = await runCli([
 			"registry",
 			"build",
@@ -1421,6 +1604,53 @@ describe("runCli", () => {
 		]);
 		expect(code).toBe(1);
 		expect(output()).toContain("--tsconfig");
+		expect(output()).toContain("INVALID_ARGUMENT");
+		expect(output()).not.toContain("INTERNAL_ERROR");
+	});
+
+	// The structured path / dataDir let an agent see which --data-dir was consulted
+	// without parsing the message.
+	it("registry が無ければ REGISTRY_NOT_FOUND と path / dataDir を返す", async () => {
+		const emptyDir = join(dataDir, "empty");
+		const code = await runCli(["component", "list", "--data-dir", emptyDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; path: string; dataDir: string };
+		};
+		expect(parsed.error.code).toBe("REGISTRY_NOT_FOUND");
+		expect(parsed.error.path).toBe(join(emptyDir, "registry.json"));
+		expect(parsed.error.dataDir).toBe(emptyDir);
+	});
+
+	it("component inspect の未登録 id は COMPONENT_NOT_FOUND を返す", async () => {
+		const code = await runCli([
+			"component",
+			"inspect",
+			"Nope",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("COMPONENT_NOT_FOUND");
+	});
+
+	// The CLI's payloads are files: "Request payload" wording would point the reader
+	// at a request that doesn't exist.
+	it("スキーマ違反のファイルは Input file の文言で INVALID_REQUEST になる", async () => {
+		const screenFile = join(dataDir, "bad.json");
+		await writeFile(screenFile, JSON.stringify({ schemaVersion: "1.0" }));
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			join(dataDir, "out.stories.tsx"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("INVALID_REQUEST");
+		expect(output()).toContain("Input file failed schema validation.");
 	});
 
 	// Components whose props can't be read from types can only be supplemented via
@@ -1628,16 +1858,116 @@ export default meta;
 		expect(output()).toContain('Ignored "title" from the meta template');
 	});
 
-	it("未知のコマンドは usage を表示し exit 1", async () => {
-		const code = await runCli(["bogus", "--data-dir", dataDir]);
+	it("未知のコマンドは UNKNOWN_COMMAND と候補を返す", async () => {
+		const code = await runCli(["compnent", "list", "--data-dir", dataDir]);
 		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_COMMAND");
+		expect(parsed.error.suggestion).toContain("component list");
+		expect(output()).not.toContain("Yosegi CLI");
+	});
+
+	// A bare group is answered with that group's subcommands, not a fuzzy guess.
+	it("サブコマンド無しの group はその group の候補を返す", async () => {
+		const code = await runCli(["registry", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_COMMAND");
+		expect(parsed.error.suggestion).toContain("registry build");
+		expect(parsed.error.suggestion).toContain("registry status");
+	});
+
+	// A misspelled flag used to be silently dropped, and the command ran as if it were
+	// never passed — the worst failure mode for an agent, which then trusts the output.
+	it("未知のフラグは UNKNOWN_FLAG と候補を返す", async () => {
+		const code = await runCli(["component", "list", "--datadir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: {
+				code: string;
+				command: string;
+				knownFlags: string[];
+				suggestion?: string;
+			};
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_FLAG");
+		expect(parsed.error.command).toBe("component list");
+		expect(parsed.error.suggestion).toBe("Did you mean: --data-dir?");
+		expect(parsed.error.knownFlags).toContain("--query");
+	});
+
+	// --search is nowhere near --query by edit distance, so it comes from the synonym table.
+	it("--search には --query を候補として返す", async () => {
+		const code = await runCli([
+			"component",
+			"list",
+			"--search",
+			"button",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_FLAG");
+		expect(parsed.error.suggestion).toBe("Did you mean: --query?");
+	});
+
+	it("--help は usage を表示し exit 0", async () => {
+		const code = await runCli(["--help"]);
+		expect(code).toBe(0);
+		expect(output()).toContain("Yosegi CLI");
+		expect(output()).toContain("  mcp");
+		expect(output()).toContain("claude mcp add yosegi -- npx yosegi mcp");
+	});
+
+	it("-h も usage を表示し exit 0", async () => {
+		const code = await runCli(["-h"]);
+		expect(code).toBe(0);
 		expect(output()).toContain("Yosegi CLI");
 	});
 
-	it("usage に mcp サブコマンドが載っている", async () => {
-		await runCli(["bogus", "--data-dir", dataDir]);
-		expect(output()).toContain("  mcp");
-		expect(output()).toContain("claude mcp add yosegi -- npx yosegi mcp");
+	it("--version は version と cliPath を JSON で返し exit 0", async () => {
+		const code = await runCli(["--version"]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as { version: string; cliPath: string };
+		expect(parsed.version).toBe(yosegiVersion());
+		expect(parsed.cliPath).toBe(yosegiCliPath());
+	});
+
+	// With a command present, --version keeps its registry build meaning (a version ref).
+	it("registry build の --version はこれまでどおり版の指定として扱う", async () => {
+		const indexFile = join(dataDir, "index.json");
+		await writeFile(indexFile, JSON.stringify({ v: 5, entries: {} }));
+		const out = join(dataDir, "versioned.json");
+		const code = await runCli([
+			"registry",
+			"build",
+			"--index",
+			indexFile,
+			"--out",
+			out,
+			"--version",
+			"ref:custom",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		const written = JSON.parse(await Bun.file(out).text()) as {
+			version: string;
+		};
+		expect(written.version).toBe("ref:custom");
+	});
+
+	it("引数なしは usage を表示し exit 1", async () => {
+		const code = await runCli([]);
+		expect(code).toBe(1);
+		expect(output()).toContain("Yosegi CLI");
 	});
 });
 
