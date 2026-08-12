@@ -1033,7 +1033,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// exported a React component (a non-React project, or globs that only cover
 		// utilities). Only files: 0 warning would leave this case looking like a success.
 		if (stats.files > 0 && stats.componentCandidates === 0) {
-			print(
+			warnings.push(
 				`Warning: ${stats.files} files were read but no React component exports were found; check that the glob includes .tsx files and the project uses React.`,
 			);
 		}
@@ -1042,7 +1042,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// propsUnreadable stays at 0. Gated on componentCandidates so a non-React project
 		// gets the warning above rather than both.
 		if (stats.componentCandidates > 0 && !reactTypesResolved) {
-			print(
+			warnings.push(
 				"Warning: React's type definitions did not resolve, so ReactNode props degrade to json and no slots are detected; check that the host's @types/react resolves through --tsconfig.",
 			);
 		}

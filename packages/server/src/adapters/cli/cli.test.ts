@@ -1435,6 +1435,80 @@ describe("runCli", () => {
 		expect(output()).toContain('"anyShapedProps": 2');
 	});
 
+	// The degradation warnings must ride inside the JSON object; a warning line printed
+	// before it would make the output unparseable as one document.
+	it("registry build --json は劣化警告も単一 JSON に畳み込む", async () => {
+		const hostRoot = join(dataDir, "nonreact-host-json");
+		await mkdir(join(hostRoot, "src"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["src"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "src", "util.ts"),
+			"export function formatLabel(label: string): string {\n\treturn label.trim();\n}\n",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"src/**/*.ts",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--json",
+			"--data-dir",
+			join(dataDir, "nonreact-json-data"),
+		]);
+		expect(code).toBe(0);
+		// Parseable as one document — nothing printed outside the object.
+		const parsed = JSON.parse(output()) as { warnings: string[] };
+		expect(parsed.warnings.join("\n")).toContain(
+			"no React component exports were found",
+		);
+	});
+
+	it("registry build --json は @types/react の警告も単一 JSON に畳み込む", async () => {
+		const hostRoot = join(dataDir, "no-react-types-json-host");
+		await mkdir(join(hostRoot, "components"), { recursive: true });
+		await writeFile(
+			join(hostRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["components"],
+			}),
+		);
+		await writeFile(
+			join(hostRoot, "components", "button.tsx"),
+			[
+				'import type { ReactNode } from "react";',
+				"export type ButtonProps = { icon?: ReactNode; children?: ReactNode };",
+				"export function Button({ children }: ButtonProps) {",
+				"\treturn <button>{children}</button>;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"components/**/*.tsx",
+			"--tsconfig",
+			join(hostRoot, "tsconfig.json"),
+			"--json",
+			"--data-dir",
+			join(dataDir, "no-react-types-json-data"),
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as { warnings: string[] };
+		expect(parsed.warnings.join("\n")).toContain(
+			"@types/react resolves through --tsconfig",
+		);
+	});
+
 	// --json folds the text output's mixed stream (Wrote line / warnings / stats / hints)
 	// into one machine-readable object.
 	it("registry build --json は結果を単一の JSON オブジェクトで返す", async () => {
