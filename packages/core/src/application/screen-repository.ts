@@ -7,6 +7,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { ZodError } from "zod";
 import {
 	ComposerError,
 	RevisionConflictError,
@@ -25,10 +26,24 @@ export type ScreenSummary = {
 	updatedAt: string | null;
 };
 
+// An entry under the storage location that list() could not turn into a summary. One
+// broken file must not take the whole listing down, but silently dropping it would
+// hide the problem — the reason travels back with the summaries instead.
+export type ScreenListWarning = {
+	// The storage entry, e.g. a file name for the file-backed repository.
+	file: string;
+	message: string;
+};
+
+export type ScreenList = {
+	screens: ScreenSummary[];
+	warnings: ScreenListWarning[];
+};
+
 // Abstracts persistence of the Screen Definition. A boundary that keeps storage-specific
 // types out of the Application Service. The initial implementation provides local JSON files / in-memory.
 export interface ScreenRepository {
-	list(): Promise<ScreenSummary[]>;
+	list(): Promise<ScreenList>;
 	get(id: string): Promise<ScreenDefinition | null>;
 	// Creates a new one. SCREEN_ALREADY_EXISTS if it already exists.
 	create(screen: ScreenDefinition): Promise<ScreenDefinition>;
@@ -42,6 +57,18 @@ export interface ScreenRepository {
 	): Promise<ScreenDefinition>;
 	delete(id: string): Promise<void>;
 	exists(id: string): Promise<boolean>;
+}
+
+// One line naming what to inspect. A ZodError's full issue list spans pages of JSON,
+// which would drown the listing it is attached to.
+function readFailureReason(error: unknown): string {
+	if (error instanceof SyntaxError) {
+		return "the file is not valid JSON";
+	}
+	if (error instanceof ZodError) {
+		return "the contents are not a valid Screen Definition";
+	}
+	return error instanceof Error ? error.message : String(error);
 }
 
 function toSummary(
@@ -61,8 +88,13 @@ function toSummary(
 export class InMemoryScreenRepository implements ScreenRepository {
 	private readonly store = new Map<string, ScreenDefinition>();
 
-	async list(): Promise<ScreenSummary[]> {
-		return [...this.store.values()].map((screen) => toSummary(screen, null));
+	async list(): Promise<ScreenList> {
+		return {
+			screens: [...this.store.values()].map((screen) =>
+				toSummary(screen, null),
+			),
+			warnings: [],
+		};
 	}
 
 	async get(id: string): Promise<ScreenDefinition | null> {
@@ -150,17 +182,40 @@ export class FileScreenRepository implements ScreenRepository {
 		await mkdir(this.dir, { recursive: true });
 	}
 
-	async list(): Promise<ScreenSummary[]> {
+	async list(): Promise<ScreenList> {
 		await this.ensureDir();
 		const files = (await readdir(this.dir)).filter((f) => f.endsWith(".json"));
-		const summaries: ScreenSummary[] = [];
+		const screens: ScreenSummary[] = [];
+		const warnings: ScreenListWarning[] = [];
 		for (const file of files) {
-			const raw = await readFile(join(this.dir, file), "utf8");
-			const screen = parseScreenDefinition(JSON.parse(raw));
+			let screen: ScreenDefinition;
+			try {
+				const raw = await readFile(join(this.dir, file), "utf8");
+				screen = parseScreenDefinition(JSON.parse(raw));
+			} catch (error) {
+				warnings.push({
+					file,
+					message: `Skipped "${file}": ${readFailureReason(error)}.`,
+				});
+				continue;
+			}
+			// get() resolves a screen by "<id>.json", so a file whose stored id differs
+			// from its name would be listed but could never be opened. Excluded with a
+			// warning rather than surfacing an id the caller cannot use.
+			if (`${screen.id}.json` !== file) {
+				warnings.push({
+					file,
+					message: `Skipped "${file}": it contains screen id "${screen.id}", which is loaded from "${screen.id}.json". Rename the file to match.`,
+				});
+				continue;
+			}
 			const info = await stat(join(this.dir, file));
-			summaries.push(toSummary(screen, info.mtime.toISOString()));
+			screens.push(toSummary(screen, info.mtime.toISOString()));
 		}
-		return summaries.sort((a, b) => a.id.localeCompare(b.id));
+		return {
+			screens: screens.sort((a, b) => a.id.localeCompare(b.id)),
+			warnings,
+		};
 	}
 
 	async get(id: string): Promise<ScreenDefinition | null> {

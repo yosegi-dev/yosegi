@@ -101,9 +101,10 @@ export function createHttpApp(
 		return c.json(component);
 	});
 
-	// Screens
+	// Screens. listScreens already returns { screens, warnings }, so the body is
+	// passed through — wrapping it again would nest "screens" twice.
 	app.get("/api/screens", async (c) =>
-		c.json({ screens: await composer.screens.listScreens() }),
+		c.json(await composer.screens.listScreens()),
 	);
 
 	app.get("/api/screens/:screenId", async (c) => {

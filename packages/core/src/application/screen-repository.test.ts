@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SERVICE_CODES } from "../domain/errors.ts";
@@ -35,7 +35,8 @@ for (const [label, make] of [
 			await repo.create(sampleScreen());
 			expect((await repo.get("customer-list"))?.name).toBe("Customer list");
 			const list = await repo.list();
-			expect(list.map((s) => s.id)).toContain("customer-list");
+			expect(list.screens.map((s) => s.id)).toContain("customer-list");
+			expect(list.warnings).toEqual([]);
 			await repo.delete("customer-list");
 			expect(await repo.exists("customer-list")).toBe(false);
 		});
@@ -141,5 +142,56 @@ describe("FileScreenRepository: 保存先の外を指す id", () => {
 			.create({ ...sampleScreen(), id: "../escaped" })
 			.catch(() => undefined);
 		expect(existsSync(join(dir, "escaped.json"))).toBe(false);
+	});
+});
+
+// One unreadable file must not take the whole listing down — list() used to throw on
+// the first file that failed to parse, hiding every healthy screen with it.
+describe("FileScreenRepository: 読めないファイルの混入", () => {
+	async function repoWithSample(): Promise<{
+		dir: string;
+		repo: FileScreenRepository;
+	}> {
+		const dir = await mkdtemp(join(tmpdir(), "vc-repo-"));
+		tempDirs.push(dir);
+		const repo = new FileScreenRepository(dir);
+		await repo.create(sampleScreen());
+		return { dir, repo };
+	}
+
+	it("JSON として壊れたファイルは警告付きでスキップする", async () => {
+		const { dir, repo } = await repoWithSample();
+		await writeFile(join(dir, "broken.json"), "{ not json");
+		const list = await repo.list();
+		expect(list.screens.map((s) => s.id)).toEqual(["customer-list"]);
+		expect(list.warnings).toHaveLength(1);
+		expect(list.warnings[0].file).toBe("broken.json");
+		expect(list.warnings[0].message).toContain("not valid JSON");
+	});
+
+	it("Screen Definition として不正なファイルは警告付きでスキップする", async () => {
+		const { dir, repo } = await repoWithSample();
+		await writeFile(join(dir, "notes.json"), '{"hello":"world"}');
+		const list = await repo.list();
+		expect(list.screens.map((s) => s.id)).toEqual(["customer-list"]);
+		expect(list.warnings).toHaveLength(1);
+		expect(list.warnings[0].file).toBe("notes.json");
+		expect(list.warnings[0].message).toContain("Screen Definition");
+	});
+
+	// get() resolves by "<id>.json", so a file whose stored id differs from its name
+	// used to be listed under an id that could never be opened.
+	it("ファイル名と id が食い違うファイルは警告付きで除外する", async () => {
+		const { dir, repo } = await repoWithSample();
+		await writeFile(
+			join(dir, "alpha.json"),
+			JSON.stringify({ ...sampleScreen(), id: "beta" }),
+		);
+		const list = await repo.list();
+		expect(list.screens.map((s) => s.id)).toEqual(["customer-list"]);
+		expect(list.warnings).toHaveLength(1);
+		expect(list.warnings[0].file).toBe("alpha.json");
+		expect(list.warnings[0].message).toContain('"beta"');
+		expect(await repo.get("beta")).toBe(null);
 	});
 });
