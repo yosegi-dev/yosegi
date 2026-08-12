@@ -125,6 +125,7 @@ shape is only decided at runtime cannot be read**.
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box`, but the tag name is lost |
 | `SPREAD_ATTRIBUTE` | `{...args}` cannot be expanded |
+| `INTENT_NOT_APPLIED` | A `TODO(yosegi)` intent comment had no single element to attach to (it preceded several siblings), so its `bindings` / `events` were dropped. Re-declare them on the right node |
 | `COMPONENT_NOT_RESOLVED` | The import statement does not lead to a registry id. The node keeps its local name, so validation will offer candidates |
 | `COMPONENT_AMBIGUOUS` | Several registry entries share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |

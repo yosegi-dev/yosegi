@@ -159,6 +159,7 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 | `OPAQUE_PROP` | prop の値が読めない（変数参照など）。その prop だけが落ちる |
 | `OPAQUE_ELEMENT` | 対応する合成プリミティブが無い DOM タグ。`Box` として残るがタグ名は失われる |
 | `SPREAD_ATTRIBUTE` | `{...args}` は展開できない |
+| `INTENT_NOT_APPLIED` | intent コメントの直後に兄弟要素が複数あり、`bindings`・`events` を付ける先を決められず落ちた |
 | `COMPONENT_NOT_RESOLVED` | import 文から Registry の id へ辿れない。ノードはローカル名のまま残るので、検証が候補を出す |
 | `COMPONENT_AMBIGUOUS` | 同じ export 名の候補が複数ある。`--import-map` で絞る |
 | `IMPORT_PATH_MISMATCH` | export 名は一致するが import 元が Registry と違う。Registry が古い可能性 |

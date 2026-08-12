@@ -166,6 +166,7 @@ warning is absent from the Screen JSON**, so read the original Story for those p
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box` but the tag name is lost |
 | `SPREAD_ATTRIBUTE` | `{...args}` cannot be expanded |
+| `INTENT_NOT_APPLIED` | An intent comment preceded several siblings, so its `bindings` / `events` had no single element to attach to and were dropped |
 | `COMPONENT_NOT_RESOLVED` | The import statement does not lead to a registry id. The node keeps its local name, so validation will offer candidates |
 | `COMPONENT_AMBIGUOUS` | Several candidates share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |
