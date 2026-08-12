@@ -732,6 +732,22 @@ describe("buildImportMapResolver", () => {
 			'Invalid import map entry "./app". Expected "<from>=<to>".',
 		);
 	});
+
+	// A prefix must only match on a path-segment boundary — "./app" rewriting
+	// "./application/x" to "~lication/x" corrupts the specifier.
+	it("パス境界のないプレフィックス一致はしない", () => {
+		const resolve = buildImportMapResolver("./app=~");
+		expect(resolve("./application/x")).toBe("./application/x");
+		expect(resolve("./apple/x")).toBe("./apple/x");
+		expect(resolve("./app/x")).toBe("~/x");
+		expect(resolve("./app")).toBe("~");
+	});
+
+	it("スラッシュで終わる from はそのまま境界になる", () => {
+		const resolve = buildImportMapResolver("./app/=~/");
+		expect(resolve("./app/x")).toBe("~/x");
+		expect(resolve("./application/x")).toBe("./application/x");
+	});
 });
 
 describe("emitCsf の default export", () => {

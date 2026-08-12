@@ -110,8 +110,16 @@ export function buildImportMapResolver(
 		// For containment relationships like "./app" vs "./app/ui", let the more specific one win.
 		.sort((a, b) => b.from.length - a.from.length);
 
+	// A bare startsWith would let "./app" swallow "./application/x" and rewrite it to
+	// "~lication/x", so a rule only matches on a whole path segment: an exact match,
+	// or a prefix followed by "/". A rule already ending in "/" carries its own boundary.
+	const matches = (packageName: string, from: string): boolean =>
+		from.endsWith("/")
+			? packageName.startsWith(from)
+			: packageName === from || packageName.startsWith(`${from}/`);
+
 	return (packageName) => {
-		const rule = rules.find((r) => packageName.startsWith(r.from));
+		const rule = rules.find((r) => matches(packageName, r.from));
 		return rule
 			? `${rule.to}${packageName.slice(rule.from.length)}`
 			: packageName;
