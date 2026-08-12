@@ -772,7 +772,7 @@ describe("runCli", () => {
 		expect(importCode).toBe(0);
 		expect(output()).toContain('"warnings": []');
 		const restored = JSON.parse(await Bun.file(restoredFile).text()) as {
-			fixtures?: Record<string, unknown>;
+			fixtures: Record<string, unknown>;
 		};
 		expect(restored.fixtures).toEqual({
 			customers: [{ name: "Sato" }, { name: "Suzuki" }],
