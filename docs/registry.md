@@ -34,7 +34,8 @@ at the other) as the takeaway, not a number to expect from any specific host.
 ## Three sources, three roles
 
 - **TypeScript types are the truth about a component.** props, slots, and imports are derived from
-  them, so the host writes no registry by hand and nothing drifts from the implementation.
+  them, so the host writes no registry by hand and nothing drifts from the implementation — apart
+  from the explicit `--metadata` override for components the types cannot express (below).
 - **Stories are curation signals and usage examples.** They show which components the host wants you
   to use, and how they get composed.
 - **Storybook is the rendering environment.** It is where you look at what you assembled.
