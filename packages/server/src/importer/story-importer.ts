@@ -85,7 +85,11 @@ export type StoryImportWarningCode =
 	// be read back as a fixture.
 	| "OPAQUE_FIXTURE"
 	// Multiple roots existed, so they were wrapped in a Box.
-	| "MULTIPLE_ROOTS";
+	| "MULTIPLE_ROOTS"
+	// The file exports more Stories than the one that was imported (a variants
+	// file, typically). Import reads one export per run; the others are named so
+	// they are not dropped in silence.
+	| "MULTIPLE_STORIES";
 
 export type StoryImportWarning = {
 	code: StoryImportWarningCode;
@@ -1256,6 +1260,26 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 			imports: bindings,
 			warnings,
 		};
+	}
+
+	// A file emitted with variants exports several Stories; only the selected one
+	// is read back, and the diff cannot be reconstructed into `variants` (the
+	// import sees applied trees, not operations). Naming the skipped exports
+	// keeps the read-back contract — nothing gets dropped in silence.
+	const otherStories = stories.filter(
+		(candidate) =>
+			candidate !== story &&
+			objectProperty(candidate.object, "render") !== null,
+	);
+	if (otherStories.length > 0) {
+		warn(
+			context,
+			"MULTIPLE_STORIES",
+			`Imported Story "${story.name}" only; the file also exports ${otherStories
+				.map((candidate) => `"${candidate.name}"`)
+				.join(", ")}. Re-run with --story-name to read another export.`,
+			otherStories[0].object,
+		);
 	}
 
 	const render = objectProperty(story.object, "render");

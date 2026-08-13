@@ -573,6 +573,57 @@ describe("fixtures のラウンドトリップ", () => {
 	});
 });
 
+// Variants are one-way by design (like repeat): the Story carries applied
+// trees, and the importer reads back one export per run — it never
+// reconstructs the operations into `variants`.
+describe("variants のラウンドトリップ", () => {
+	const base = node(
+		"box-1",
+		"Box",
+		{},
+		{
+			children: [node("b-1", "ui/button#Button", { label: "ok" })],
+		},
+	);
+	const variants = [
+		{
+			name: "Disabled",
+			operations: [
+				{
+					type: "setProps" as const,
+					nodeId: "b-1",
+					props: { label: "wait" },
+				},
+			],
+		},
+	];
+
+	it("ベースの export はベースの木のまま戻り、他の export は警告で名指しされる", () => {
+		const source = emitCsf(base, registry, { title: "S/T", variants });
+		expect(syntaxErrors(source)).toEqual([]);
+
+		const imported = importStory({ source, registry });
+		expect(imported.storyName).toBe("Default");
+		expect(shape(imported.root as ScreenNode)).toEqual(shape(base));
+		const warning = imported.warnings.find(
+			(w) => w.code === "MULTIPLE_STORIES",
+		);
+		expect(warning?.message).toContain('"Disabled"');
+	});
+
+	it("--story-name で variant の export を適用後の木として読める", () => {
+		const source = emitCsf(base, registry, { title: "S/T", variants });
+		const imported = importStory({
+			source,
+			registry,
+			storyName: "Disabled",
+		});
+		expect(imported.storyName).toBe("Disabled");
+		const button = (imported.root as ScreenNode).slots.children[0];
+		expect(button.props.label).toBe("wait");
+	});
+});
+
 describe("default export のラウンドトリップ", () => {
 	const withDefaultExport: ComponentRegistry = withSyntheticComponents({
 		version: "test:default",

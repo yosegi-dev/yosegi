@@ -307,6 +307,56 @@ describe("MCP server", () => {
 		expect(text).not.toContain("@yosegi/synthetic");
 	});
 
+	it("generate_story は variants を複数の Story export として返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "generate_story",
+			arguments: {
+				root: sampleScreen().root,
+				title: "Examples/顧客一覧",
+				variants: [
+					{
+						name: "Loading",
+						description: "Rows are being fetched.",
+						operations: [
+							{
+								type: "setProps",
+								nodeId: "node-table",
+								props: { loading: true },
+							},
+						],
+					},
+				],
+			},
+		});
+		const text = textOf(result as never);
+		expect(text).toContain("export const Default: StoryObj = {");
+		expect(text).toContain("export const Loading: StoryObj = {");
+		expect(text).toContain("/** Rows are being fetched. */");
+	});
+
+	it("generate_story は適用できない variant を VALIDATION_FAILED で返す", async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "generate_story",
+			arguments: {
+				root: sampleScreen().root,
+				title: "Examples/顧客一覧",
+				variants: [
+					{
+						name: "Broken",
+						operations: [
+							{ type: "setProps", nodeId: "no-such-node", props: { a: 1 } },
+						],
+					},
+				],
+			},
+		});
+		const text = textOf(result as never);
+		expect(text).toContain("VALIDATION_FAILED");
+		expect(text).toContain("VARIANT_OPERATION_FAILED");
+	});
+
 	it("generate_story は検証エラーを VALIDATION_FAILED で返す", async () => {
 		const client = await connect();
 		const result = await client.callTool({

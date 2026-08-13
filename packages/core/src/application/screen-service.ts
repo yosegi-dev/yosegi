@@ -38,6 +38,10 @@ export type CreateScreenInput = {
 	name: string;
 	root: ScreenNode;
 	status?: ScreenDefinition["status"];
+	// Optional layers of the definition (mock data, screen states). Absent means
+	// the screen starts without them; they can be added later via updateScreen.
+	fixtures?: ScreenDefinition["fixtures"];
+	variants?: ScreenDefinition["variants"];
 };
 
 export type UpdateResult = {
@@ -106,6 +110,10 @@ export class ScreenService {
 			status: input.status ?? "draft",
 			componentRegistryVersion: this.components.getRegistryVersion(),
 			revision: 1,
+			// Spread conditionally so an absent layer stays absent in the stored JSON
+			// instead of surviving as an explicit undefined-valued key.
+			...(input.fixtures !== undefined ? { fixtures: input.fixtures } : {}),
+			...(input.variants !== undefined ? { variants: input.variants } : {}),
 			root: input.root,
 		});
 		const validation = this.validateOrThrow(screen);
