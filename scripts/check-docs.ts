@@ -182,30 +182,67 @@ function isWidthChecked(path: string): boolean {
 	);
 }
 
+// A GFM delimiter row: cells of `:?-+:?` separated by pipes, with the outer
+// pipes optional. At least one pipe is required — without it the pattern would
+// also match a thematic break or a setext underline.
+function isDelimiterRow(line: string): boolean {
+	const trimmed = line.trim();
+	return (
+		trimmed.includes("|") &&
+		/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(trimmed)
+	);
+}
+
 // Lines exempt from the width limit: front matter (VitePress reads it, humans
 // do not), table rows (their width is the table's business), and fenced code.
 function widthCheckedLines(text: string): Array<[number, string]> {
 	const lines = text.split("\n");
-	const out: Array<[number, string]> = [];
-	let index = 0;
+	let start = 0;
 	if (lines[0] === "---") {
 		const close = lines.indexOf("---", 1);
-		if (close !== -1) index = close + 1;
+		if (close !== -1) start = close + 1;
 	}
+	// First pass: which lines sit in a fence, marker lines included.
+	const inFence = new Array<boolean>(lines.length).fill(false);
 	let open: FenceMarker | null = null;
-	for (; index < lines.length; index++) {
-		const line = lines[index] as string;
+	for (let i = start; i < lines.length; i++) {
+		const line = lines[i] as string;
 		if (open !== null) {
+			inFence[i] = true;
 			if (closesFence(open, line)) open = null;
 			continue;
 		}
 		const marker = fenceMarker(line);
 		if (marker !== null) {
 			open = marker;
-			continue;
+			inFence[i] = true;
 		}
+	}
+	// Second pass: table blocks. GFM does not require the outer pipes, so a
+	// `|`-prefix test alone misses `name | description` tables; the delimiter
+	// row is what marks a table, exempting its header and every following row
+	// that still carries a pipe.
+	const inTable = new Array<boolean>(lines.length).fill(false);
+	for (let i = start + 1; i < lines.length; i++) {
+		if (inFence[i] || inFence[i - 1]) continue;
+		if (!isDelimiterRow(lines[i] as string)) continue;
+		if (!(lines[i - 1] as string).includes("|")) continue;
+		inTable[i - 1] = true;
+		inTable[i] = true;
+		for (
+			let j = i + 1;
+			j < lines.length && !inFence[j] && (lines[j] as string).includes("|");
+			j++
+		) {
+			inTable[j] = true;
+		}
+	}
+	const out: Array<[number, string]> = [];
+	for (let i = start; i < lines.length; i++) {
+		const line = lines[i] as string;
+		if (inFence[i] || inTable[i]) continue;
 		if (line.trimStart().startsWith("|")) continue;
-		out.push([index + 1, line]);
+		out.push([i + 1, line]);
 	}
 	return out;
 }

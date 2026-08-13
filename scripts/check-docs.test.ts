@@ -256,6 +256,34 @@ describe("checkDocs", () => {
 		expect(errors).toEqual([]);
 	});
 
+	// GFM does not require the outer pipes, so `name | description` tables are
+	// tables too; the delimiter row is what identifies them.
+	it("外側パイプの無い表も幅の検査から除く", () => {
+		const long = "あ".repeat(51);
+		const text = en(`名前 | 説明\n--- | ---\n${long} | 値\n\n${long}`);
+		const { widthErrors } = checkDocs(
+			[{ path: "docs/ja/page.md", text }],
+			never,
+		);
+		// The prose line after the table is still checked.
+		expect(widthErrors).toEqual([
+			`docs/ja/page.md:7: 102 columns (limit ${100})`,
+		]);
+	});
+
+	// A lone thematic break must not turn the paragraph above it into a table.
+	it("--- 単独の行は表の区切りとして扱わない", () => {
+		const long = `${"あ".repeat(50)} | x`;
+		const text = en(`${long}\n\n---`);
+		const { widthErrors } = checkDocs(
+			[{ path: "docs/ja/page.md", text }],
+			never,
+		);
+		expect(widthErrors).toEqual([
+			`docs/ja/page.md:3: 104 columns (limit ${100})`,
+		]);
+	});
+
 	it("docs の外のファイルは幅を検査しない", () => {
 		const { widthErrors } = checkDocs(
 			[{ path: "AGENTS.md", text: en("a".repeat(120)) }],
