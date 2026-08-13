@@ -76,8 +76,8 @@ yosegi component inspect "app/components/ui/card#CardHeader" --data-dir .yosegi
 
 # 3. ホストの規約を読む（AGENTS.md、デザイントークン、既存の複合 Story）
 
-# 4a. .stories.tsx を直接書く。これが既定であり、JSON リテラルで書けない値を必要とするコンポーネントが
-#     1 つでもあれば（ランタイムのオブジェクト、コンポーネント参照、繰り返し、条件分岐）唯一の選択肢
+# 4a. .stories.tsx を直接書く。これが既定であり、JSON の形を持たない値を必要とするコンポーネントが
+#     1 つでもあれば（ランタイムのオブジェクト、コンポーネント参照、条件分岐）唯一の選択肢
 
 # 4b. 静的な画面なら tmp/screen.json を書き、そこから Story を生成する
 yosegi screen generate tmp/screen.json \
