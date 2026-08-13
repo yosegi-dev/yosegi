@@ -16,7 +16,7 @@ React + TypeScript のプロジェクト向け。Component Registry は TypeScri
 
 1. **Component Registry** — ホストのソースの TypeScript の型を読んでコンポーネントのカタログにする。
    props、slots、enum の選択肢、実際に書く import specifier のすべてが既定では型から決まる。
-   型で表現できない少数のコンポーネントは `--metadata` で埋め、`--index` 単独で作った Registry には
+   型で表現できないわずかな穴は `--metadata` で埋め、`--index` 単独で作った Registry には
    型情報が無い（[`docs/ja/registry.md`](./docs/ja/registry.md)）。
 2. **参照** — `component inspect` はコンポーネントの props の正となる情報源。フォーク先で改名された
    variant、children ではなく名前付き slot になっている `ReactNode` prop、export 名が衝突する 2 つの

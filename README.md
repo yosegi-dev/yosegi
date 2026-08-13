@@ -16,7 +16,7 @@ For React + TypeScript projects. The registry is built from TypeScript types, an
 
 1. **Registry** — reads your source's TypeScript types into a component catalog. Props, slots, enum
    options, and the import specifier you actually write all come from types by default;
-   `--metadata` fills the rare component the types cannot express, and an `--index`-only registry
+   `--metadata` fills the rare gaps the types cannot express, and an `--index`-only registry
    carries no types ([`docs/registry.md`](./docs/registry.md)).
 2. **Lookup** — `component inspect` is the source of truth for a component's props. Your fork's
    renamed variants, a `ReactNode` prop that is a named slot rather than children, two components
