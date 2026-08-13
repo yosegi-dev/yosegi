@@ -237,7 +237,8 @@ owns this output.
 
 ## `screen generate`
 
-Screen JSON → Story (CSF). The deliverable of the upstream half.
+Screen JSON → Story (CSF), or with `--target component` a plain React component file. The
+deliverable of the upstream half.
 
 ```sh
 yosegi screen generate tmp/screen.json \
@@ -252,8 +253,9 @@ yosegi screen generate tmp/screen.json \
 | Flag | Meaning |
 | --- | --- |
 | `--out <path>` | **Required.** Where the Story goes in the host. Intermediate directories are created |
+| `--target <story\|component>` | What to emit. Defaults to `story` (CSF). `component` writes a plain React component file, for hosts without Storybook (the SKILL.md step 1 branch) |
 | `--title <title>` | The Story title. Defaults to `Screens/<screen name>` |
-| `--story-name <name>` | The Story's export name. Defaults to `Default`. Must be a JavaScript identifier — a name with a space or a leading digit is rejected outright |
+| `--story-name <name>` | The Story's export name. Defaults to `Default`. Must be a JavaScript identifier — a name with a space or a leading digit is rejected outright. With `--target component`, names the exported function instead (default `Screen`) |
 | `--import-map <from=to,...>` | Prefix-replaces the registry's packageName with the host's import specifier. Use it to align registry paths (`./app/...`) with the host's aliases (`~/...`). If the generated imports do not resolve in the host, this is what to fix — match the packageName visible in `inspect`'s import statement against the host's aliases |
 | `--framework <pkg>` | Where `Meta` / `StoryObj` are imported from. Defaults to `@storybook/react` |
 | `--meta-template <file>` | Splices in the host's meta boilerplate. See `implementation.md` |
@@ -264,6 +266,13 @@ On validation errors nothing is written and an array of errors comes back with e
 
 A screen with `variants` (`screen-json.md`) needs no extra flag: the one output file carries the
 base export plus one export per variant, and `--story-name` still names only the base export.
+
+`--target component` emits the imports, the fixture consts, and one exported function per screen
+state — no meta, no Story exports. Three constraints come with it, each an `INVALID_ARGUMENT` when
+violated: `--out` must end with `.tsx` but not `.stories.tsx`; `--title`, `--framework`, and
+`--meta-template` are CSF-only and rejected rather than ignored. Validation, `fixtures`, `repeat`,
+and `variants` behave exactly as on the story target. `story import` cannot read a component file
+back (it fails with `STORY_NOT_FOUND`), so keep the Screen JSON if the screen may be revised.
 
 `screen validate` is a different command: it targets screens already saved in the screen store (the
 ones you have `screen push`ed). A Screen JSON file is validated by `screen generate` itself, so you
@@ -347,7 +356,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` — an unknown id returns `COMPONENT_NOT_FOUND` with the same did-you-mean `suggestion` |
 | `list_categories` | — | the `categories` field of `component list --json` |
 | `get_registry_status` | — | `registry status`, provenance only: it reports version / build time / inputs and the version-mismatch warning, but does not recompute source drift |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants` | `screen generate` — but it writes no file and returns the CSF source as a string, so the caller decides where it goes |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants`, `target` | `screen generate` — but it writes no file and returns the source as a string, so the caller decides where it goes. `target: "component"` returns a plain component file; `title` (otherwise required) and `framework` are then rejected |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |

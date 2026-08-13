@@ -68,6 +68,9 @@ So:
 - **Anything else, including every hand-written Story** — do not run either command. Read the Story
   and the files it imports. That is the whole of the input, and it is not hard to read; the
   commands' output would be twenty times its size and less accurate.
+- **A `--target component` file is not a Story at all** — `story import` fails on it outright with
+  `STORY_NOT_FOUND`. There is no read-back for the component target; the Screen JSON you generated
+  it from is the only machine-readable form, which is why it is worth keeping.
 
 ## Recovering the Screen JSON (`story import`)
 
