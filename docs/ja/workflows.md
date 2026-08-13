@@ -95,6 +95,16 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 することは無い。ただしテンプレート元にした既存 Story の URL
 はそのまま引き継がれ、警告で名指しされる。
 
+### Storybook が無い場合
+
+Storybook を持たないホストでは、`screen generate --target component` が同じ画面を CSF ではなく素の
+React コンポーネントファイルとして書き出す。検証・`fixtures`・`repeat`・`variants` の挙動は同一で、
+各状態は Story export ではなく export された関数になる。こうしたファイルをどこでレビューするかを
+Yosegi は規定しない。レビューはホストの型検査に加えて、利用者が選んだ確認手段（たとえば作業用の
+ルートにコンポーネントを描画する）で行うものなので、エージェントは推測せずに確認する。知っておく
+べき非対称が 1 つある。`story import` が読めるのは Story だけなので、コンポーネントファイルは
+Screen JSON へ読み戻せない。画面をあとで直す可能性があるなら Screen JSON を残しておく。
+
 ## 検証エラーの code
 
 どのエラーも機械可読な `code` と、直し方を決められるだけの `suggestion` を持つ。

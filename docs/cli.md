@@ -176,7 +176,8 @@ yosegi component inspect "app/components/ui/button#Button" --data-dir .yosegi
 
 ## `screen generate`
 
-Validates a Screen JSON file against the registry and writes the Story (CSF).
+Validates a Screen JSON file against the registry and writes the Story (CSF) — or, with
+`--target component`, a plain React component file.
 
 ```sh
 yosegi screen generate <screen.json> --out <file.stories.tsx> [options]
@@ -185,8 +186,9 @@ yosegi screen generate <screen.json> --out <file.stories.tsx> [options]
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `--out <path>` | path | — | Required. Where the Story goes. Intermediate directories are created |
+| `--target <story\|component>` | string | `story` | What to emit. `component` writes a plain React component file for hosts without Storybook |
 | `--title <title>` | string | `Screens/<screen name>` | The Story's `title` |
-| `--story-name <name>` | string | `Default` | The Story's export name. Must be a JavaScript identifier |
+| `--story-name <name>` | string | `Default` | The Story's export name. Must be a JavaScript identifier. With `--target component`, the exported function's name instead (default `Screen`) |
 | `--import-map <from=to,...>` | string | — | Prefix-replaces the registry's `packageName` with the host's import specifier. Fix generated imports that do not resolve here |
 | `--framework <pkg>` | string | `@storybook/react` | Where `Meta` / `StoryObj` are imported from |
 | `--meta-template <file>` | path | — | A host file holding one meta; everything except `title` and `component` is carried over |
@@ -203,6 +205,12 @@ yosegi screen generate tmp/screen.json \
 On validation errors nothing is written and an array of errors comes back with exit code 1. Warnings
 are printed after `Wrote <path>` and do not stop generation. Codes are in
 [Workflows](./workflows.md#validation-error-codes).
+
+`--target component` emits the imports, the fixture consts, and one exported function per screen
+state (the base plus each variant). `--out` must then end with `.tsx` but not `.stories.tsx`, and
+the CSF-only flags — `--title`, `--framework`, `--meta-template` — are rejected with
+`INVALID_ARGUMENT` rather than ignored. `story import` reads Stories only, so a component file
+cannot be read back.
 
 ## `screen context`
 
@@ -285,7 +293,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` |
 | `list_categories` | — | the `categories` field of `component list --json` |
 | `get_registry_status` | — | `registry status`, provenance only — it does not recompute source drift |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants` | `screen generate`, but it returns the CSF source as a string and writes no file |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants`, `target` | `screen generate`, but it returns the source as a string and writes no file |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |
@@ -294,7 +302,9 @@ claude mcp add yosegi -- npx yosegi mcp
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
 `generate_story` takes `root` — the ScreenNode alone, not the whole Screen JSON — and `importMap` is
-the same string the CLI takes, not an object. `search_components` returns summaries capped at
+the same string the CLI takes, not an object. `target: "component"` returns a plain component file
+instead of CSF; `title` (required on the story target) and `framework` do not apply to it and are
+rejected. `search_components` returns summaries capped at
 `limit` (default 50, max 200) with `total` / `truncated`; `detail: "full"` returns complete
 manifests. `registry build`, `registry metadata`, and `story import` are CLI-only, and there is no
 MCP equivalent of `--meta-template`.

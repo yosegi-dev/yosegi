@@ -10,7 +10,8 @@ server, and an Agent Skill. No GUI.
 > pattern. The tool gathers design system components into a screen.
 
 For React + TypeScript projects. The registry is built from TypeScript types, and the output is CSF
-(`.stories.tsx`).
+(`.stories.tsx`) — or, on hosts without Storybook, a plain React component file
+(`screen generate --target component`).
 
 ## How it works
 

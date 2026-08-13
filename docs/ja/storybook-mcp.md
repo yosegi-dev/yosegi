@@ -54,6 +54,9 @@ Story までで終わる。
 
 Registry はソースファイルと tsconfig から作られる。Storybook の `index.json` は任意のキュレーション
 入力で、静的ファイルでもよい。何も起動していなくてよいので、CI やチェックアウト直後でも使える。
+Storybook 自体も必須ではない。`screen generate --target component` が画面を素の React コンポーネント
+ファイルとして書き出す。そのため Storybook をまったく持たないホストでも画面の組み立てと検証はできる
+（[ワークフロー](./workflows.md#storybook-が無い場合)を参照）。
 
 ## 棲み分け
 

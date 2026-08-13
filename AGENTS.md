@@ -22,7 +22,7 @@ A Bun workspaces monorepo with two packages.
   - `src/domain` (`@yosegi/core`) — Screen JSON schema, validator, synthetic primitives, suggestions
   - `src/application` (`@yosegi/core/app`) — Composer, services, repository, actor context,
     implementation context
-  - `src/emit` (`@yosegi/core/emit`) — Screen JSON → CSF
+  - `src/emit` (`@yosegi/core/emit`) — Screen JSON → CSF, or a plain component file
   - `src/registry` (`@yosegi/core/registry`) — Storybook index.json → registry normalization
   - `src/test-fixtures.ts` (`@yosegi/core/testing`) — fixtures shared by tests
 - `packages/server` (`@yosegi/yosegi`) — the CLI, MCP, and HTTP (Hono) adapters, plus persistence.
