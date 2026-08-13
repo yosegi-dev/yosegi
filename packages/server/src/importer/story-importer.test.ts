@@ -643,4 +643,192 @@ describe("importStory", () => {
 			expect(imported.root?.component).toBe("Card");
 		});
 	});
+
+	describe("fixtures の読み戻し", () => {
+		it("トップレベルの const を JSON リテラルとして復元する", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"",
+				'const customers = [\n\t{\n\t\t"name": "Sato"\n\t},\n\t{\n\t\t"name": "Suzuki"\n\t}\n];',
+				"const pageSize = 20;",
+				"",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.fixtures).toEqual({
+				customers: [{ name: "Sato" }, { name: "Suzuki" }],
+				pageSize: 20,
+			});
+		});
+
+		// The inverse of emit writing a fixture-backed binding as `prop={expression}`.
+		it("fixture を参照する属性式は binding として読み戻す", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const customers = [];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table rows={customers} /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.root?.bindings).toEqual({ rows: "customers" });
+			expect(imported.root?.props).toEqual({});
+		});
+
+		it("fixture に無い識別子の属性式は従来どおり OPAQUE_PROP", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const customers = [];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table rows={orders} /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual(["OPAQUE_PROP"]);
+			expect(imported.root?.bindings).toBeUndefined();
+		});
+
+		it("const meta は fixture として読まない", () => {
+			const screen = sampleScreen();
+			const source = emitCsf(screen.root, registry(), { title: "S/T" });
+
+			expect(importSource(source).fixtures).toEqual({});
+		});
+
+		it("JSON リテラルでない const は OPAQUE_FIXTURE として警告する", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const rows = buildRows();",
+				"const helper = () => 1;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+			]);
+			expect(imported.warnings[0].message).toContain('"rows"');
+			expect(imported.fixtures).toEqual({});
+		});
+
+		it("初期化後に変異された const は OPAQUE_FIXTURE として警告し fixture に読まない", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"const customers = [];",
+				'const settings = { theme: "light" };',
+				"const rows = [1, 2];",
+				"const totals = { a: 1 };",
+				"const extra = { a: 1 };",
+				"const stats = { count: 0 };",
+				"const series = { items: [1, 2] };",
+				"const keep = [3, 4];",
+				'customers.push({ name: "Sato" });',
+				'settings.theme = "dark";',
+				"rows[0] = 9;",
+				"Object.assign(totals, { b: 2 });",
+				"delete extra.a;",
+				"stats.count++;",
+				"series.items[0]--;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+			]);
+			for (const warning of imported.warnings) {
+				expect(warning.message).toContain("mutated after initialization");
+			}
+			expect(imported.fixtures).toEqual({ keep: [3, 4] });
+		});
+
+		it("変異しないメソッド呼び出しやプロパティ参照は fixture を保つ", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				'const customers = [{ name: "Sato" }];',
+				"customers.map((c) => c.name);",
+				"customers.length;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table rows={customers} /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.warnings).toEqual([]);
+			expect(imported.fixtures).toEqual({ customers: [{ name: "Sato" }] });
+			expect(imported.root?.bindings).toEqual({ rows: "customers" });
+		});
+
+		it("let / var 宣言は OPAQUE_FIXTURE として警告し fixture に読まない", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"let rows = [1, 2];",
+				"var pageSize = 20;",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(codes(imported.warnings)).toEqual([
+				"OPAQUE_FIXTURE",
+				"OPAQUE_FIXTURE",
+			]);
+			expect(imported.warnings[0].message).toContain('"rows"');
+			expect(imported.warnings[0].message).toContain('"let"');
+			expect(imported.warnings[1].message).toContain('"pageSize"');
+			expect(imported.warnings[1].message).toContain('"var"');
+			expect(imported.fixtures).toEqual({});
+		});
+
+		it("export された const は fixture として読まない", () => {
+			const source = [
+				'import { Table } from "~/components/table";',
+				"export const shared = [1, 2];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+				"export const Default: StoryObj = { render: () => <Table /> };",
+			].join("\n");
+
+			expect(importSource(source).fixtures).toEqual({});
+		});
+
+		it("render を読めなくても fixtures は返す", () => {
+			const source = [
+				"const customers = [];",
+				'const meta: Meta = { title: "S/T" };',
+				"export default meta;",
+			].join("\n");
+
+			const imported = importSource(source);
+
+			expect(imported.root).toBeNull();
+			expect(imported.fixtures).toEqual({ customers: [] });
+		});
+	});
 });

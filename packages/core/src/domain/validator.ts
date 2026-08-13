@@ -6,6 +6,15 @@ import {
 } from "./component-manifest.ts";
 import { VALIDATION_CODES, type ValidationCode } from "./errors.ts";
 import {
+	expandRepeat,
+	MAX_EXPANDED_NODE_COUNT,
+	MAX_REPEAT_COUNT,
+	MIN_REPEAT_COUNT,
+	RepeatBudgetExceededError,
+	RepeatIdCollisionError,
+} from "./repeat.ts";
+import {
+	bindingRootIdentifier,
 	isEmittableBindingExpression,
 	type ScreenDefinition,
 	type ScreenNode,
@@ -53,7 +62,13 @@ function ownEntry<T>(record: Record<string, T>, key: string): T | undefined {
 // ScreenNode fields that live next to props, not inside them. Writing them inside
 // props passes the schema (props is a free-form record), so the mistake surfaces here
 // as UNKNOWN_PROP and deserves a pointed fix rather than a fuzzy-match miss.
-const NODE_LEVEL_FIELDS = new Set(["bindings", "events", "when", "each"]);
+const NODE_LEVEL_FIELDS = new Set([
+	"bindings",
+	"events",
+	"when",
+	"each",
+	"repeat",
+]);
 
 // Enum options rendered with their type visible ("primary" vs 1 vs true) — the same
 // JSON.stringify rendering component inspect uses for options.
@@ -141,6 +156,7 @@ function validateSlots(
 function validateProps(
 	node: ScreenNode,
 	manifest: ComponentManifest,
+	fixtureNames: ReadonlySet<string>,
 	pathOf: (node: ScreenNode) => string,
 	errors: ValidationIssue[],
 	warnings: ValidationIssue[],
@@ -265,6 +281,7 @@ function validateProps(
 			manifest,
 			propName,
 			def,
+			fixtureNames,
 			pathOf,
 			errors,
 			warnings,
@@ -280,6 +297,7 @@ function validateRequiredProp(
 	manifest: ComponentManifest,
 	propName: string,
 	def: PropDefinition,
+	fixtureNames: ReadonlySet<string>,
 	pathOf: (node: ScreenNode) => string,
 	errors: ValidationIssue[],
 	warnings: ValidationIssue[],
@@ -294,6 +312,14 @@ function validateRequiredProp(
 	}
 	const expression = ownEntry(node.bindings ?? {}, propName);
 	if (expression !== undefined && isEmittableBindingExpression(expression)) {
+		// The binding's head names a fixture, so the identifier really is declared in
+		// the generated Story and the emitted `prop={expression}` type-checks. The
+		// BOUND_REQUIRED_PROP warning exists to say "this name won't exist"; here it
+		// does, so warning anyway would push the agent to add a redundant mock value.
+		const head = bindingRootIdentifier(expression);
+		if (head !== null && fixtureNames.has(head)) {
+			return;
+		}
 		warnings.push({
 			nodeId: node.id,
 			path: pathOf(node),
@@ -397,6 +423,121 @@ function indexShadowedSyntheticNames(
 	return byName;
 }
 
+// Checks every repeat declaration: the range, the root, and — when the tree is
+// otherwise sound — whether expansion would produce colliding ids. Expansion
+// itself happens only at emit; the Screen JSON keeps the single node.
+function validateRepeat(
+	root: ScreenNode,
+	nodes: ScreenNode[],
+	pathOf: (node: ScreenNode) => string,
+	errors: ValidationIssue[],
+): void {
+	let hasRepeatDeclaration = false;
+	let repeatUsable = true;
+	for (const node of nodes) {
+		if (node.repeat === undefined) {
+			continue;
+		}
+		hasRepeatDeclaration = true;
+		if (node === root) {
+			errors.push({
+				nodeId: node.id,
+				path: pathOf(node),
+				code: VALIDATION_CODES.REPEAT_ON_ROOT,
+				message: `The root node cannot carry "repeat" (a screen has a single root, and there is no parent slot to hold the copies).`,
+				suggestion:
+					"Wrap the repeated content in a container node (e.g. a Box) and put repeat on the child.",
+			});
+			repeatUsable = false;
+			continue;
+		}
+		if (
+			!Number.isInteger(node.repeat) ||
+			node.repeat < MIN_REPEAT_COUNT ||
+			node.repeat > MAX_REPEAT_COUNT
+		) {
+			errors.push({
+				nodeId: node.id,
+				path: pathOf(node),
+				code: VALIDATION_CODES.REPEAT_OUT_OF_RANGE,
+				message: `repeat on node "${node.id}" is ${node.repeat}; expected an integer between ${MIN_REPEAT_COUNT} and ${MAX_REPEAT_COUNT}.`,
+				suggestion:
+					node.repeat < MIN_REPEAT_COUNT
+						? "Remove repeat (a single node needs no expansion) or raise it to 2 or more."
+						: `Lower it to at most ${MAX_REPEAT_COUNT}. A mock list only needs enough rows to read as a list.`,
+			});
+			repeatUsable = false;
+		}
+	}
+	// The collision scan only makes sense on a tree whose ids are already unique
+	// and whose repeat values are in range — otherwise it would double-report the
+	// plain DUPLICATE_NODE_ID (or throw on the range) before the agent fixed those.
+	if (
+		!hasRepeatDeclaration ||
+		!repeatUsable ||
+		errors.some((issue) => issue.code === VALIDATION_CODES.DUPLICATE_NODE_ID)
+	) {
+		return;
+	}
+	try {
+		expandRepeat(root);
+	} catch (error) {
+		// expandRepeat rejects an over-budget total arithmetically, before
+		// allocating any copy, so running it here stays cheap even for a tree
+		// whose expansion would be astronomically large.
+		if (error instanceof RepeatBudgetExceededError) {
+			errors.push({
+				nodeId: null,
+				code: VALIDATION_CODES.REPEAT_EXPANSION_TOO_LARGE,
+				message: error.message,
+				suggestion: `Nested repeats multiply. Lower the counts or un-nest the repeated subtrees so the expanded tree stays at or under ${MAX_EXPANDED_NODE_COUNT} nodes.`,
+			});
+			return;
+		}
+		if (!(error instanceof RepeatIdCollisionError)) {
+			throw error;
+		}
+		errors.push({
+			nodeId: error.nodeId,
+			code: VALIDATION_CODES.DUPLICATE_NODE_ID,
+			message: error.message,
+			suggestion: `Expansion appends "-1"…"-N" to every id in the repeated subtree. Rename the node whose id already ends in such a suffix.`,
+		});
+	}
+}
+
+// A fixture nothing points at still gets emitted (an unused const breaks
+// nothing), but it usually means a binding was renamed or dropped — worth
+// surfacing without blocking generation.
+function validateFixtureUsage(
+	nodes: ScreenNode[],
+	fixtureNames: ReadonlySet<string>,
+	warnings: ValidationIssue[],
+): void {
+	if (fixtureNames.size === 0) {
+		return;
+	}
+	const referenced = new Set<string>();
+	for (const node of nodes) {
+		for (const expression of Object.values(node.bindings ?? {})) {
+			const head = bindingRootIdentifier(expression);
+			if (head !== null) {
+				referenced.add(head);
+			}
+		}
+	}
+	for (const name of fixtureNames) {
+		if (!referenced.has(name)) {
+			warnings.push({
+				nodeId: null,
+				code: VALIDATION_CODES.UNUSED_FIXTURE,
+				message: `Fixture "${name}" is not referenced by any binding.`,
+				suggestion: `Reference it from a binding ("bindings": { "<prop>": "${name}" }) or remove it.`,
+			});
+		}
+	}
+}
+
 // Validates a Screen Definition against a Registry. Call this before saving,
 // sharing, or implementing.
 export function validateScreen(
@@ -422,6 +563,9 @@ export function validateScreen(
 	const reportedShadowedNames = new Set<string>();
 	const nodes = walkNodes(screen.root);
 	const nodePaths = indexNodePaths(screen.root);
+	const fixtureNames: ReadonlySet<string> = new Set(
+		Object.keys(screen.fixtures ?? {}),
+	);
 
 	// Node ID duplication check. Both colliding paths are named — the id alone can't say
 	// which of the two nodes to rename.
@@ -445,6 +589,9 @@ export function validateScreen(
 	// identity — resolving through nodeId would send every issue on a duplicated id
 	// to the first occurrence's path.
 	const pathOf = (node: ScreenNode): string => nodePaths.get(node) ?? "$";
+
+	validateRepeat(screen.root, nodes, pathOf, errors);
+	validateFixtureUsage(nodes, fixtureNames, warnings);
 
 	for (const node of nodes) {
 		const manifest = manifests.get(node.component);
@@ -482,7 +629,7 @@ export function validateScreen(
 				message: `Component "${node.component}" is deprecated.`,
 			});
 		}
-		validateProps(node, manifest, pathOf, errors, warnings);
+		validateProps(node, manifest, fixtureNames, pathOf, errors, warnings);
 		validateSlots(node, manifest, pathOf, errors, warnings);
 
 		for (const children of Object.values(node.slots)) {

@@ -252,21 +252,25 @@ export function createMcpServer(composer: Composer): McpServer {
 				storyName: z.string().optional(),
 				importMap: z.string().optional(),
 				framework: z.string().optional(),
+				fixtures: z.record(z.string(), z.unknown()).optional(),
 			},
 		},
-		async ({ root, title, storyName, importMap, framework }) => {
+		async ({ root, title, storyName, importMap, framework, fixtures }) => {
 			try {
 				const parsedRoot = screenNodeSchema.parse(root);
 				const registry = withSyntheticComponents(
 					composer.components.getRegistry(),
 				);
-				// A throwaway Screen Definition, used only for pre-generation validation. Never persisted.
+				// A throwaway Screen Definition, used only for pre-generation validation. Never
+				// persisted. Routing fixtures through it also runs the fixtures schema (name
+				// legality), so the MCP path rejects the same inputs the CLI path does.
 				const screen = parseScreenDefinition({
 					schemaVersion: "1.0",
 					id: "generate-story",
 					name: title,
 					componentRegistryVersion: registry.version,
 					revision: 0,
+					fixtures,
 					root: parsedRoot,
 				});
 				const result = validateScreen(screen, registry);
@@ -281,6 +285,7 @@ export function createMcpServer(composer: Composer): McpServer {
 						resolveImport: importMap
 							? buildImportMapResolver(importMap)
 							: undefined,
+						fixtures: screen.fixtures,
 					}),
 				);
 			} catch (error) {

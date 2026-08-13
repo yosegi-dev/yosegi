@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { sampleScreen } from "../test-fixtures.ts";
 import {
+	bindingRootIdentifier,
 	collectNodeIds,
 	findLocation,
 	findNode,
@@ -85,5 +86,116 @@ describe("screen id constraints", () => {
 	it("allows letters, digits, hyphens, and underscores", () => {
 		expect(withId("customer-list")()).toMatchObject({ id: "customer-list" });
 		expect(withId("Screen_1")()).toMatchObject({ id: "Screen_1" });
+	});
+});
+
+// Fixture names go verbatim into `const <name>` and are referenced from binding
+// expressions, so emit can never rename them — illegal names are rejected here.
+describe("fixtures constraints", () => {
+	function withFixtures(fixtures: Record<string, unknown>) {
+		return () => parseScreenDefinition({ ...sampleScreen(), fixtures });
+	}
+
+	it("accepts identifier-named fixtures with arbitrary JSON values", () => {
+		const screen = withFixtures({
+			customers: [{ name: "A" }, { name: "B" }],
+			$count: 2,
+			_flag: null,
+		})();
+		expect(screen.fixtures).toEqual({
+			customers: [{ name: "A" }, { name: "B" }],
+			$count: 2,
+			_flag: null,
+		});
+	});
+
+	it("rejects a name that is not a JavaScript identifier", () => {
+		expect(withFixtures({ "customer-rows": [] })).toThrow();
+		expect(withFixtures({ "1st": [] })).toThrow();
+		expect(withFixtures({ "a b": [] })).toThrow();
+	});
+
+	// Reserved words match the identifier pattern but `const class = ...` is a
+	// SyntaxError; the strict-mode set matters because a Story is a module.
+	it("rejects a name that is a reserved word", () => {
+		expect(withFixtures({ class: [] })).toThrow("reserved word");
+		expect(withFixtures({ default: [] })).toThrow("reserved word");
+		expect(withFixtures({ null: [] })).toThrow("reserved word");
+		expect(withFixtures({ let: [] })).toThrow("reserved word");
+		expect(withFixtures({ static: [] })).toThrow("reserved word");
+		expect(withFixtures({ await: [] })).toThrow("reserved word");
+		expect(withFixtures({ eval: [] })).toThrow("reserved word");
+		expect(withFixtures({ arguments: [] })).toThrow("reserved word");
+	});
+
+	it("rejects the identifiers the generated Story itself declares", () => {
+		expect(withFixtures({ meta: {} })).toThrow();
+		expect(withFixtures({ Meta: {} })).toThrow();
+		expect(withFixtures({ StoryObj: {} })).toThrow();
+	});
+
+	// A fixture is emitted verbatim as Story source, so anything JSON.stringify
+	// would drop or mangle has to be rejected before the screen is ever saved.
+	it("rejects values that have no JSON form", () => {
+		expect(withFixtures({ value: undefined })).toThrow();
+		expect(withFixtures({ value: new Date() })).toThrow();
+		expect(withFixtures({ value: new Map() })).toThrow();
+		expect(withFixtures({ value: () => 1 })).toThrow();
+		expect(withFixtures({ value: Number.NaN })).toThrow();
+		expect(withFixtures({ value: Number.POSITIVE_INFINITY })).toThrow();
+	});
+
+	it("rejects a non-JSON value nested inside an otherwise valid fixture", () => {
+		expect(withFixtures({ rows: [{ createdAt: new Date() }] })).toThrow();
+		expect(withFixtures({ rows: { deep: [undefined] } })).toThrow();
+	});
+});
+
+describe("bindingRootIdentifier", () => {
+	it("returns the leading identifier of a member path", () => {
+		expect(bindingRootIdentifier("customers.items")).toBe("customers");
+		expect(bindingRootIdentifier("customers")).toBe("customers");
+	});
+
+	it("returns null for a non-emittable expression", () => {
+		expect(bindingRootIdentifier("fn(a, b)")).toBe(null);
+		expect(bindingRootIdentifier("a + b")).toBe(null);
+	});
+});
+
+describe("repeat schema", () => {
+	function withRepeat(repeat: unknown) {
+		const screen = sampleScreen();
+		return () =>
+			parseScreenDefinition({
+				...screen,
+				root: {
+					...screen.root,
+					slots: {
+						...screen.root.slots,
+						body: [
+							{
+								id: "node-x",
+								component: "Table",
+								props: {},
+								slots: {},
+								repeat,
+							},
+						],
+					},
+				},
+			});
+	}
+
+	it("accepts an integer", () => {
+		const screen = withRepeat(3)();
+		expect(findNode(screen.root, "node-x")?.repeat).toBe(3);
+	});
+
+	// Range is the validator's job (so the error carries nodeId / path); the
+	// schema only rejects shapes that could never mean a copy count.
+	it("rejects a non-integer", () => {
+		expect(withRepeat(2.5)).toThrow();
+		expect(withRepeat("3")).toThrow();
 	});
 });

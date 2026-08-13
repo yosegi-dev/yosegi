@@ -62,6 +62,7 @@ deliverable.
 | `revision` | yes | A non-negative integer. Starts at `0` |
 | `root` | yes | The root ScreenNode |
 | `status` | no | `"draft"` (default) or `"published"` |
+| `fixtures` | no | Mock data: `{ "<name>": <any JSON value> }`. See [fixtures](#fixtures) |
 
 Omitting a required field is an `INVALID_REQUEST`, not a validation warning.
 
@@ -146,25 +147,69 @@ and `story import` reads them back.
 
 ### A binding is not a mock value
 
-A binding says where a value comes from at implementation time; it holds nothing the mock can show.
-On an optional prop the prop is simply left out and the Story renders. On a **required** prop the
-emitter writes the expression into the JSX (`rows={customers}`) instead of dropping the prop, and
-validation warns with `BOUND_REQUIRED_PROP` — that name does not exist in the Story, so the host's
-type check stops on it. Give required props a mock value in `props` as well, and keep the binding as
-the intent. Required handlers are the exception: they are filled with a no-op `() => {}`, so
-declaring them in `events` is enough.
+A binding says where a value comes from at implementation time; it holds nothing the mock can show —
+unless a [fixture](#fixtures) of the same name supplies one. Without a fixture, an optional prop is
+simply left out and the Story renders. On a **required** prop the emitter writes the expression into
+the JSX (`rows={customers}`) instead of dropping the prop, and validation warns with
+`BOUND_REQUIRED_PROP` — that name does not exist in the Story, so the host's type check stops on it.
+Either declare a fixture named after the binding's head, or give the prop a mock value in `props`,
+and keep the binding as the intent. Required handlers are the exception: they are filled with a
+no-op `() => {}`, so declaring them in `events` is enough.
 
-## when / each
+## fixtures
+
+`fixtures` is the screen's mock-data layer: named JSON values that become top-level
+`const <name> = <value>;` declarations in the generated Story, between the imports and the meta, in
+the order written. A binding whose expression starts with a fixture name then references a value
+that really exists — one declaration carries both the value the mock shows and the wiring target the
+implementation replaces.
+
+```json
+{
+	"fixtures": { "customers": [{ "name": "Sato" }, { "name": "Suzuki" }] },
+	"root": {
+		"id": "table", "component": "app/components/table#Table", "props": {}, "slots": {},
+		"bindings": { "rows": "customers" }
+	}
+}
+```
+
+This emits `const customers = [...]` and `rows={customers}` — the binding is written into the JSX
+even on an optional prop, because the value exists. On a required prop the `BOUND_REQUIRED_PROP`
+warning disappears for the same reason. `story import` restores the consts into `fixtures`, so the
+round trip is lossless; a fixture no binding references is still emitted, with an `UNUSED_FIXTURE`
+warning.
+
+A fixture name must be a JavaScript identifier, and must not be `meta`, `Meta`, or `StoryObj` — the
+generated Story declares those itself, and a fixture const cannot be renamed because bindings
+reference it as written (a schema violation, `INVALID_REQUEST`). A name equal to the Story's export
+name (`Default`, or `--story-name`) is rejected at generation time. A component import that collides
+with a fixture name takes a suffixed alias instead.
+
+Fixtures hold JSON only. A value that has no JSON form — a table instance, a component reference, a
+function — still cannot be expressed; write the Story directly for those.
+
+## when / each / repeat
 
 A node may also carry `when` (conditional display) and `each` (repetition), both free-form strings
-with no grammar and no validation. Neither produces any JSX, so a screen declaring `each` renders
-exactly one of the repeated node. Duplicate the nodes by hand with distinct ids if the mock needs to
-look like a list, and keep `each` as the declaration of intent. The declarations themselves ride in
+with no grammar and no validation. Neither produces any JSX. The declarations themselves ride in
 the same hand-off comment as `bindings` / `events`:
 
 ```tsx
 {/* TODO(yosegi): {"when":"customers.length > 0","each":"customer in customers"} */}
 ```
+
+`repeat` (an integer, 2–20) is the structural counterpart of `each`: at generation time the subtree
+is expanded into that many copies, so the mock looks like a list without duplicating nodes by hand.
+The two are independent and usually appear together — `each` says *what* repeats at implementation
+time, `repeat` says how many copies the mock shows. The Screen JSON keeps the single node; ids in
+the copies get `-1`…`-N` suffixes, and a suffixed id that collides with an existing node id is a
+`DUPLICATE_NODE_ID` error. `repeat` on the root is rejected (`REPEAT_ON_ROOT`); an out-of-range
+value is `REPEAT_OUT_OF_RANGE`.
+
+Unlike fixtures, `repeat` does not survive the round trip: the generated Story carries the expanded
+copies as plain JSX, and `story import` reads them back as that many separate nodes with no `repeat`
+field. Collapse them yourself if you re-enter the JSON route from an imported Story.
 
 ## Next steps
 
