@@ -1020,7 +1020,7 @@ describe("emitCsf の variants", () => {
 		expect(source).toContain("export const Default: StoryObj = {");
 		expect(source).toContain("export const Loading: StoryObj = {");
 		expect(source).toContain("export const Empty: StoryObj = {");
-		// meta と default export は 1 回だけ。
+		// meta and the default export appear exactly once.
 		expect(source.split("const meta: Meta = {").length - 1).toBe(1);
 		expect(source.split("export default meta;").length - 1).toBe(1);
 	});
@@ -1103,7 +1103,7 @@ describe("emitCsf の variants", () => {
 		expect(source).toContain(
 			'import { LegacyBanner } from "~/components/legacy";',
 		);
-		// import 群は 1 回だけ（variant ごとに繰り返さない）。
+		// Imports appear once, not repeated per variant.
 		expect(source.split('from "~/components/legacy"').length - 1).toBe(1);
 	});
 
