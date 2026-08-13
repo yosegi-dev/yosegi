@@ -280,6 +280,14 @@ back.
 
 Write the `.stories.tsx` by hand, following the host's Story conventions from step 2.
 
+**On the no-Storybook branch from step 1, what you write directly is the component file, not a
+Story.** Write it at the location the user named: exported function components, one per screen
+state, with the mock data as consts in the file — the shape `--target component` emits, minus the
+CSF trappings. No meta, no Story conventions, no `.stories.tsx` suffix. The bullets below (imports
+from `inspect`, only props `inspect` listed, mock data in the file) apply unchanged; the two
+Story-shaped paragraphs that follow this one do not — the deliverable's location was already settled
+by the user in step 1, and there is no Storybook review to keep out of the routes directory.
+
 **Decide the shape of the deliverable before writing anything.** A Story here can be an inline
 component tree, or a thin Story that renders a page module (a `route.tsx` or a standalone page
 component) which holds the tree. If step 2 found a page/route generator or an established route
