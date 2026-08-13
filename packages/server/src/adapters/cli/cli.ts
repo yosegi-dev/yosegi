@@ -19,7 +19,11 @@ import {
 	Composer,
 	FileScreenRepository,
 } from "@yosegi/core/app";
-import { buildImportMapResolver, emitCsf } from "@yosegi/core/emit";
+import {
+	buildImportMapResolver,
+	emitComponent,
+	emitCsf,
+} from "@yosegi/core/emit";
 import {
 	buildRegistryFromStorybook,
 	type ComposerMetadata,
@@ -150,6 +154,7 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
 	"screen apply": [],
 	"screen generate": [
 		"out",
+		"target",
 		"title",
 		"story-name",
 		"import-map",
@@ -433,7 +438,52 @@ function inspectComponent(
 	return exitCode;
 }
 
-// Write a Storybook Story (CSF) from a Screen Definition. Yosegi's final deliverable.
+// The emit targets screen generate can write. "story" (CSF) is the default and
+// the historical behavior; "component" writes a plain React component file for
+// hosts without Storybook.
+const GENERATE_TARGETS = ["story", "component"] as const;
+type GenerateTarget = (typeof GENERATE_TARGETS)[number];
+
+// Resolves and cross-checks --target against the flags that only make sense for
+// one target. CSF-only flags are rejected rather than ignored: silently dropping
+// them would emit a file missing what the caller asked for, the worst failure
+// mode for an agent, which then trusts the output.
+function resolveGenerateTarget(flags: CliFlags, out: string): GenerateTarget {
+	const target = flagString(flags, "target") ?? "story";
+	if (!(GENERATE_TARGETS as readonly string[]).includes(target)) {
+		throw new ComposerError(
+			SERVICE_CODES.INVALID_ARGUMENT,
+			`Unknown --target "${target}". Use "story" (CSF, the default) or "component" (a plain React component file).`,
+		);
+	}
+	if (target === "component") {
+		const csfOnly = ["title", "framework", "meta-template"].filter(
+			(name) => flags[name] !== undefined,
+		);
+		if (csfOnly.length > 0) {
+			throw new ComposerError(
+				SERVICE_CODES.INVALID_ARGUMENT,
+				`--target component does not take ${csfOnly
+					.map((name) => `--${name}`)
+					.join(
+						", ",
+					)}: the component file has no Story meta, so these CSF-only flags would be ignored.`,
+			);
+		}
+		// The extension is what the host's tooling dispatches on — a component file
+		// named *.stories.tsx would be picked up by the Storybook glob as a broken CSF module.
+		if (!out.endsWith(".tsx") || STORY_FILE_PATTERN.test(out)) {
+			throw new ComposerError(
+				SERVICE_CODES.INVALID_ARGUMENT,
+				`--target component writes a plain component file, so --out must end with ".tsx" but not ".stories.tsx". Received "${out}".`,
+			);
+		}
+	}
+	return target as GenerateTarget;
+}
+
+// Write a Storybook Story (CSF), or with --target component a plain React
+// component file, from a Screen Definition. Yosegi's final deliverable.
 async function generateStory(
 	screenFile: string | undefined,
 	flags: CliFlags,
@@ -452,6 +502,7 @@ async function generateStory(
 			"screen generate requires --out <file.stories.tsx>.",
 		);
 	}
+	const target = resolveGenerateTarget(flags, out);
 	const screen = parseScreenDefinition(
 		JSON.parse(await readFile(screenFile, "utf8")),
 	);
@@ -463,6 +514,9 @@ async function generateStory(
 		return 1;
 	}
 	const importMap = flagString(flags, "import-map");
+	const resolveImport = importMap
+		? buildImportMapResolver(importMap)
+		: undefined;
 	// The host's meta conventions (tags / parameters / design-reference JSDoc) are carried
 	// over from the template. Anything not carried over, or that looks suspect, is warned about.
 	const metaTemplatePath = flagString(flags, "meta-template");
@@ -472,15 +526,25 @@ async function generateStory(
 				metaTemplatePath,
 			)
 		: null;
-	const source = emitCsf(screen.root, registry, {
-		title: flagString(flags, "title") ?? `Screens/${screen.name}`,
-		storyName: flagString(flags, "story-name"),
-		frameworkPackage: flagString(flags, "framework"),
-		resolveImport: importMap ? buildImportMapResolver(importMap) : undefined,
-		meta: metaTemplate?.template,
-		fixtures: screen.fixtures,
-		variants: screen.variants,
-	});
+	const source =
+		target === "component"
+			? emitComponent(screen.root, registry, {
+					// --story-name names the base export on both targets, so switching
+					// target never silently drops a name the caller chose.
+					componentName: flagString(flags, "story-name"),
+					resolveImport,
+					fixtures: screen.fixtures,
+					variants: screen.variants,
+				})
+			: emitCsf(screen.root, registry, {
+					title: flagString(flags, "title") ?? `Screens/${screen.name}`,
+					storyName: flagString(flags, "story-name"),
+					frameworkPackage: flagString(flags, "framework"),
+					resolveImport,
+					meta: metaTemplate?.template,
+					fixtures: screen.fixtures,
+					variants: screen.variants,
+				});
 	await mkdir(dirname(out), { recursive: true });
 	await writeFile(out, source);
 	print(`Wrote ${out}`);
@@ -1378,12 +1442,17 @@ function usage(): string {
 		"  screen validate <screenId>   # For screens saved in the screen store. A Screen JSON file is validated by screen generate",
 		"  screen push <file.json>",
 		"  screen apply <screenId> <operations.json>",
-		"  screen generate <screen.json> --out <file.stories.tsx> [--title <title>] [--story-name <name>]",
+		"  screen generate <screen.json> --out <file.stories.tsx> [--target story|component]",
+		"                                [--title <title>] [--story-name <name>]",
 		"                                [--import-map <from=to,...>] [--framework <pkg>] [--registry <file>]",
 		"                                [--meta-template <file>]",
 		"      --meta-template points at a host file that holds the boilerplate meta (tags /",
 		"      parameters / JSDoc). A fragment or an existing Story both work; everything",
 		"      except title is carried over.",
+		"      --target component writes a plain React component file (--out <file.tsx>, not",
+		"      .stories.tsx) for hosts without Storybook. --story-name then names the exported",
+		"      function (default Screen); --title / --framework / --meta-template are CSF-only",
+		"      and rejected.",
 		"  screen context <screen.json> [--registry <file>] [--import-map <from=to,...>]",
 		"                               [--route <path>] [--preferred-path <path>] [--out <file.json>]",
 		"      Emit the context for turning a screen into an implementation (import statements,",

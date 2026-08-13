@@ -1,7 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
+	ComposerError,
 	parseScreenDefinition,
 	parseScreenOperations,
+	SERVICE_CODES,
 	screenIdSchema,
 	screenNodeSchema,
 	validateScreen,
@@ -13,7 +15,11 @@ import {
 	buildImplementationContext,
 	ValidationFailedError,
 } from "@yosegi/core/app";
-import { buildImportMapResolver, emitCsf } from "@yosegi/core/emit";
+import {
+	buildImportMapResolver,
+	emitComponent,
+	emitCsf,
+} from "@yosegi/core/emit";
 import { z } from "zod";
 import { yosegiVersion } from "../../config.ts";
 import {
@@ -245,15 +251,18 @@ export function createMcpServer(composer: Composer): McpServer {
 		"generate_story",
 		{
 			description:
-				"Generate Storybook Story (CSF) source from a screen tree. Save it under the host's stories directory. Optional variants ({ name, description?, operations }) emit additional Story exports for the screen's other states (loading / error / empty)",
+				"Generate Storybook Story (CSF) source from a screen tree, or — with target: \"component\" — a plain React component file for hosts without Storybook (no meta, one exported function per screen state; title and framework do not apply). Save it under the host's stories directory (or, for a component, wherever the user chose). Optional variants ({ name, description?, operations }) emit additional Story exports (or component exports) for the screen's other states (loading / error / empty)",
 			inputSchema: {
 				root: z.unknown(),
-				title: z.string(),
+				// Required with the default story target (it becomes meta.title);
+				// meaningless for the component target, which has no meta.
+				title: z.string().optional(),
 				storyName: z.string().optional(),
 				importMap: z.string().optional(),
 				framework: z.string().optional(),
 				fixtures: z.record(z.string(), z.unknown()).optional(),
 				variants: z.array(z.unknown()).optional(),
+				target: z.enum(["story", "component"]).optional(),
 			},
 		},
 		async ({
@@ -264,8 +273,27 @@ export function createMcpServer(composer: Composer): McpServer {
 			framework,
 			fixtures,
 			variants,
+			target,
 		}) => {
 			try {
+				const emitTarget = target ?? "story";
+				// Mirrors the CLI's cross-checks: a CSF-only argument on the component
+				// target is rejected rather than silently ignored.
+				if (emitTarget === "story" && title === undefined) {
+					throw new ComposerError(
+						SERVICE_CODES.INVALID_ARGUMENT,
+						'generate_story requires "title" unless target is "component" (it becomes the Story meta\'s title).',
+					);
+				}
+				if (
+					emitTarget === "component" &&
+					(title !== undefined || framework !== undefined)
+				) {
+					throw new ComposerError(
+						SERVICE_CODES.INVALID_ARGUMENT,
+						'target "component" does not take "title" or "framework": the component file has no Story meta, so both would be ignored.',
+					);
+				}
 				const parsedRoot = screenNodeSchema.parse(root);
 				const registry = withSyntheticComponents(
 					composer.components.getRegistry(),
@@ -277,7 +305,7 @@ export function createMcpServer(composer: Composer): McpServer {
 				const screen = parseScreenDefinition({
 					schemaVersion: "1.0",
 					id: "generate-story",
-					name: title,
+					name: title ?? storyName ?? "Screen",
 					componentRegistryVersion: registry.version,
 					revision: 0,
 					fixtures,
@@ -288,17 +316,27 @@ export function createMcpServer(composer: Composer): McpServer {
 				if (result.errors.length > 0) {
 					throw new ValidationFailedError(result);
 				}
+				const resolveImport = importMap
+					? buildImportMapResolver(importMap)
+					: undefined;
 				return ok(
-					emitCsf(parsedRoot, registry, {
-						title,
-						storyName,
-						frameworkPackage: framework,
-						resolveImport: importMap
-							? buildImportMapResolver(importMap)
-							: undefined,
-						fixtures: screen.fixtures,
-						variants: screen.variants,
-					}),
+					emitTarget === "component"
+						? emitComponent(parsedRoot, registry, {
+								// storyName names the base export on both targets, same as the CLI.
+								componentName: storyName,
+								resolveImport,
+								fixtures: screen.fixtures,
+								variants: screen.variants,
+							})
+						: emitCsf(parsedRoot, registry, {
+								// The story branch has already rejected an absent title above.
+								title: title ?? "",
+								storyName,
+								frameworkPackage: framework,
+								resolveImport,
+								fixtures: screen.fixtures,
+								variants: screen.variants,
+							}),
 				);
 			} catch (error) {
 				return fail(error);

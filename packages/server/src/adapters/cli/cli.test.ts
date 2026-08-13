@@ -598,6 +598,162 @@ describe("runCli", () => {
 		expect(output()).not.toContain("Yosegi CLI");
 	});
 
+	it("screen generate --target component は素のコンポーネントファイルを書き出す", async () => {
+		const screenFile = join(dataDir, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "generated", "customer-list.tsx");
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--target",
+			"component",
+			"--out",
+			outFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain(`Wrote ${outFile}`);
+
+		const source = await Bun.file(outFile).text();
+		expect(source).toContain('import type { ReactElement } from "react";');
+		expect(source).toContain("export function Screen(): ReactElement {");
+		expect(source).toContain('<PageHeader title="Customer list" />');
+		expect(source).not.toContain("@storybook");
+		expect(source).not.toContain("const meta");
+	});
+
+	it("screen generate --target component は --story-name を関数名にする", async () => {
+		const screenFile = join(dataDir, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "customer-list.tsx");
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--target",
+			"component",
+			"--story-name",
+			"CustomerList",
+			"--out",
+			outFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		const source = await Bun.file(outFile).text();
+		expect(source).toContain("export function CustomerList(): ReactElement {");
+	});
+
+	// The extension is what the host's tooling dispatches on, so a component file
+	// must not take the Storybook glob's .stories.tsx suffix (nor a non-.tsx one).
+	it("screen generate --target component は拡張子の食い違いを INVALID_ARGUMENT にする", async () => {
+		const screenFile = join(dataDir, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		for (const outFile of [
+			join(dataDir, "x.stories.tsx"),
+			join(dataDir, "x.ts"),
+		]) {
+			logs = [];
+			const code = await runCli([
+				"screen",
+				"generate",
+				screenFile,
+				"--target",
+				"component",
+				"--out",
+				outFile,
+				"--data-dir",
+				dataDir,
+			]);
+			expect(code).toBe(1);
+			expect(output()).toContain("INVALID_ARGUMENT");
+			expect(await Bun.file(outFile).exists()).toBe(false);
+		}
+	});
+
+	// A CSF-only flag on the component target is rejected rather than silently
+	// ignored — the caller asked for something the output cannot carry.
+	it("screen generate --target component は CSF 専用フラグを INVALID_ARGUMENT にする", async () => {
+		const screenFile = join(dataDir, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "x.tsx");
+		for (const extra of [
+			["--title", "Examples/X"],
+			["--framework", "@storybook/react-vite"],
+			["--meta-template", join(dataDir, "meta.tsx")],
+		]) {
+			logs = [];
+			const code = await runCli([
+				"screen",
+				"generate",
+				screenFile,
+				"--target",
+				"component",
+				"--out",
+				outFile,
+				...extra,
+				"--data-dir",
+				dataDir,
+			]);
+			expect(code).toBe(1);
+			expect(output()).toContain("INVALID_ARGUMENT");
+			expect(output()).toContain(extra[0]);
+		}
+	});
+
+	it("screen generate は未知の --target を INVALID_ARGUMENT にする", async () => {
+		const screenFile = join(dataDir, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--target",
+			"page",
+			"--out",
+			join(dataDir, "x.tsx"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("INVALID_ARGUMENT");
+		expect(output()).toContain("Unknown --target");
+		expect(output()).toContain("component");
+	});
+
+	// story import reads Stories (exports with a render), which a component file
+	// does not have; the failure names the reason instead of returning an empty tree.
+	it("story import は --target component の出力を明示的に失敗させる", async () => {
+		const screenFile = join(dataDir, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "customer-list.tsx");
+		await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--target",
+			"component",
+			"--out",
+			outFile,
+			"--data-dir",
+			dataDir,
+		]);
+		logs = [];
+		const code = await runCli([
+			"story",
+			"import",
+			outFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("STORY_NOT_FOUND");
+	});
+
 	it("component inspect は id 無しで MISSING_ARGUMENT を返す", async () => {
 		const code = await runCli(["component", "inspect", "--data-dir", dataDir]);
 		expect(code).toBe(1);
