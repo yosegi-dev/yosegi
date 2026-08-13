@@ -197,8 +197,18 @@ export function applyOperation(
 	operation: ScreenOperation,
 ): ScreenDefinition {
 	const next = cloneScreen(screen);
-	const root = next.root;
+	next.root = applyToClonedRoot(next.root, operation);
+	return next;
+}
 
+// The single-operation body, working on a root the caller already cloned. Split
+// from applyOperation so callers that hold only a tree — emitting a screen
+// variant, validating one — can apply operations without fabricating a
+// ScreenDefinition around it. Returns the root, which replaceNode may swap out.
+function applyToClonedRoot(
+	root: ScreenNode,
+	operation: ScreenOperation,
+): ScreenNode {
 	switch (operation.type) {
 		case "addNode": {
 			const parent = requireParent(root, operation.target.parentNodeId);
@@ -229,7 +239,7 @@ export function applyOperation(
 				cloneNode(operation.node),
 				operation.target.index,
 			);
-			return next;
+			return root;
 		}
 		case "removeNode": {
 			if (operation.nodeId === root.id) {
@@ -240,7 +250,7 @@ export function applyOperation(
 				);
 			}
 			detachNode(root, operation.nodeId);
-			return next;
+			return root;
 		}
 		case "moveNode": {
 			if (operation.nodeId === root.id) {
@@ -268,14 +278,15 @@ export function applyOperation(
 				detached,
 				operation.target.index,
 			);
-			return next;
+			return root;
 		}
 		case "replaceNode": {
 			const location = findLocation(root, operation.nodeId);
+			let nextRoot = root;
 			if (!location) {
 				// Replacing the root itself.
 				if (operation.nodeId === root.id) {
-					next.root = cloneNode(operation.node);
+					nextRoot = cloneNode(operation.node);
 				} else {
 					throw new ComposerError(
 						OPERATION_CODES.NODE_NOT_FOUND,
@@ -291,7 +302,7 @@ export function applyOperation(
 			// Ensures id uniqueness across the whole tree after replacement (catches
 			// injecting an id that exists elsewhere, or duplicates inside the
 			// replacement node itself). Kept symmetric with addNode / duplicateNode.
-			const dup = firstDuplicate(collectNodeIds(next.root));
+			const dup = firstDuplicate(collectNodeIds(nextRoot));
 			if (dup) {
 				throw new ComposerError(
 					OPERATION_CODES.DUPLICATE_NODE_ID,
@@ -299,7 +310,7 @@ export function applyOperation(
 					dup,
 				);
 			}
-			return next;
+			return nextRoot;
 		}
 		case "setProps": {
 			const node = requireNode(root, operation.nodeId);
@@ -307,7 +318,7 @@ export function applyOperation(
 				operation.merge === false
 					? { ...operation.props }
 					: { ...node.props, ...operation.props };
-			return next;
+			return root;
 		}
 		case "setBinding": {
 			const node = requireNode(root, operation.nodeId);
@@ -315,7 +326,7 @@ export function applyOperation(
 				operation.merge === false
 					? { ...operation.bindings }
 					: { ...(node.bindings ?? {}), ...operation.bindings };
-			return next;
+			return root;
 		}
 		case "setEvent": {
 			const node = requireNode(root, operation.nodeId);
@@ -323,7 +334,7 @@ export function applyOperation(
 				operation.merge === false
 					? { ...operation.events }
 					: { ...(node.events ?? {}), ...operation.events };
-			return next;
+			return root;
 		}
 		case "duplicateNode": {
 			const location = findLocation(root, operation.nodeId);
@@ -342,7 +353,7 @@ export function applyOperation(
 			);
 			const copy = reidSubtree(source, rootId, existing);
 			insertIntoSlot(location.parent, location.slot, copy, location.index + 1);
-			return next;
+			return root;
 		}
 		default: {
 			// Unreachable due to discriminatedUnion, but made explicit as a contract.
@@ -364,5 +375,20 @@ export function applyOperations(
 	return operations.reduce(
 		(current, operation) => applyOperation(current, operation),
 		screen,
+	);
+}
+
+// applyOperations for callers that hold only a tree. The screen-level variant
+// stays the write path's entry point; this one exists for uses where a
+// ScreenDefinition wrapper would be fabricated just to be unwrapped again —
+// applying a variant's diff on the way into emit or validation. Same contract:
+// the input is never mutated, and the first failing operation throws.
+export function applyOperationsToRoot(
+	root: ScreenNode,
+	operations: ScreenOperation[],
+): ScreenNode {
+	return operations.reduce(
+		(current, operation) => applyToClonedRoot(cloneNode(current), operation),
+		root,
 	);
 }
