@@ -16,6 +16,7 @@ anything else, and no way to smuggle one in.
 | --- | --- |
 | Mock data a component maps over (list rows, a config object) | `fixtures` — a named JSON value emitted as a top-level const, referenced from `bindings`. See below |
 | Repetition | `repeat: N` on the node — the Story carries N copies of the subtree. `each` stays the declaration of intent |
+| The screen's other states (loading / error / empty) | `variants` — named operation diffs over the base tree, each emitted as its own Story export. See below |
 | A runtime object as a prop (a table instance, a form control, a ref) | None. A fixture is JSON, and no JSON value is a table instance; a `bindings` entry without a fixture emits the bare name, which does not exist in the Story |
 | A component reference as a prop (an icon prop taking the component itself) | None. It is a `json` prop, and no JSON value is a component |
 | A `ReactNode` assembled in an expression | None. A slot takes ScreenNodes only |
@@ -60,7 +61,7 @@ nothing to fix inside the Screen JSON. Go back to step 3 and write the Story dir
 
 Every top-level field shown above is required: `schemaVersion` (`"1.0"`), `id`, `name`,
 `componentRegistryVersion`, `revision`, `root`. Omitting one is an `INVALID_REQUEST`, not a warning.
-`status` (defaults to `"draft"`) and `fixtures` (see below) are the optional ones.
+`status` (defaults to `"draft"`), `fixtures`, and `variants` (see below) are the optional ones.
 
 The screen `id` may contain **letters, digits, `-` and `_` only** (`/^[A-Za-z0-9_-]+$/`). It becomes
 a file name in the screen store, so a `/` or a `..` is rejected as an `INVALID_REQUEST`.
@@ -236,6 +237,56 @@ many copies the mock shows. Three errors to know: `REPEAT_ON_ROOT` (the root can
 it), `REPEAT_OUT_OF_RANGE` (not an integer 2–20), and `DUPLICATE_NODE_ID` when a suffixed id
 collides with an existing one. `repeat` is one-way: `story import` reads the expanded Story back as
 that many separate nodes, with no `repeat` field.
+
+## variants
+
+`variants` expresses the screen's other states — loading, error, empty — as named diffs over `root`.
+Each entry's `operations` are applied to the base tree at generation time, and the result becomes an
+additional `export const <name>: Story` in the same file: one Story module carries every state, and
+the reviewer sees them side by side in Storybook. Use it to flush out state handling at the mock
+stage — a screen proposal that shows only the happy path hides exactly the states that get argued
+about during implementation.
+
+```json
+{
+  "fixtures": { "customers": [{ "name": "Sato" }] },
+  "variants": [
+    {
+      "name": "Loading",
+      "description": "Rows are being fetched.",
+      "operations": [
+        { "type": "setProps", "nodeId": "customer-table", "props": { "loading": true } }
+      ]
+    },
+    { "name": "Empty", "operations": [{ "type": "removeNode", "nodeId": "customer-table" }] }
+  ]
+}
+```
+
+An operation is the same shape `screen apply` takes:
+
+| `type` | Fields | Effect |
+| --- | --- | --- |
+| `addNode` | `target: { parentNodeId, slot, index? }`, `node` | Insert a subtree (`index` defaults to the end) |
+| `removeNode` | `nodeId` | Remove a node (never the root) |
+| `moveNode` | `nodeId`, `target` | Detach a node, then insert it at `target` |
+| `replaceNode` | `nodeId`, `node` | Swap a subtree (the root included) |
+| `setProps` / `setBinding` / `setEvent` | `nodeId`, `props` / `bindings` / `events`, `merge?` | Merge into the existing record; `merge: false` replaces it |
+| `duplicateNode` | `nodeId`, `newId?` | Insert a re-id'd copy right after the node |
+
+Rules and behaviour:
+
+- `name` becomes the export identifier, so it follows the fixture-name rules: a JavaScript
+  identifier, not `meta` / `Meta` / `StoryObj`, unique among variants, not equal to a fixture name
+  (all `INVALID_REQUEST`), and not equal to the base Story's export name (rejected at generation).
+- `description` becomes the JSDoc above the export — one line saying what the state shows.
+- Validation covers every variant's applied tree; those issues carry a `variant` field, and their
+  `path` addresses the tree after the operations. An operation targeting a `nodeId` the base tree
+  does not have is `VARIANT_OPERATION_FAILED` (`errors.md`).
+- Imports, fixtures, and the meta are emitted once and shared. A fixture only a variant's binding
+  references counts as used.
+- Like `repeat`, variants are one-way: `story import` reads one export per run (`--story-name`
+  selects which) and names the rest in a `MULTIPLE_STORIES` warning. It never reconstructs the diff.
 
 ## Common schema errors
 

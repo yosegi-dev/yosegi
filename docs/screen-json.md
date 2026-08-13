@@ -63,6 +63,7 @@ deliverable.
 | `root` | yes | The root ScreenNode |
 | `status` | no | `"draft"` (default) or `"published"` |
 | `fixtures` | no | Mock data: `{ "<name>": <any JSON value> }`. See [fixtures](#fixtures) |
+| `variants` | no | Screen states as named diffs over `root`. See [variants](#variants) |
 
 Omitting a required field is an `INVALID_REQUEST`, not a validation warning.
 
@@ -189,6 +190,55 @@ with a fixture name takes a suffixed alias instead.
 
 Fixtures hold JSON only. A value that has no JSON form — a table instance, a component reference, a
 function — still cannot be expressed; write the Story directly for those.
+
+## variants
+
+`variants` expresses the screen's other states — loading, error, empty — as named diffs over `root`.
+At generation time each entry's `operations` are applied to the base tree and the result becomes an
+additional `export const <name>: Story` in the same file, so one Story module carries every state
+and a reviewer sees them side by side in Storybook. Imports, fixtures, and the meta are shared;
+`description` becomes the JSDoc above the variant's export.
+
+```json
+{
+	"variants": [
+		{
+			"name": "Loading",
+			"description": "Rows are being fetched.",
+			"operations": [
+				{ "type": "setProps", "nodeId": "table", "props": { "loading": true } }
+			]
+		},
+		{ "name": "Empty", "operations": [{ "type": "removeNode", "nodeId": "table" }] }
+	]
+}
+```
+
+An operation is the same shape `screen apply` and the MCP tool `apply_screen_operations` take:
+
+| `type` | Fields | Effect |
+| --- | --- | --- |
+| `addNode` | `target: { parentNodeId, slot, index? }`, `node` | Insert a subtree (`index` defaults to the end) |
+| `removeNode` | `nodeId` | Remove a node (never the root) |
+| `moveNode` | `nodeId`, `target` | Detach a node, then insert it at `target` |
+| `replaceNode` | `nodeId`, `node` | Swap a subtree (the root included) |
+| `setProps` / `setBinding` / `setEvent` | `nodeId`, `props` / `bindings` / `events`, `merge?` | Merge into the existing record; `merge: false` replaces it |
+| `duplicateNode` | `nodeId`, `newId?` | Insert a re-id'd copy right after the node |
+
+`name` becomes the export's identifier, so it faces the same rules as a fixture name: a JavaScript
+identifier, not `meta` / `Meta` / `StoryObj`, unique among variants, and not equal to a fixture name
+(all `INVALID_REQUEST`). A name equal to the base Story's export name (`Default`, or `--story-name`)
+is rejected at generation time.
+
+Validation covers every variant: each applied tree is validated like the base, and its issues carry
+a `variant` field with the variant's name, `path` addressing the tree *after* the operations. An
+operation that cannot apply — a `nodeId` the base tree does not have, say — is
+`VARIANT_OPERATION_FAILED`. An issue a variant merely inherits from the base is reported once, on
+the base.
+
+Like `repeat`, variants do not survive the round trip: `story import` reads one export per run
+(`--story-name` selects which), names the other exports in a `MULTIPLE_STORIES` warning, and never
+reconstructs the diff back into `variants`.
 
 ## when / each / repeat
 

@@ -279,7 +279,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` |
 | `list_categories` | — | `component list --json` の `categories` フィールド |
 | `get_registry_status` | — | `registry status`。ただし provenance のみで、ソースの変化は再計算しない |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures` | `screen generate`。ただしファイルは書かず CSF のソースを文字列で返す |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants` | `screen generate`。ただしファイルは書かず CSF のソースを文字列で返す |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`。保存済み画面の id で指定する |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |

@@ -56,10 +56,11 @@ ships. The screen's skeleton and composition idiom come from the host's own Stor
 not the registry. How the Story gets written is a choice of format. Write it directly when any
 component on the screen needs a value that has no JSON form — a runtime object, a component
 reference, a `ReactNode` built in an expression, a branch — because Screen JSON has no syntax for
-those. Mock data and repetition are expressible: `fixtures` carries named JSON values the bindings
-reference, and `repeat` expands a subtree into list rows (see [Screen JSON](./screen-json.md)).
-Otherwise Screen JSON buys validation before any JSX exists, plus the hand-off comments the
-downstream half reads back.
+those. Mock data, repetition, and screen states are expressible: `fixtures` carries named JSON
+values the bindings reference, `repeat` expands a subtree into list rows, and `variants` emits the
+screen's other states (loading / error / empty) as additional Story exports (see
+[Screen JSON](./screen-json.md)). Otherwise Screen JSON buys validation before any JSX exists, plus
+the hand-off comments the downstream half reads back.
 
 Either way the host's type check is what confirms the result: it reads the JSX against the real
 component types, which is more than validation against the registry can do.
@@ -90,7 +91,9 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 `COMPONENT_NOT_FOUND`, `UNKNOWN_PROP`, and `UNKNOWN_BINDING_TARGET` carry the nearest candidates by
 Levenshtein distance; `INVALID_PROP_VALUE` echoes the received value and the enum options. Every
 issue also carries `path`, the node's position in the tree, so a node is locatable even when ids
-collide. Warnings do not stop generation and are listed after the file is written.
+collide. An issue raised by a variant's tree additionally carries `variant` with the variant's name,
+and its `path` addresses the tree after the variant's operations. Warnings do not stop generation
+and are listed after the file is written.
 
 By default the generated meta holds only `title`. Splice in the boilerplate the host requires with
 `--meta-template <file>`. Values are carried as source fragments without being interpreted, so
@@ -117,6 +120,7 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | `REPEAT_ON_ROOT` | `repeat` sits on the root node, which has no parent slot to hold the copies | Wrap the content in a container node and put `repeat` on the child |
 | `REPEAT_OUT_OF_RANGE` | `repeat` is not an integer between 2 and 20 | Fix the count, or remove `repeat` if one copy is enough |
 | `REPEAT_EXPANSION_TOO_LARGE` | Expanding every `repeat` would produce more than 2000 nodes — nested repeats multiply | Lower the counts or un-nest the repeated subtrees |
+| `VARIANT_OPERATION_FAILED` | A variant's `operations` could not be applied to the base tree; the message names the failing operation's code | Fix the operation so every `nodeId` it targets exists in the base tree (or was added by an earlier operation of the same variant) |
 
 Warnings, which do not stop generation:
 
@@ -181,6 +185,7 @@ warning is absent from the Screen JSON**, so read the original Story for those p
 | `COMPONENT_AMBIGUOUS` | Several candidates share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |
 | `MULTIPLE_ROOTS` | There was more than one root element, so they were wrapped in a `Box` |
+| `MULTIPLE_STORIES` | The file exports more Stories than the imported one (a `variants` file, typically). One export is read per run; pass `--story-name` to read another. The diff is never reconstructed into `variants` |
 
 ## Next steps
 

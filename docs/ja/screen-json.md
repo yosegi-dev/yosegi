@@ -61,6 +61,7 @@ Screen JSON は中間表現。一時ファイルとして扱ってよく、成�
 | `root` | はい | ルートの ScreenNode |
 | `status` | いいえ | `"draft"`（既定）または `"published"` |
 | `fixtures` | いいえ | モックデータ: `{ "<名前>": <任意の JSON 値> }`。[fixtures](#fixtures) を参照 |
+| `variants` | いいえ | `root` への名前付き差分で表す画面状態。[variants](#variants) を参照 |
 
 必須フィールドの欠落は検証の警告ではなく `INVALID_REQUEST` になる。
 
@@ -180,6 +181,54 @@ fixture 名は JavaScript の識別子であること。また `meta` / `Meta` /
 
 fixtures が持てるのは JSON だけ。JSON の形を持たない値（テーブルインスタンス、コンポーネント参照、
 関数）は依然として表現できない。そうした画面は Story を直接書く。
+
+## variants
+
+`variants` は画面のほかの状態（ローディング、エラー、空）を、`root` への名前付き差分として表現す
+る。生成時に各エントリの `operations` がベースの木へ適用され、その結果が同じファイル内の追加の
+`export const <name>: Story` になる。1 つの Story モジュールが全状態を運び、レビュアーは Storybook
+でそれらを並べて見られる。import・fixtures・meta は共有され、`description` はその variant の
+export 直上の JSDoc になる。
+
+```json
+{
+	"variants": [
+		{
+			"name": "Loading",
+			"description": "Rows are being fetched.",
+			"operations": [
+				{ "type": "setProps", "nodeId": "table", "props": { "loading": true } }
+			]
+		},
+		{ "name": "Empty", "operations": [{ "type": "removeNode", "nodeId": "table" }] }
+	]
+}
+```
+
+operation は `screen apply` と MCP ツール `apply_screen_operations` が受け取るのと同じ形をしている。
+
+| `type` | フィールド | 効果 |
+| --- | --- | --- |
+| `addNode` | `target: { parentNodeId, slot, index? }`, `node` | サブツリーを挿入する（`index` の既定は末尾） |
+| `removeNode` | `nodeId` | ノードを取り除く（ルートは不可） |
+| `moveNode` | `nodeId`, `target` | ノードを切り離し、`target` へ挿入する |
+| `replaceNode` | `nodeId`, `node` | サブツリーを差し替える（ルートも可） |
+| `setProps` / `setBinding` / `setEvent` | `nodeId`, `props` / `bindings` / `events`, `merge?` | 既存のレコードへマージする。`merge: false` は置き換える |
+| `duplicateNode` | `nodeId`, `newId?` | id を振り直した複製をノードの直後へ挿入する |
+
+`name` は export の識別子になるため、fixture 名と同じ規則に従う。JavaScript の識別子であること、
+`meta` / `Meta` / `StoryObj` でないこと、variant 同士で一意であること、fixture 名と同じでないこと
+（いずれも `INVALID_REQUEST`）。ベースの Story の export 名（`Default`、または `--story-name`）と
+同じ名前は生成時に弾かれる。
+
+検証はすべての variant に及ぶ。適用後の木がベースと同じように検証され、その issue は variant 名を
+持つ `variant` フィールドを運ぶ。`path` は operations 適用**後**の木を指す。適用できない operation
+（ベースの木に無い `nodeId` など）は `VARIANT_OPERATION_FAILED` になる。ベースから受け継いだだけの
+issue はベース側で 1 回だけ報告される。
+
+`repeat` と同じく、variants は往復で生き残らない。`story import` は 1 回の実行で 1 つの export を
+読む（どれを読むかは `--story-name` で選ぶ）。残りの export は `MULTIPLE_STORIES` 警告で名指しされ、
+差分が `variants` へ再構成されることはない。
 
 ## when / each / repeat
 

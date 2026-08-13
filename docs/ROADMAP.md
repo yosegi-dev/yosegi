@@ -58,9 +58,15 @@ Skill says so, which works but leaves the adapters uneven.
 
 ### How far to widen the shape of the output
 
-Today the deliverable is a single Story (`.stories.tsx`), with the whole screen tree living inside
-`render`. With handoff to implementation in mind, another option is to split it into a composed
-component (`screen.tsx`) plus a thin Story that calls it.
+The deliverable is a single `.stories.tsx`, now carrying one export per screen state: the base
+Story plus one per `variants` entry, every state rendered from the same tree plus its diff. That
+settled the file's shape — several exports in one Story module is the default, not one file per
+state.
+
+The open half is a second emit target: a composed component (`screen.tsx`) plus a thin Story that
+calls it, with handoff to implementation in mind. The emitter is already split into JSX rendering
+and CSF document assembly (`render.ts` / `csf.ts`), so the component target reuses the renderer and
+only owns its own document shape.
 
 - Upside: the generated code can move into the application as-is. The Story becomes "just render
   this component", matching the shape of the host's other Stories, and it can express which props
@@ -68,7 +74,7 @@ component (`screen.tsx`) plus a thin Story that calls it.
 - Question: where to draw the component boundary — Screen JSON carries no information
   about "this is a reusable unit". Emitting two files also deepens how much Yosegi reaches into the
   host's file layout conventions.
-- A single Story stays the default until Screen JSON can express boundaries.
+- A single Story file stays the default until Screen JSON can express boundaries.
 
 ### How curation should be used
 
