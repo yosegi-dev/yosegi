@@ -1,0 +1,79 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`emitComponent 生成したコンポーネントファイルが fixtures / variants 込みで安定した全文になる 1`] = `
+"import type { ReactElement } from "react";
+import { SearchForm } from "~/components/form";
+import { Page, PageHeader } from "~/components/layout";
+import { TextField } from "~/components/shadcn-ui/input";
+import { Table } from "~/components/table";
+
+const customers = [
+	{
+		"name": "Sato"
+	}
+];
+
+export function CustomerList(): ReactElement {
+	return (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<>
+					<SearchForm
+						fields={
+							<>
+								{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+								<TextField label="Customer name" placeholder="Enter a customer name" />
+							</>
+						}
+					/>
+					{/* TODO(yosegi): {"bindings":{"rows":"customers","loading":"customerQuery.isLoading"},"events":{"onRowClick":{"action":"navigate","arguments":{"to":"/customers/:customerId"}}}} */}
+					<Table rows={customers} />
+				</>
+			}
+		/>
+	);
+}
+
+/** Rows are being fetched. */
+export function Loading(): ReactElement {
+	return (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<>
+					<SearchForm
+						fields={
+							<>
+								{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+								<TextField label="Customer name" placeholder="Enter a customer name" />
+							</>
+						}
+					/>
+					{/* TODO(yosegi): {"bindings":{"rows":"customers","loading":"customerQuery.isLoading"},"events":{"onRowClick":{"action":"navigate","arguments":{"to":"/customers/:customerId"}}}} */}
+					<Table loading rows={customers} />
+				</>
+			}
+		/>
+	);
+}
+
+export function Empty(): ReactElement {
+	return (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<SearchForm
+					fields={
+						<>
+							{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+							<TextField label="Customer name" placeholder="Enter a customer name" />
+						</>
+					}
+				/>
+			}
+		/>
+	);
+}
+"
+`;
