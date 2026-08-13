@@ -34,6 +34,10 @@ export const VALIDATION_CODES = {
 	// declaration is in range, but nested repeats multiply, so the total needs
 	// its own bound.
 	REPEAT_EXPANSION_TOO_LARGE: "REPEAT_EXPANSION_TOO_LARGE",
+	// A variant's operations could not be applied to the base tree (a nodeId that
+	// does not exist there, an out-of-range slot index, ...). The variant's states
+	// cannot be derived, so nothing can be generated from it.
+	VARIANT_OPERATION_FAILED: "VARIANT_OPERATION_FAILED",
 	REGISTRY_VERSION_MISMATCH: "REGISTRY_VERSION_MISMATCH",
 	// warning
 	// The event's target points at a prop that doesn't exist in the Manifest. Since

@@ -30,11 +30,17 @@ const targetSchema = z.object({
 });
 export type OperationTarget = z.infer<typeof targetSchema>;
 
+// screen-definition.ts imports this schema back (a variant's operations are part
+// of the Screen Definition), so the two modules form an import cycle. Every
+// reference across the cycle sits behind z.lazy — on this side screenNodeSchema /
+// eventDefinitionSchema, on that side screenOperationSchema — so neither module
+// touches the other's bindings before both have finished evaluating, whichever
+// one a consumer happens to import first.
 export const screenOperationSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("addNode"),
 		target: targetSchema,
-		node: screenNodeSchema,
+		node: z.lazy(() => screenNodeSchema),
 	}),
 	z.object({ type: z.literal("removeNode"), nodeId: z.string().min(1) }),
 	z.object({
@@ -45,7 +51,7 @@ export const screenOperationSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("replaceNode"),
 		nodeId: z.string().min(1),
-		node: screenNodeSchema,
+		node: z.lazy(() => screenNodeSchema),
 	}),
 	z.object({
 		type: z.literal("setProps"),
@@ -63,7 +69,10 @@ export const screenOperationSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("setEvent"),
 		nodeId: z.string().min(1),
-		events: z.record(z.string(), eventDefinitionSchema),
+		events: z.record(
+			z.string(),
+			z.lazy(() => eventDefinitionSchema),
+		),
 		merge: z.boolean().optional(),
 	}),
 	z.object({
