@@ -135,9 +135,10 @@ node <repo>/packages/server/bin/yosegi.js registry build \
   --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --data-dir .yosegi
 ```
 
-Then, from the repository root, check that links and anchors resolve, that the twins line up
-(same headings, fences, and table rows), and that lines stay within 100 columns counted in East
-Asian character width (tables, code blocks, and front matter are exempt):
+Then, from the repository root, check that links and anchors resolve, that the twins line up —
+headings and table rows in matching numbers, fences matching in content with translated comments
+set aside — and that lines stay within 100 columns counted in East Asian character width (tables,
+code blocks, and front matter are exempt):
 
 ```sh
 bun run check:docs

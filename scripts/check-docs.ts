@@ -5,10 +5,11 @@ import { fileURLToPath } from "node:url";
 // Structural checks for the documentation, run by CI and by hand as
 // `bun run check:docs`. This is the executable form of the checklist in
 // docs/conventions.md: relative links and anchors must resolve, every English
-// page must have a Japanese twin with the same headings / fences / table rows,
-// and lines must stay within the 100-column budget counted in East Asian
-// character width (tables, code blocks, and front matter are exempt — they
-// cannot always be wrapped).
+// page must have a Japanese twin with as many headings and table rows and with
+// fences whose content matches (translated comments aside), and lines must
+// stay within the 100-column budget counted in East Asian character width
+// (tables, code blocks, and front matter are exempt — they cannot always be
+// wrapped).
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const WIDTH_LIMIT = 100;
@@ -109,6 +110,47 @@ function stripFencedCode(text: string): string {
 		}
 	}
 	return out.join("\n");
+}
+
+type Fence = {
+	info: string;
+	body: string[];
+};
+
+function fencedBlocks(text: string): Fence[] {
+	const blocks: Fence[] = [];
+	let open: { marker: FenceMarker; fence: Fence } | null = null;
+	for (const line of text.split("\n")) {
+		if (open === null) {
+			const marker = fenceMarker(line);
+			if (marker !== null) {
+				open = {
+					marker,
+					fence: { info: line.slice(marker.length).trim(), body: [] },
+				};
+			}
+		} else if (closesFence(open.marker, line)) {
+			blocks.push(open.fence);
+			open = null;
+		} else {
+			open.fence.body.push(line);
+		}
+	}
+	return blocks;
+}
+
+// What twin fences are compared on. Commands are language-neutral and must
+// match line for line, but docs/conventions.md translates comments inside a
+// code block, so comment text is set aside: trailing `# ...` / `// ...` is cut
+// and comment-only lines are dropped rather than blanked, because re-wrapping
+// a translated comment legitimately changes how many lines it takes. Blank
+// lines go with them for the same reason. The trailing cut requires
+// whitespace on both sides of the marker, which keeps component ids such as
+// `button#Button` and `https://` URLs intact.
+function comparableFenceLines(fence: Fence): string[] {
+	return fence.body
+		.map((line) => line.replace(/\s(#|\/\/)\s.*$/, "").trimEnd())
+		.filter((line) => line !== "" && !/^\s*(#|\/\/|\/\*|\*)/.test(line));
 }
 
 function headingSlugs(prose: string): string[] {
@@ -213,16 +255,45 @@ export function checkDocs(
 			errors.push(`${file.path}: no Japanese twin`);
 			continue;
 		}
-		const pairs: Array<[string, RegExp, Map<string, string>]> = [
-			["headings", /^#+\s/gm, prose],
-			["fences", /^`{3}/gm, raw],
-			["table rows", /^\|/gm, prose],
+		// Heading text and table-row text are translated, so equal counts are
+		// all the checker can hold them to; fence content is held to more below.
+		const pairs: Array<[string, RegExp]> = [
+			["headings", /^#+\s/gm],
+			["table rows", /^\|/gm],
 		];
-		for (const [label, pattern, source] of pairs) {
-			const a = count(pattern, source.get(file.path) as string);
-			const b = count(pattern, source.get(twin) as string);
+		for (const [label, pattern] of pairs) {
+			const a = count(pattern, prose.get(file.path) as string);
+			const b = count(pattern, prose.get(twin) as string);
 			if (a !== b) {
 				errors.push(`${file.path} vs ${twin}: ${label} ${a} != ${b}`);
+			}
+		}
+		const ours = fencedBlocks(raw.get(file.path) as string);
+		const theirs = fencedBlocks(raw.get(twin) as string);
+		if (ours.length !== theirs.length) {
+			errors.push(
+				`${file.path} vs ${twin}: fences ${ours.length} != ${theirs.length}`,
+			);
+			continue;
+		}
+		for (let i = 0; i < ours.length; i++) {
+			const a = ours[i] as Fence;
+			const b = theirs[i] as Fence;
+			if (a.info !== b.info) {
+				errors.push(
+					`${file.path} vs ${twin}: fence ${i + 1} info "${a.info}" != "${b.info}"`,
+				);
+				continue;
+			}
+			const linesA = comparableFenceLines(a);
+			const linesB = comparableFenceLines(b);
+			for (let j = 0; j < Math.max(linesA.length, linesB.length); j++) {
+				if (linesA[j] !== linesB[j]) {
+					errors.push(
+						`${file.path} vs ${twin}: fence ${i + 1} content "${linesA[j] ?? ""}" != "${linesB[j] ?? ""}"`,
+					);
+					break;
+				}
 			}
 		}
 	}

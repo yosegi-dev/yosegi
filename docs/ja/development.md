@@ -104,7 +104,7 @@ shebang は `node` で、利用者に必要なのは Node.js 20 以上だけ。�
 ```sh
 bun run pack <tmp>          # tarball のパスを公開順に出力する
 
-cd <このリポジトリの外の作業用プロジェクト>
+cd <a scratch project outside this repo>
 npm install <tmp>/yosegi-core-0.1.0.tgz <tmp>/yosegi-yosegi-0.1.0.tgz
 ```
 
