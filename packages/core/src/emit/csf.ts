@@ -5,10 +5,14 @@ import {
 	indexRegistry,
 	type PropDefinition,
 } from "../domain/component-manifest.ts";
+import { expandRepeat } from "../domain/repeat.ts";
 import type { EventDefinition } from "../domain/screen-definition.ts";
 import {
+	bindingRootIdentifier,
+	EMIT_RESERVED_IDENTIFIERS,
 	eventDefinitionSchema,
 	isEmittableBindingExpression,
+	isJsIdentifier,
 	type ScreenNode,
 	walkNodes,
 } from "../domain/screen-definition.ts";
@@ -49,12 +53,12 @@ const STORY_SUFFIX_PATTERN = /\.stories$/;
 const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n&]/;
 // Characters that can't be left inside a double-quoted JSX attribute value.
 const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n&]/;
-// A form that can be written as-is in an identifier position (a Story's export name, an import's local name).
-const JS_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 // Local names the emitted file itself declares: `const meta` and the Meta / StoryObj
 // type imports. A host export with one of these names must take a suffixed alias, or
-// the generated Story declares the same identifier twice and cannot compile.
-const EMIT_DECLARED_LOCAL_NAMES = ["meta", "Meta", "StoryObj"];
+// the generated Story declares the same identifier twice and cannot compile. The
+// list lives in the domain (screen-definition.ts) because the fixtures schema
+// rejects the same names, and the two sides must not drift apart.
+const EMIT_DECLARED_LOCAL_NAMES: readonly string[] = EMIT_RESERVED_IDENTIFIERS;
 // Mocks have no handler implementation. The "do nothing" value placed on a required function prop.
 const NOOP_HANDLER = "() => {}";
 
@@ -85,6 +89,11 @@ export type EmitCsfOptions = {
 	resolveImport?: (packageName: string) => string;
 	// Meta boilerplate for the host's conventions.
 	meta?: MetaTemplate;
+	// Mock data emitted as top-level `const <name> = <JSON>;` declarations between
+	// the imports and meta, in insertion order. Bindings reference the names as
+	// written, so component imports yield the name instead (they get a suffixed
+	// alias) — a fixture const can never be renamed.
+	fixtures?: Record<string, unknown>;
 };
 
 // Converts a "./app=~,./packages/x=@y"-style spec into a prefix-replacement function.
@@ -199,6 +208,9 @@ type RenderContext = {
 	manifests: Map<string, ComponentManifest>;
 	// Component id -> the local name used in JSX.
 	localNames: Map<string, string>;
+	// Fixture names this file declares as consts. A binding whose head is one of
+	// these references a value that exists, so it can be written into the JSX.
+	fixtureNames: ReadonlySet<string>;
 };
 
 function indent(line: string): string {
@@ -264,7 +276,7 @@ export function planImports(
 		// The export name appears in an identifier position both in the import statement
 		// and as the JSX tag name. Since a Registry can also be built from a remote
 		// index.json, we verify here that it's actually writable as one.
-		if (!JS_IDENTIFIER_PATTERN.test(exportName)) {
+		if (!isJsIdentifier(exportName)) {
 			throw new Error(
 				`Component "${manifest.id}" has export name "${exportName}", which is not a valid JavaScript identifier.`,
 			);
@@ -335,7 +347,7 @@ function serializeProp(name: string, value: unknown): string | null {
 	return null;
 }
 
-// The expression placed on a required prop that's only declared via bindings / events.
+// The expression placed on a prop that's only declared via bindings / events.
 //
 // bindings / events are a declaration of "wire it up like this at implementation
 // time" — they don't carry a value. Dropping a valueless prop from the output is
@@ -344,24 +356,35 @@ function serializeProp(name: string, value: unknown): string | null {
 // For required props only, we place the smallest expression we can build from the
 // declaration, just so the prop never disappears outright. The intent itself is
 // carried by the TODO comment.
-function requiredPropExpression(
+//
+// A binding whose head names a fixture is the exception to "required only": the
+// const exists in this very file, so the expression is written regardless of
+// requiredness — the point of a fixture is that the mock actually shows the data
+// while the binding stays the implementation intent.
+function declaredPropExpression(
 	node: ScreenNode,
 	def: PropDefinition | undefined,
 	propName: string,
+	fixtureNames: ReadonlySet<string>,
 ): string | null {
-	if (def?.required !== true) {
-		return null;
-	}
-	// Handlers have no implementation in a mock, so fill with a no-op function. Nothing
-	// happening when it's triggered is correct behavior for a mock, and it type-checks
-	// in a handler position too.
-	if (def.kind === "function") {
-		return NOOP_HANDLER;
+	// Handlers have no implementation in a mock, so a required one is filled with a
+	// no-op function. Nothing happening when it's triggered is correct behavior for
+	// a mock, and it type-checks in a handler position too. A fixture is JSON, so
+	// it can never satisfy a handler position — the fixture path is skipped.
+	if (def?.kind === "function") {
+		return def.required === true ? NOOP_HANDLER : null;
 	}
 	const expression = Object.hasOwn(node.bindings ?? {}, propName)
 		? node.bindings?.[propName]
 		: undefined;
 	if (expression === undefined || !isEmittableBindingExpression(expression)) {
+		return null;
+	}
+	const head = bindingRootIdentifier(expression);
+	if (head !== null && fixtureNames.has(head)) {
+		return expression;
+	}
+	if (def?.required !== true) {
 		return null;
 	}
 	// The identifier doesn't exist inside the Story, so this Story won't pass type
@@ -646,12 +669,13 @@ function renderNode(node: ScreenNode, context: RenderContext): RenderedNode {
 		}
 		// Guarded with hasOwn: a plain bracket lookup keyed by a screen-supplied name
 		// walks the prototype chain, so a prop named "toString" would look defined.
-		const expression = requiredPropExpression(
+		const expression = declaredPropExpression(
 			node,
 			manifest && Object.hasOwn(manifest.props, propName)
 				? manifest.props[propName]
 				: undefined,
 			propName,
+			context.fixtureNames,
 		);
 		if (expression !== null) {
 			attributes.push([`${propName}={${expression}}`]);
@@ -697,6 +721,22 @@ function renderMetaProperties(properties: string[]): string[] {
 	});
 }
 
+// Reduces the fixtures to `const <name> = <JSON>;` lines. Values are always
+// written through JSON.stringify — the standing policy that an externally
+// supplied string never lands in a code position — and the tab indentation of a
+// multi-line value matches the rest of the output.
+function renderFixtures(fixtures: Record<string, unknown>): string[] {
+	return Object.entries(fixtures).flatMap(([name, value]) => {
+		const serialized = JSON.stringify(value, null, "\t");
+		// undefined / functions have no JSON form. A schema-parsed screen never
+		// carries them, so this only guards direct API callers.
+		if (serialized === undefined) {
+			throw new Error(`Fixture "${name}" has no JSON representation.`);
+		}
+		return `const ${name} = ${serialized};`.split("\n");
+	});
+}
+
 export function emitCsf(
 	root: ScreenNode,
 	registry: ComponentRegistry,
@@ -707,15 +747,41 @@ export function emitCsf(
 	// arrive from the CLI / MCP, only accept a form that's writable as an identifier
 	// (otherwise arbitrary code could get mixed into the generated output).
 	const storyName = options.storyName ?? DEFAULT_STORY_NAME;
-	if (!JS_IDENTIFIER_PATTERN.test(storyName)) {
+	if (!isJsIdentifier(storyName)) {
 		throw new Error(
-			`Story name "${storyName}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", and do not start with a digit.`,
+			`Story name "${storyName}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", do not start with a digit, and avoid reserved words.`,
 		);
 	}
-	// The Story's export name is an identifier this file declares, so a component
-	// import must not take the same local name.
-	const plan = planImports(root, registry, options.resolveImport, [storyName]);
-	const context: RenderContext = { manifests, localNames: plan.localNames };
+	const fixtures = options.fixtures ?? {};
+	for (const name of Object.keys(fixtures)) {
+		// Second safety net — the fixtures schema rejects both cases before a screen
+		// is ever saved. The storyName collision can only be caught here, because the
+		// name is chosen per emit rather than stored on the screen.
+		if (!isJsIdentifier(name) || EMIT_DECLARED_LOCAL_NAMES.includes(name)) {
+			throw new Error(
+				`Fixture name "${name}" is not writable as a top-level const (it must be a JavaScript identifier other than ${EMIT_DECLARED_LOCAL_NAMES.join(" / ")}).`,
+			);
+		}
+		if (name === storyName) {
+			throw new Error(
+				`Fixture name "${name}" collides with the Story export name. Rename the fixture or pass a different story name.`,
+			);
+		}
+	}
+	// repeat expands here — after validation, before import planning — so the
+	// Screen JSON keeps its single node while the Story shows the copies.
+	const expandedRoot = expandRepeat(root);
+	// The Story's export name and the fixture consts are identifiers this file
+	// declares, so a component import must not take the same local name.
+	const plan = planImports(expandedRoot, registry, options.resolveImport, [
+		storyName,
+		...Object.keys(fixtures),
+	]);
+	const context: RenderContext = {
+		manifests,
+		localNames: plan.localNames,
+		fixtureNames: new Set(Object.keys(fixtures)),
+	};
 
 	const generatedImports = [
 		`import type { Meta, StoryObj } from ${JSON.stringify(options.frameworkPackage ?? DEFAULT_FRAMEWORK_PACKAGE)};`,
@@ -729,6 +795,11 @@ export function emitCsf(
 			(statement) => !generatedImports.includes(statement),
 		),
 	];
+	const fixtureLines = renderFixtures(fixtures);
+	if (fixtureLines.length > 0) {
+		lines.push("");
+		lines.push(...fixtureLines);
+	}
 	lines.push("");
 	if (options.meta?.jsdoc) {
 		lines.push(...options.meta.jsdoc.split("\n"));
@@ -743,7 +814,7 @@ export function emitCsf(
 		"",
 		`export const ${storyName}: StoryObj = {`,
 		"\trender: () => (",
-		...renderRoot(root, context).map((line) => `\t\t${line}`),
+		...renderRoot(expandedRoot, context).map((line) => `\t\t${line}`),
 		"\t),",
 		"};",
 	);

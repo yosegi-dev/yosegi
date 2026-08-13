@@ -285,7 +285,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` |
 | `list_categories` | — | the `categories` field of `component list --json` |
 | `get_registry_status` | — | `registry status`, provenance only — it does not recompute source drift |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework` | `screen generate`, but it returns the CSF source as a string and writes no file |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures` | `screen generate`, but it returns the CSF source as a string and writes no file |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |

@@ -148,7 +148,8 @@ different things**, and the second appears neither in the Story nor in the imple
    literals you or someone else wrote into the mock. `expression` and `action` are Yosegi's
    declarations, not the host's API names — translate them into the style of the implementations you
    just read.
-4. Apply the repetition and conditions. Rows the mock faked by duplication become a real iteration.
+4. Apply the repetition and conditions. Rows the mock faked by duplication or expanded by `repeat`
+   become a real iteration; a fixture's const becomes the real data source its bindings name.
 5. Sweep up the dummy values that nothing flagged — sample copy, placeholder counts. These ship to
    production if you leave them.
 6. Run the host's type checking, lint, and tests.

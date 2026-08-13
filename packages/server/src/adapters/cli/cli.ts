@@ -478,6 +478,7 @@ async function generateStory(
 		frameworkPackage: flagString(flags, "framework"),
 		resolveImport: importMap ? buildImportMapResolver(importMap) : undefined,
 		meta: metaTemplate?.template,
+		fixtures: screen.fixtures,
 	});
 	await mkdir(dirname(out), { recursive: true });
 	await writeFile(out, source);
@@ -586,6 +587,11 @@ async function importStoryFile(
 			screenId,
 		componentRegistryVersion: registry.version,
 		revision: 0,
+		// A Story with no fixture consts keeps the field absent, so the output JSON
+		// stays byte-identical to what this command produced before fixtures existed.
+		...(Object.keys(imported.fixtures).length > 0
+			? { fixtures: imported.fixtures }
+			: {}),
 		root: imported.root,
 	});
 

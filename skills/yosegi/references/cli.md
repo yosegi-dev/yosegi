@@ -344,7 +344,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` — an unknown id returns `COMPONENT_NOT_FOUND` with the same did-you-mean `suggestion` |
 | `list_categories` | — | the `categories` field of `component list --json` |
 | `get_registry_status` | — | `registry status`, provenance only: it reports version / build time / inputs and the version-mismatch warning, but does not recompute source drift |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework` | `screen generate` — but it writes no file and returns the CSF source as a string, so the caller decides where it goes |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures` | `screen generate` — but it writes no file and returns the CSF source as a string, so the caller decides where it goes |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |
@@ -355,8 +355,8 @@ claude mcp add yosegi -- npx yosegi mcp
 Two differences from the CLI are easy to get wrong:
 
 - `generate_story` takes `root` — the ScreenNode alone, which is the `root` field of the Screen
-  JSON, not the whole document. The other top-level fields have no MCP equivalent; `title` is passed
-  separately.
+  JSON, not the whole document. The other top-level fields have no MCP equivalent; `title` and
+  `fixtures` are passed separately.
 - `importMap` is the same string the CLI takes (`"./app=~,./lib=~/lib"`), not an object.
 
 `generate_implementation_context` takes a `screenId`, so the screen has to be in the store first

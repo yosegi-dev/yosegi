@@ -905,3 +905,144 @@ describe("emitCsf のローカル名衝突", () => {
 		expect(source).toContain("export const Default: StoryObj = {");
 	});
 });
+
+describe("emitCsf の fixtures", () => {
+	it("fixtures を import の後・meta の前に const として挿入順で出力する", () => {
+		const source = emitCsf(sampleScreen().root, sampleRegistry(), {
+			title: "S/T",
+			fixtures: { customers: [{ name: "Sato" }], pageSize: 20 },
+		});
+		const imports = source.indexOf("import type { Meta, StoryObj }");
+		const customers = source.indexOf("const customers = [");
+		const pageSize = source.indexOf("const pageSize = 20;");
+		const meta = source.indexOf("const meta: Meta = {");
+		expect(imports).toBeGreaterThanOrEqual(0);
+		expect(customers).toBeGreaterThan(imports);
+		expect(pageSize).toBeGreaterThan(customers);
+		expect(meta).toBeGreaterThan(pageSize);
+		// Multi-line JSON values keep the file's tab indentation.
+		expect(source).toContain(
+			'const customers = [\n\t{\n\t\t"name": "Sato"\n\t}\n];',
+		);
+	});
+
+	// A fixture const can never be renamed (bindings reference it as written), so
+	// the colliding component import takes the suffixed alias instead.
+	it("fixture 名と衝突する export 名は退避する", () => {
+		const source = emitCsf(
+			node("root", "Card"),
+			withSyntheticComponents(singleComponentRegistry("Card")),
+			{ title: "S/T", fixtures: { Card: { label: "x" } } },
+		);
+		expect(source).toContain('import { Card as Card2 } from "~/x";');
+		expect(source).toContain("<Card2 />");
+		expect(source).toContain("const Card = {");
+	});
+
+	it("fixture を参照する binding は optional な Prop でも式として書く", () => {
+		// Table.rows is optional in the sample registry; without the fixture the
+		// prop is dropped from the output entirely.
+		const root = node("root", "Table", { bindings: { rows: "customers" } });
+		const without = emit(root);
+		expect(without).not.toContain("rows={customers}");
+		const source = emitCsf(root, withSyntheticComponents(sampleRegistry()), {
+			title: "S/T",
+			fixtures: { customers: [] },
+		});
+		expect(source).toContain("const customers = [];");
+		expect(source).toContain("rows={customers}");
+	});
+
+	it("fixture を参照しない binding は従来どおり出力しない", () => {
+		const source = emitCsf(
+			node("root", "Table", { bindings: { rows: "query.rows" } }),
+			withSyntheticComponents(sampleRegistry()),
+			{ title: "S/T", fixtures: { customers: [] } },
+		);
+		expect(source).not.toContain("rows={query.rows}");
+	});
+
+	it("メンバー参照の binding も fixture の先頭識別子で判定する", () => {
+		const source = emitCsf(
+			node("root", "Table", { bindings: { rows: "data.customers" } }),
+			withSyntheticComponents(sampleRegistry()),
+			{ title: "S/T", fixtures: { data: { customers: [] } } },
+		);
+		expect(source).toContain("rows={data.customers}");
+	});
+
+	it("storyName と衝突する fixture 名を拒否する", () => {
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				fixtures: { Default: [] },
+			}),
+		).toThrow("collides with the Story export name");
+	});
+
+	it("予約識別子・識別子でない fixture 名を拒否する", () => {
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				fixtures: { meta: [] },
+			}),
+		).toThrow("not writable as a top-level const");
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				fixtures: { "customer-rows": [] },
+			}),
+		).toThrow("not writable as a top-level const");
+	});
+});
+
+describe("emitCsf の repeat", () => {
+	it("repeat を持つノードを -1..-N の複製として展開する", () => {
+		const source = emit(
+			node("root", "Box", {
+				slots: {
+					children: [
+						node("row", "Table", { props: { loading: false }, repeat: 3 }),
+					],
+				},
+			}),
+		);
+		expect(source.split("<Table loading={false} />").length - 1).toBe(3);
+	});
+
+	it("repeat の複製にも意図コメントが付く", () => {
+		const source = emit(
+			node("root", "Box", {
+				slots: {
+					children: [
+						node("row", "Table", {
+							bindings: { rows: "customer.orders" },
+							each: "customer in customers",
+							repeat: 2,
+						}),
+					],
+				},
+			}),
+		);
+		expect(
+			source.split(
+				'{/* TODO(yosegi): {"bindings":{"rows":"customer.orders"},"each":"customer in customers"} */}',
+			).length - 1,
+		).toBe(2);
+	});
+
+	it("展開後の id が衝突する木を拒否する", () => {
+		expect(() =>
+			emit(
+				node("root", "Box", {
+					slots: {
+						children: [
+							node("row", "Table", { repeat: 2 }),
+							node("row-2", "Table"),
+						],
+					},
+				}),
+			),
+		).toThrow('"row-2" appears more than once');
+	});
+});

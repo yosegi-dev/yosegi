@@ -76,8 +76,8 @@ yosegi component inspect "app/components/ui/card#CardHeader" --data-dir .yosegi
 # 3. Read the host's conventions (AGENTS.md, design tokens, existing composed Stories)
 
 # 4a. Write the .stories.tsx directly — the default, and the only option when any component
-#     needs a value that is not a JSON literal (a runtime object, a component reference,
-#     repetition, a condition)
+#     needs a value that has no JSON form (a runtime object, a component reference,
+#     a condition)
 
 # 4b. Or, for a static screen, write tmp/screen.json and generate the Story from it
 yosegi screen generate tmp/screen.json \

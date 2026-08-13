@@ -195,6 +195,74 @@ describe("生成した Story の型検査", () => {
 		expect(source).toContain('title={"AT&T &amp; more"}');
 	});
 
+	it("fixtures と fixture を参照する binding を含む Story がコンパイルできる", () => {
+		const registry: ComponentRegistry = withSyntheticComponents(
+			parseComponentRegistry({
+				version: "v1",
+				components: [
+					{
+						id: "Table",
+						name: "Table",
+						import: { packageName: "./ui/table", exportName: "Table" },
+						props: { rows: { kind: "json", editable: false } },
+						slots: {},
+					},
+				],
+			}),
+		);
+		const source = emitCsf(
+			{
+				id: "n1",
+				component: "Table",
+				props: {},
+				slots: {},
+				bindings: { rows: "customers" },
+			},
+			registry,
+			{
+				title: "T",
+				fixtures: {
+					customers: [{ name: 'Sa"to', note: "a\nb" }],
+					pageSize: 20,
+				},
+			},
+		);
+
+		expect(
+			compile(source, { "/host/ui/table.ts": componentStub(["Table"]) }),
+		).toEqual([]);
+		expect(source).toContain("rows={customers}");
+	});
+
+	// A fixture const cannot be renamed, so the colliding component import must
+	// take the alias — otherwise the file declares the identifier twice.
+	it("fixture 名と衝突する export 名があってもコンパイルできる", () => {
+		const registry: ComponentRegistry = withSyntheticComponents(
+			parseComponentRegistry({
+				version: "v1",
+				components: [
+					{
+						id: "Card",
+						name: "Card",
+						import: { packageName: "./ui/card", exportName: "Card" },
+						props: {},
+						slots: {},
+					},
+				],
+			}),
+		);
+		const source = emitCsf(
+			{ id: "n1", component: "Card", props: {}, slots: {} },
+			registry,
+			{ title: "T", fixtures: { Card: { label: "x" } } },
+		);
+
+		expect(
+			compile(source, { "/host/ui/card.ts": componentStub(["Card"]) }),
+		).toEqual([]);
+		expect(source).toContain('import { Card as Card2 } from "./ui/card";');
+	});
+
 	it("Story の export 名と衝突する export 名でもコンパイルできる", () => {
 		const registry: ComponentRegistry = withSyntheticComponents(
 			parseComponentRegistry({
