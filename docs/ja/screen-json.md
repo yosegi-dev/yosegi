@@ -64,8 +64,8 @@ Screen JSON は中間表現。一時ファイルとして扱ってよく、成�
 
 必須フィールドの欠落は検証の警告ではなく `INVALID_REQUEST` になる。
 
-ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須。ノードの
-`id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の slot 名は
+ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須。ノード
+の `id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の slot 名は
 prop として渡される。
 
 ## コンポーネント id
@@ -77,16 +77,16 @@ app/components/ui/button#Button
 app/components/ui/card#CardHeader
 ```
 
-この id をそのまま `component` に書く。1 ファイルが複数の部品を export する場合（`Card` /
-`CardHeader` / `CardBody`）でも一意に定まるのは、export 名だけでは足りないから。`CardHeader` とだけ
-書くと `COMPONENT_NOT_FOUND` になり、候補として完全な id が返る。
+この id をそのまま `component` に書く。1 ファイルが複数のコンポーネントを export する場合（`Card` /
+`CardHeader` / `CardBody`）でも一意に定まるのはこの形だけで、export 名だけでは区別できない。
+`CardHeader` とだけ書くと `COMPONENT_NOT_FOUND` になり、候補として完全な id が返る。
 
 `--index` 単独モードは互換のため短い id（`Button`）のまま。[Component Registry](./registry.md)
 を参照。
 
 ## 合成プリミティブ
 
-Registry に無くても使える構造用の部品。import を必要としない。
+Registry に無くても使える構造用のコンポーネント。import を必要としない。
 
 | id | props | 出力 |
 | --- | --- | --- |
@@ -94,12 +94,13 @@ Registry に無くても使える構造用の部品。import を必要としな�
 | `Box` | `className` | `<div className=...>`（`slots.children` を持てる） |
 | `Heading` | `text` | `<h1 className="font-bold text-2xl tracking-tight">` |
 
-実部品のラベルは、その `children` slot に `Text` を置いて表現する。
+実コンポーネントのラベルは、その `children` slot に `Text` を置いて表現する。
 
-合成プリミティブは id の長さで見分ける。短い id（`"Text"`）は常にプリミティブを指し、ホストの部品は
-完全な id（`"app/components/typography#Text"`）を使う。同名の部品が Registry にもある場合、検証は
-完全な id を候補に添えた `SYNTHETIC_NAME_SHADOWED` 警告を出す。プリミティブを使うこと自体は正当な
-ので error ではない。`Heading` も同様に、見出し部品を持たないホスト向けの既定にすぎない。見た目は
+合成プリミティブは id の長さで見分ける。短い id（`"Text"`）は常にプリミティブを指し、ホストの
+コンポーネントは完全な id（`"app/components/typography#Text"`）を使う。同名のコンポーネントが
+Registry にもある場合、検証は完全
+な id を候補に添えた `SYNTHETIC_NAME_SHADOWED` 警告を出す。プリミティブを使うこと自体は正当なのでエ
+ラーではない。`Heading` も同様に、見出しコンポーネントを持たないホスト向けの既定にすぎない。見た目は
 Yosegi の既定であって、ホストのタイポグラフィ定義には従わない。
 
 ## bindings / events
@@ -115,15 +116,15 @@ Yosegi の既定であって、ホストのタイポグラフィ定義には従�
 `bindings` の値は文字列そのもの。`{ "expression": "..." }` のようにオブジェクトで包むとスキーマ違反
 （`INVALID_REQUEST`。正しい形は `hints` に出る）。`events` の `arguments` は省略できる。
 
-どちらのキーも Manifest と突き合わせて検証される。存在しない prop を指す `bindings` のキーは error
-（`UNKNOWN_BINDING_TARGET`）。存在しない prop に値を書くのと同じ間違いだからである。`events` のキーは
-warning どまり（`UNKNOWN_EVENT_TARGET`）で、これは Manifest がイベントの一覧を持たず、ハンドラが
-関数型の prop としてしか現れないため。
+どちらのキーも Manifest と突き合わせて検証される。存在しない prop を指す `bindings` のキーは
+エラー（`UNKNOWN_BINDING_TARGET`）。存在しない prop に値を書くのと同じ間違いだからである。`events`
+のキーは警告どまり（`UNKNOWN_EVENT_TARGET`）で、これは Manifest がイベントの一覧を持たず、ハンドラ
+が関数型の prop としてしか現れないため。
 
 binding の宛先は prop でなければならない。型から作られた Registry では `ReactNode` の prop は prop
 ではなく **slot** になる。`children` も同様である。ノードのテキストをデータ由来にしたい場合は、その
-部品が実際に宣言している文字列の prop へ binding するか、テキストは `slots.children` へ置いたまま
-実装時に結線する。
+コンポーネントが実際に宣言している文字列の prop へ binding するか、テキストは `slots.children` へ置
+いたまま実装時に結線する。
 
 `bindings` を持つ prop は型検証の対象外になる。値が具体化するのは実装時だからである。
 
@@ -141,19 +142,19 @@ binding の宛先は prop でなければならない。型から作られた Re
 
 ### binding はモックの値ではない
 
-binding は「実装時にどこから値が来るか」の宣言であって、モックが表示できる値は持たない——同名の
-[fixture](#fixtures) が値を供給する場合を除いて。fixture が無ければ、optional な prop は prop が
-出力されないだけでモックは描画できる。**required** な prop の場合、エミッタは prop を落とさずに
-式そのものを JSX へ書き（`rows={customers}`）、検証は `BOUND_REQUIRED_PROP` を警告する。その名前は
-Story に存在しないので、ホストの型検査はそこで止まる。binding の先頭と同じ名前の fixture を宣言する
-か、`props` にモック値を与え、binding は意図として残す。例外は required なハンドラで、何もしない
-`() => {}` が埋められるため `events` への宣言だけでよい。
+binding は「実装時にどこから値が来るか」の宣言であって、モックが表示できる値は持たない。同名の
+[fixture](#fixtures) が値を供給する場合だけが例外になる。fixture が無ければ、optional な prop は
+prop が出力されないだけでモックは描画できる。**required** な prop の場合、エミッタは prop を落とさ
+ずに式そのものを JSX へ書き（`rows={customers}`）、検証は `BOUND_REQUIRED_PROP` を警告する。その名
+前は Story に存在しないので、ホストの型検査はそこで止まる。binding の先頭と同じ名前の fixture を宣
+言するか、`props` にモック値を与え、binding は意図として残す。例外は required なハンドラで、何もし
+ない `() => {}` が埋められるため `events` への宣言だけでよい。
 
 ## fixtures
 
 `fixtures` は画面のモックデータ層。名前付きの JSON 値で、生成される Story では import と meta の
 間に、書いた順で、トップレベルの `const <名前> = <値>;` 宣言になる。式が fixture 名から始まる
-binding は、実在する値への参照になる——モックが表示する値と実装が置き換える結線先を、1 つの宣言が
+binding は、実在する値への参照になる。モックが表示する値と実装が置き換える結線先を、1 つの宣言が
 両方運ぶ。
 
 ```json
@@ -177,8 +178,8 @@ fixture 名は JavaScript の識別子であること。また `meta` / `Meta` /
 （`Default`、または `--story-name`）と同じ名前は生成時に弾かれる。fixture 名と衝突する
 コンポーネント import はサフィックス付きの別名へ退避する。
 
-fixtures が持てるのは JSON だけ。JSON の形を持たない値——テーブルインスタンス、コンポーネント参照、
-関数——は依然として表現できないので、そうした画面は Story を直接書く。
+fixtures が持てるのは JSON だけ。JSON の形を持たない値（テーブルインスタンス、コンポーネント参照、
+関数）は依然として表現できない。そうした画面は Story を直接書く。
 
 ## when / each / repeat
 
@@ -191,7 +192,7 @@ fixtures が持てるのは JSON だけ。JSON の形を持たない値——テ
 ```
 
 `repeat`（2〜20 の整数）は `each` の構造版で、生成時にサブツリーがその数の複製へ展開されるため、
-手でノードを複製しなくてもモックは一覧に見える。両者は独立していて、たいてい併用する——`each` は
+手でノードを複製しなくてもモックは一覧に見える。両者は独立していて、たいてい併用する。`each` は
 実装時に**何が**繰り返されるかを、`repeat` はモックが複製を何個見せるかを言う。Screen JSON 上は
 1 ノードのまま。複製の id には `-1`〜`-N` サフィックスが付き、サフィックス後の id が既存ノードの
 id と衝突すると `DUPLICATE_NODE_ID` エラーになる。ルートの `repeat` は弾かれ（`REPEAT_ON_ROOT`）、
@@ -199,7 +200,7 @@ id と衝突すると `DUPLICATE_NODE_ID` エラーになる。ルートの `rep
 
 fixtures と違い、`repeat` は往復で生き残らない。生成された Story は展開済みの複製を素の JSX として
 持ち、`story import` はそれを `repeat` フィールドの無い個別ノードとして読み戻す。取り込んだ Story
-から JSON ルートに再入する場合は自分で畳み直すこと。
+から JSON の経路に入り直す場合は自分で畳み直すこと。
 
 ## 次に読む
 

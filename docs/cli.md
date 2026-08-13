@@ -78,14 +78,14 @@ props that take a value no literal can express and that go undocumented.
 priority, recommended, shape? }`. Entries are ordered `required-opaque`, `optional-opaque`,
 `required-literal`, `optional-literal`, and capped at 100 with the rest counted in `omitted`. Work
 down it — see
-[Component registry](./registry.md#what-the-host-can-do-to-make-inspect-more-useful).
+[Component Registry](./registry.md#what-the-host-can-do-to-make-inspect-more-useful).
 
 Import specifiers come from the host's tsconfig `paths`, so the registry reports the line the host
 would write (`~/components/button`) rather than a path relative to the project root. Pass
 `--import-map "./app=~"` only if the aliases live somewhere tsconfig cannot see.
 
 Omitting `--source` builds from `--index` alone. Ids then stay short (`Button`) and props rely on
-`--metadata`. See [Component registry](./registry.md).
+`--metadata`. See [Component Registry](./registry.md).
 
 ## `registry metadata`
 
@@ -225,7 +225,8 @@ yosegi screen context tmp/screen.json \
   --import-map "./app=~" --route /customers --data-dir .yosegi
 ```
 
-How to read the output is in [Workflows](./workflows.md#downstream--turning-a-story-into-an-implementation).
+How to read the output is in
+[Workflows](./workflows.md#downstream--turning-a-story-into-an-implementation).
 
 ## `story import`
 
@@ -294,9 +295,9 @@ claude mcp add yosegi -- npx yosegi mcp
 
 `generate_story` takes `root` — the ScreenNode alone, not the whole Screen JSON — and `importMap` is
 the same string the CLI takes, not an object. `search_components` returns summaries capped at
-`limit` (default 50, max 200) with `total` / `truncated`; `detail: "full"` returns complete manifests.
-`registry build`, `registry metadata`, and `story import` are CLI-only, and there is no MCP
-equivalent of `--meta-template`.
+`limit` (default 50, max 200) with `total` / `truncated`; `detail: "full"` returns complete
+manifests. `registry build`, `registry metadata`, and `story import` are CLI-only, and there is no
+MCP equivalent of `--meta-template`.
 
 ## Next steps
 

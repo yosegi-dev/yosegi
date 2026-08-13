@@ -120,8 +120,8 @@ Reviewing a Japanese page against its English source, check that the translation
 ## Skill self-containment
 
 - `skills/yosegi/` must never depend on `docs/` or on a URL for anything essential. `SKILL.md` sends
-  the reader into `references/` and nowhere else, so content overlapping a `docs/` page is duplicated
-  there on purpose and kept in step by hand.
+  the reader into `references/` and nowhere else, so content overlapping a `docs/` page is
+  duplicated there on purpose and kept in step by hand.
 - Edit `skills/yosegi/`. `packages/server/skills/` is a generated mirror — never edit it.
 
 ## Checks before committing docs

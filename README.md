@@ -15,7 +15,9 @@ For React + TypeScript projects. The registry is built from TypeScript types, an
 ## How it works
 
 1. **Registry** — reads your source's TypeScript types into a component catalog. Props, slots, enum
-   options, and the import specifier you actually write all come from types; nothing is hand-written.
+   options, and the import specifier you actually write all come from types by default;
+   `--metadata` fills the rare gaps the types cannot express, and an `--index`-only registry
+   carries no types ([`docs/registry.md`](./docs/registry.md)).
 2. **Lookup** — `component inspect` is the source of truth for a component's props. Your fork's
    renamed variants, a `ReactNode` prop that is a named slot rather than children, two components
    sharing one export name: none of that is derivable from knowing React. The screen's skeleton and
@@ -105,8 +107,8 @@ cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 
 `SKILL.md` carries a version date under its title — compare it against this repository's copy to
 confirm an installed skill is current. Install it into one location your agent tool reads; a second,
-untracked copy elsewhere in the host repository is exactly the kind of stale copy that check exists to
-catch.
+untracked copy elsewhere in the host repository is exactly the kind of stale copy that check exists
+to catch.
 
 Then: *"build me a screen proposal from the existing components"*.
 
@@ -121,7 +123,7 @@ Then: *"build me a screen proposal from the existing components"*.
 | [CLI reference](./docs/cli.md) | Every command and flag, plus the MCP tools |
 | [Development](./docs/development.md) | Package layout, build, pre-publish verification |
 | [Roadmap](./docs/ROADMAP.md) | Planned work and open questions |
-| [Component registry](./docs/registry.md) | How types become a catalog, and the measurements |
+| [Component Registry](./docs/registry.md) | How types become a catalog, and the measurements |
 
 Working in this repository: [`AGENTS.md`](./AGENTS.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md),
 [documentation conventions](./docs/conventions.md).

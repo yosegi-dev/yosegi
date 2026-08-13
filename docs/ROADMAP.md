@@ -4,13 +4,13 @@ English | [日本語](./ja/ROADMAP.md)
 
 What is planned, and what is still undecided. For what Yosegi does today, start from
 [`README.md`](../README.md); for how the Component Registry works, see
-[Component registry](./registry.md).
+[Component Registry](./registry.md).
 
 ## Registry extraction
 
 ### Rescue the props the extractor cannot read today
 
-Three kinds of component come back with only `className` / `children`: a value cast to an overloaded
+Two kinds of component come back with only `className` / `children`: a value cast to an overloaded
 call signature type, and re-exports of third-party components. Reading the first parameter of the
 call signature directly through the TypeChecker should recover them.
 
@@ -35,10 +35,11 @@ into a `@yosegi/core/node` subpath would leave core usable in browser and Worker
 
 ### Stay on TypeScript 6.x until 7.1 ships an API
 
-`typescript` is capped at `<7` on purpose. TypeScript 7.0 ships no compiler API — `require("typescript")`
-returns `{ version, versionMajorMinor }` and nothing else — and both `source-registry.ts` and
-`react-docgen-typescript` are built on the 6.x API. A host on 7 keeps that API through the
-compatibility package, which is what [`registry.md`](./registry.md) tells them to install.
+`typescript` is capped at `<7` on purpose. TypeScript 7.0 ships no compiler API —
+`require("typescript")` returns `{ version, versionMajorMinor }` and nothing else — and both
+`source-registry.ts` and `react-docgen-typescript` are built on the 6.x API. A host on 7 keeps that
+API through the compatibility package, which is what [`registry.md`](./registry.md) tells them to
+install.
 
 7.1 is expected to introduce a new and different API, published today as `typescript/unstable/*`
 (`unstable/sync` for `Program` / `Checker`, `unstable/ast` for the node helpers). Migrating to it
@@ -61,9 +62,9 @@ Today the deliverable is a single Story (`.stories.tsx`), with the whole screen 
 `render`. With handoff to implementation in mind, another option is to split it into a composed
 component (`screen.tsx`) plus a thin Story that calls it.
 
-- Upside: the generated code can move into the application as-is. The Story becomes "just render this
-  component", matching the shape of the host's other Stories, and it can express which props are
-  lifted out (what gets passed in from outside).
+- Upside: the generated code can move into the application as-is. The Story becomes "just render
+  this component", matching the shape of the host's other Stories, and it can express which props
+  are lifted out (what gets passed in from outside).
 - Question: where to draw the component boundary — Screen JSON carries no information
   about "this is a reusable unit". Emitting two files also deepens how much Yosegi reaches into the
   host's file layout conventions.
@@ -77,8 +78,8 @@ for the default ordering and filtering of `component list` is the obvious line.
 
 ### Migrating component ids in saved screens
 
-A screen saved under `<data-dir>/screens/` stores the component ids that were current when it was written.
-Registries built from `--source` use `<module path>#<exportName>`, while `--index` on its own
-produces short ids (`Button`). The two are not interchangeable, so a screen saved against one cannot
-be revalidated against the other. Nothing migrates or aliases them today. Before saved screens carry
-anything worth keeping, this needs either a migration step or id aliasing.
+A screen saved under `<data-dir>/screens/` stores the component ids that were current when it was
+written. Registries built from `--source` use `<module path>#<exportName>`, while `--index` on its
+own produces short ids (`Button`). The two are not interchangeable, so a screen saved against one
+cannot be revalidated against the other. Nothing migrates or aliases them today. Before saved
+screens carry anything worth keeping, this needs either a migration step or id aliasing.

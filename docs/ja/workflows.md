@@ -2,8 +2,8 @@
 
 [English](../workflows.md) | 日本語
 
-Yosegi は 2 方向に走る。上流は登録済みの部品から Story を組み立てる向き、下流はその Story を実ページ
-へ転換する向き。
+Yosegi は 2 方向に走る。上流は登録済みのコンポーネントから Story を組み立てる向き、下流はその Story
+を実ページへ転換する向き。
 
 ## ユースケース
 
@@ -13,8 +13,8 @@ Yosegi は 2 方向に走る。上流は登録済みの部品から Story を組
 ### ユースケース 1: 画面モックを速く作る
 
 - 人が言うこと: 「うちのコンポーネントでクーポン管理画面のモックを作って」
-- エージェントがやること: Registry を作り、使う部品を inspect し、ホストの規約を読み、Story を書く。
-  直接書くか、静的な画面であれば検証の恩恵を取りに Screen JSON を経由するかを選ぶ。
+- エージェントがやること: Registry を作り、使うコンポーネントを inspect し、ホストの規約を読み、
+  Story を書く。直接書くか、静的な画面であれば検証の恩恵を取りに Screen JSON を経由するかを選ぶ。
 - 成果物: ホストの Storybook にそのまま置ける `.stories.tsx`。実物のコンポーネントと実物の props で
   描かれ、ホスト自身の型検査を通っている。
 
@@ -26,30 +26,30 @@ Story か Screen JSON を直して出し直すだけ。
 - 人が言うこと: 「このモックを実装して」
 - エージェントがやること: Story とホストのページ規約を読み、モックの値を実データへ繋ぎながら実ページ
   を書く。Yosegi が生成した Story なら、先に実装コンテキストを取って `tasks[]` を 1 つずつ潰せる。
-- 成果物: 実ページの実装。レビュアーが承認したのと同じ部品で組まれている。
+- 成果物: 実ページの実装。レビュアーが承認したのと同じコンポーネントで組まれている。
 
 入力は Story ファイルだけなので、モックを組んだのが別の人・別のセッションでもよい。ただし
 `story import` に手を伸ばす前に「下流」の制約を読むこと。
 
 ### ユースケース 3: Figma を介さずイテレーションする
 
-レビューで見るものと実装で使うものが同じ部品になる。
+レビューで見るものと実装で使うものが同じコンポーネントになる。
 
-- デザインシステムに無い見た目は、そもそも組めない。Registry に無い部品は検証で弾かれる。
+- デザインシステムに無い見た目は、そもそも組めない。Registry に無いコンポーネントは検証で弾かれる。
 - 承認された案がそのままユースケース 2 の入力になるので、「実装したら別のコンポーネントだった」と
   いうズレが起きない。
-- 逆に、既存の部品では足りないことが早く分かる。実装中の不意打ちではなく、デザインシステムへの
-  要望として出てくる。
+- 逆に、既存のコンポーネントでは足りないことが早く分かる。実装中の不意打ちではなく、デザインシステム
+  への要望として出てくる。
 
-新しいビジュアル表現を決めるのは引き続き Figma の仕事。Yosegi が扱うのは、いま手元にある部品で組める
-画面を見せるところまで。
+新しいビジュアル表現を決めるのは引き続き Figma の仕事。Yosegi が扱うのは、いま手元にあるコンポーネン
+トで組める画面を見せるところまで。
 
 ## 上流: Story を組み立てる
 
 `registry build` → `component list` / `inspect` → Story。
 
 必須なのは最初の 2 段で、ここで実際の props を確定させ、推測した prop を出荷しないようにする。画面の
-骨格や合成の作法は registry ではなくホスト自身の Story やテンプレートから得る。Story をどう書くか
+骨格や合成の作法は Registry ではなくホスト自身の Story やテンプレートから得る。Story をどう書くか
 は形式の選択でしかない。画面上のどれか 1 つでも JSON の形を持たない値を必要とするなら（ランタイム
 のオブジェクト、コンポーネント参照、式で組む `ReactNode`、条件分岐）、Screen JSON には表現する構文が
 無いので直接書く。モックデータと繰り返しは表現できる。`fixtures` が binding の参照する名前付き JSON
@@ -84,13 +84,14 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 ```
 
 `COMPONENT_NOT_FOUND`・`UNKNOWN_PROP`・`UNKNOWN_BINDING_TARGET` にはレーベンシュタイン距離で最も近い
-候補が付く。`INVALID_PROP_VALUE` には受け取った値と enum の選択肢が付く。どのエラーもツリー内の位置を
-示す `path` を持つので、id が衝突していてもノードを特定できる。警告は生成を止めず、ファイル書き出しの
-後に並ぶ。
+候補が付く。`INVALID_PROP_VALUE` には受け取った値と enum の選択肢が付く。どのエラーもツリー内の位置
+を示す `path` を持つので、id が衝突していてもノードを特定できる。警告は生成を止めず、ファイル書き出
+しの後に並ぶ。
 
-生成される meta は既定では `title` だけ。ホストが要求する定型は `--meta-template <file>` で差し込む。
-値はソースの断片として解釈せずに引き継ぐので、Yosegi が持っていない Figma の URL を捏造することは
-無い。ただしテンプレート元にした既存 Story の URL はそのまま引き継がれ、警告で名指しされる。
+生成される meta は既定では `title` だけ。ホストが要求する定型は `--meta-template <file>`
+で差し込む。値はソースの断片として解釈せずに引き継ぐので、Yosegi が持っていない Figma の URL を捏造
+することは無い。ただしテンプレート元にした既存 Story の URL
+はそのまま引き継がれ、警告で名指しされる。
 
 ## 検証エラーの code
 
@@ -107,7 +108,7 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | `RESERVED_PROP` | `props` の中に `children`・`key`・`ref` を書いている | これらは JSX の属性として出力されない。内容は `slots.children` へ移し、`key`・`ref` は消す |
 | `SLOT_NOT_FOUND` | その slot は無い | `component inspect` で slots を確認する。子要素はたいてい `children` |
 | `SLOT_COMPONENT_NOT_ALLOWED` / `SLOT_MAX_ITEMS_EXCEEDED` | slot の制約がその子を許さない | 許されるものは `suggestion` にある |
-| `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | 親子の組み合わせに制約がある | 許される部品は `suggestion` にある |
+| `PARENT_NOT_ALLOWED` / `CHILD_NOT_ALLOWED` | 親子の組み合わせに制約がある | 許されるコンポーネントは `suggestion` にある |
 | `DUPLICATE_NODE_ID` | 2 つのノードが同じ `id` を持つ。message に衝突した両方の `path` が入る。`repeat` 展開の `-1`〜`-N` サフィックスが既存 id と衝突する場合もここに落ちる | どちらかを変える |
 | `REPEAT_ON_ROOT` | ルートノードに `repeat` がある。複製を収める親 slot が無い | コンテナノードで包み、子へ `repeat` を付ける |
 | `REPEAT_OUT_OF_RANGE` | `repeat` が 2〜20 の整数でない | 数を直すか、1 つで足りるなら `repeat` を消す |
@@ -123,8 +124,8 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | `UNUSED_FIXTURE` | どの binding も参照しない fixture。出力はされる。たいていは binding のリネームか削除の名残 |
 | `NOT_EDITABLE_PROP_VALUE` | not-editable な prop に値を書いている。形が検証されないまま Story へ出る |
 | `UNKNOWN_EVENT_TARGET` | `events` のキーが Manifest に無い prop を指している。Manifest がイベントの一覧を持たないため警告どまり |
-| `SYNTHETIC_NAME_SHADOWED` | 短い id が合成プリミティブに解決されたが、Registry にも同名のホスト部品がある |
-| `DEPRECATED_COMPONENT` | 非推奨の部品 |
+| `SYNTHETIC_NAME_SHADOWED` | 短い id が合成プリミティブに解決されたが、Registry にも同名のホストコンポーネントがある |
+| `DEPRECATED_COMPONENT` | 非推奨のコンポーネント |
 
 `INVALID_REQUEST` はこれらとは別物。スキーマを満たしていないファイルでは検証に到達せず、代わりに
 `{ "error": { "code": "INVALID_REQUEST", "issues": [...], "hints": [...] } }` が返る。`issues` の
@@ -136,7 +137,7 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 
 **この経路が機能するのは `screen generate` が書いた Story に対してだけ**。`story import` は Story を
 TypeScript の AST で解析するが、現実の Story がコンポーネントツリーを直書きすることはまず無い。
-通例は `render` が隣のファイルで定義した wrapper コンポーネント 1 つを返す形だ。その
+通例は `render` が隣のファイルで定義したラッパーコンポーネント 1 つを返す形である。その
 Story は 1 ノードに、しかも読めない構文が無い以上は警告 0 件で import される。画面が抜け落ちている
 ことを知らせるものは何も無い。手書きの Story が相手なら、Story そのものを読むこと。
 
@@ -145,11 +146,11 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 
 `screen context` は Screen JSON を実装コンテキストへ展開する。実装中に効くのは主に 4 つ。
 
-- `imports`: そのまま貼れる import 文。CSF エミッタと同じ import 計画から出るので、生成された Story と
-  食い違うことがない。
+- `imports`: そのまま貼れる import 文。CSF エミッタと同じ import 計画から出るので、生成された Story
+  と食い違うことがない。
 - `structure.outline`: 入れ子をインデントした行で表したもの。
-- `components[]`: 使っている部品ごとの `usedProps` / `usedSlots` / `manifest` / `importStatement`。
-  合成プリミティブと未登録の id には印が付く。
+- `components[]`: 使っているコンポーネントごとの `usedProps` / `usedSlots` / `manifest` /
+  `importStatement`。合成プリミティブと未登録の id には印が付く。
 - `tasks[]`: `bindings` と `events` を結線タスクへ平坦化したもの。各タスクは `nodeId` と
   `$.children[1]` 形式の `path` を持つ。
 
@@ -157,10 +158,10 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 
 ## `story import` の警告
 
-解析はソースの AST だけで行うため、形が実行時にしか決まらない構文は読めない。import 全体が失敗する
-ことは無く、そのノードに印を付けて先へ進む。**警告が出た箇所は Screen JSON に入っていない**ので、その
-部分は元の Story を直接読む。`warnings` が空であること自体は何の証明にもならない。Story と突き合わせて
-ノード数を数えること。
+解析はソースの AST だけで行うため、形が実行時にしか決まらない構文は読めない。import 全体が失敗するこ
+とは無く、そのノードに印を付けて先へ進む。**警告が出た箇所は Screen JSON に入っていない**ので、その
+部分は元の Story を直接読む。`warnings` が空であること自体は何の証明にもならない。Story と突き合わせ
+てノード数を数えること。
 
 | code | 意味 |
 | --- | --- |

@@ -1,4 +1,4 @@
-# Component registry
+# Component Registry
 
 English | [日本語](./ja/registry.md)
 
@@ -15,7 +15,8 @@ The registry's payoff scales with how far the host's components have drifted fro
 already knows about React. A host built on an unmodified component library, or a thin wrapper around
 one, gains little — an agent can usually guess that API correctly without help. A host that has
 renamed variants, invented its own prop vocabulary, modeled state through a runtime object, or built
-domain-specific enums gains the most, because none of that is guessable from general React knowledge.
+domain-specific enums gains the most, because none of that is guessable from general React
+knowledge.
 
 This was measured on five synthetic fixtures built to span that range, from an unmodified shadcn/ui
 screen and a thin Next.js/Radix wrapper, through moderate customization, to a heavily diverged
@@ -25,15 +26,16 @@ checked with `tsc`. Every fixture reached zero type errors with the registry; wi
 near-vanilla fixtures were already at 0–1 errors, while the customized and diverged ones ranged from
 8 to 17. Raw error count is not itself a divergence measure: one diverged fixture came back with
 fewer errors than a moderately customized one simply because its screen used fewer components, even
-though its mistakes — an array where a single model was expected, a generic-tone enum standing in for
-a domain enum, wrong event names — were the deepest in kind. The fixtures are synthetic and built to
-span this spectrum on purpose; treat the shape (near-zero payoff at one end, large payoff at the
-other) as the takeaway, not a number to expect from any specific host.
+though its mistakes — an array where a single model was expected, a generic-tone enum standing in
+for a domain enum, wrong event names — were the deepest in kind. The fixtures are synthetic and
+built to span this spectrum on purpose; treat the shape (near-zero payoff at one end, large payoff
+at the other) as the takeaway, not a number to expect from any specific host.
 
 ## Three sources, three roles
 
 - **TypeScript types are the truth about a component.** props, slots, and imports are derived from
-  them, so the host writes no registry by hand and nothing drifts from the implementation.
+  them, so the host writes no registry by hand and nothing drifts from the implementation — apart
+  from the explicit `--metadata` override for components the types cannot express (below).
 - **Stories are curation signals and usage examples.** They show which components the host wants you
   to use, and how they get composed.
 - **Storybook is the rendering environment.** It is where you look at what you assembled.
@@ -73,13 +75,15 @@ bun add -d typescript@npm:@typescript/typescript6
 
 The tree then holds one `typescript`, shared with Yosegi rather than duplicated. Without the alias,
 `registry build` fails with the version it resolved and the command above — installing Yosegi's own
-copy is not enough, because a package manager hoists react-docgen-typescript to the top of the host's
-tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
+copy is not enough, because a package manager hoists react-docgen-typescript to the top of the
+host's tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
 
 ### ids and imports
 
-- `id` = `<module path relative to projectRoot>#<exportName>` (e.g. `app/components/ui/card#CardHeader`)
-- `import.packageName` = the same form as Storybook's `componentPath` (`./app/components/ui/card.tsx`)
+- `id` = `<module path relative to projectRoot>#<exportName>` (e.g.
+  `app/components/ui/card#CardHeader`)
+- `import.packageName` = the same form as Storybook's `componentPath` (
+  `./app/components/ui/card.tsx`)
 - `import.exportName` = the actual named export
 - `import.specifier` = the module path resolved through the host's tsconfig `paths`
   (`~/components/ui/card`) — compiles, but is not necessarily what the host's own code writes
@@ -388,9 +392,9 @@ variant props are missing from generated Stories.
 **Rescuing it in the extractor is deferred** (decided). Reading the first parameter of the call
 signature directly through the TypeChecker would probably work. But it would mean partially
 reimplementing react-docgen-typescript's type conversion (JSDoc, `defaultValue`, and `required`
-resolution), giving us two extraction paths. Only 3 components on the measured host are affected,
-and all of them do appear in the registry as manifests carrying whatever the TypeChecker can settle
-of `className` / `children`.
+resolution), giving us two extraction paths. This pattern and the re-export pattern below together
+affect only 3 components on the measured host, and all of them do appear in the registry as
+manifests carrying whatever the TypeChecker can settle of `className` / `children`.
 
 **2. Re-exports of third-party components**
 

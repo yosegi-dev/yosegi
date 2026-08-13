@@ -36,7 +36,8 @@ bun add -d @yosegi/yosegi
 npx skills add yosegi-dev/yosegi
 ```
 
-入れたバージョンに固定したい場合は、インストール済みのパッケージからコピーする。
+または、インストール済みのパッケージからコピーする。こちらは Skill を手元に入っている
+バージョンに固定する。
 
 ```sh
 mkdir -p .claude/skills
@@ -69,13 +70,13 @@ yosegi registry build \
   --tsconfig ./tsconfig.json \
   --data-dir .yosegi
 
-# 2. 使う部品を探し、props を確定させる
+# 2. 使うコンポーネントを探し、props を確定させる
 yosegi component list --query card --data-dir .yosegi
 yosegi component inspect "app/components/ui/card#CardHeader" --data-dir .yosegi
 
 # 3. ホストの規約を読む（AGENTS.md、デザイントークン、既存の複合 Story）
 
-# 4a. .stories.tsx を直接書く。これが既定であり、JSON の形を持たない値を必要とする部品が
+# 4a. .stories.tsx を直接書く。これが既定であり、JSON の形を持たない値を必要とするコンポーネントが
 #     1 つでもあれば（ランタイムのオブジェクト、コンポーネント参照、条件分岐）唯一の選択肢
 
 # 4b. 静的な画面なら tmp/screen.json を書き、そこから Story を生成する
@@ -100,9 +101,9 @@ yosegi screen context tmp/screen.json \
 `--data-dir` は全コマンドへ同じ値を渡す。Registry と保存済み画面の置き場で、既定はカレント
 ディレクトリ直下の `.yosegi`。
 
-必須なのは手順 1 と 2。部品の本当の props・enum の選択肢・slots・import specifier は、そこからしか
-得られない。出力はホストのリポジトリに入り、ホストのコードとしてレビューされるので、手順 3 も省略
-できない。どちらも [Agent Skill](../../skills/yosegi/SKILL.md) が扱う。
+必須なのは手順 1 と 2。コンポーネントの本当の props・enum の選択肢・slots・import specifier は、そこ
+からしか得られない。出力はホストのリポジトリに入り、ホストのコードとしてレビューされるので、手順 3
+も省略できない。どちらも [Agent Skill](../../skills/yosegi/SKILL.md) が扱う。
 
 ## 一度だけやっておくとよいこと
 
@@ -111,8 +112,8 @@ yosegi screen context tmp/screen.json \
 - Story に必要な meta の定型（`tags`、Docs ページ、デザイン参照）をテンプレートファイルに書き、
   `screen generate --meta-template` へ渡す。
 - ホストの Story 規約・デザイントークン・真似する価値のある複合 Story をエージェントに示す。
-- 型から props を読めない部品があれば `registry metadata` で `--metadata` の雛形を作り、上の
-  スクリプトへ組み込む。
+- 型から props を読めないコンポーネントがあれば `registry metadata` で `--metadata` の雛形を作り、上
+  のスクリプトへ組み込む。
 
 ## 次に読む
 

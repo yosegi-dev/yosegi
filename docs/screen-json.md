@@ -72,7 +72,8 @@ becomes the JSX children; every other slot name is passed as a prop.
 
 ## Component ids
 
-Ids in a registry built from types take the form `<module path relative to projectRoot>#<exportName>`.
+Ids in a registry built from types take the form
+`<module path relative to projectRoot>#<exportName>`.
 
 ```
 app/components/ui/button#Button
@@ -84,7 +85,7 @@ several of them (`Card` / `CardHeader` / `CardBody`), which a bare export name c
 `CardHeader` produces `COMPONENT_NOT_FOUND` with the full id as the candidate.
 
 The `--index`-only mode still produces short ids (`Button`), kept for compatibility. See
-[Component registry](./registry.md).
+[Component Registry](./registry.md).
 
 ## Synthetic primitives
 
