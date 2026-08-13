@@ -200,10 +200,20 @@ export 直上の JSDoc になる。
 				{ "type": "setProps", "nodeId": "table", "props": { "loading": true } }
 			]
 		},
-		{ "name": "Empty", "operations": [{ "type": "removeNode", "nodeId": "table" }] }
+		{
+			"name": "Empty",
+			"operations": [
+				{ "type": "setProps", "nodeId": "table", "props": { "rows": [] } }
+			]
+		}
 	]
 }
 ```
+
+この例は [fixtures](#fixtures) の画面の続きで、その画面ではルートが `table` ノード自身になる。
+`removeNode` はルートを対象にできない（`VARIANT_OPERATION_FAILED`）ため、空状態は代わりに
+`rows: []` を設定する（`props` の値は binding より優先される）。ルートがレイアウトコンテナの画面
+なら、子ノードの削除でも空状態を表現できる。
 
 operation は `screen apply` と MCP ツール `apply_screen_operations` が受け取るのと同じ形をしている。
 

@@ -209,10 +209,20 @@ and a reviewer sees them side by side in Storybook. Imports, fixtures, and the m
 				{ "type": "setProps", "nodeId": "table", "props": { "loading": true } }
 			]
 		},
-		{ "name": "Empty", "operations": [{ "type": "removeNode", "nodeId": "table" }] }
+		{
+			"name": "Empty",
+			"operations": [
+				{ "type": "setProps", "nodeId": "table", "props": { "rows": [] } }
+			]
+		}
 	]
 }
 ```
+
+The example continues the [fixtures](#fixtures) screen, whose root is the `table` node itself.
+`removeNode` can never target the root (`VARIANT_OPERATION_FAILED`), so the empty state sets
+`rows: []` instead — a value in `props` wins over the binding. A screen whose root is a layout
+container can also express an empty state by removing a child node.
 
 An operation is the same shape `screen apply` and the MCP tool `apply_screen_operations` take:
 

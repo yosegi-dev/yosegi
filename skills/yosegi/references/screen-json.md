@@ -258,10 +258,20 @@ about during implementation.
         { "type": "setProps", "nodeId": "customer-table", "props": { "loading": true } }
       ]
     },
-    { "name": "Empty", "operations": [{ "type": "removeNode", "nodeId": "customer-table" }] }
+    {
+      "name": "Empty",
+      "operations": [
+        { "type": "setProps", "nodeId": "customer-table", "props": { "rows": [] } }
+      ]
+    }
   ]
 }
 ```
+
+The example continues the fixtures screen above, whose root is the `customer-table` node itself.
+`removeNode` can never target the root (`VARIANT_OPERATION_FAILED`), so the empty state sets
+`rows: []` instead — a value in `props` wins over the binding. A screen whose root is a layout
+container can also express an empty state by removing a child node.
 
 An operation is the same shape `screen apply` takes:
 
