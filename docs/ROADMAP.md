@@ -58,23 +58,21 @@ Skill says so, which works but leaves the adapters uneven.
 
 ### How far to widen the shape of the output
 
-The deliverable is a single `.stories.tsx`, now carrying one export per screen state: the base
-Story plus one per `variants` entry, every state rendered from the same tree plus its diff. That
-settled the file's shape — several exports in one Story module is the default, not one file per
-state.
+The file shape is settled: one module carrying one export per screen state — Story exports on the
+CSF target, exported functions on the component target (`screen generate --target component`, which
+covers hosts without Storybook). Both targets render every state from the same tree plus its diff,
+through the shared renderer (`render.ts`).
 
-The open half is a second emit target: a composed component (`screen.tsx`) plus a thin Story that
-calls it, with handoff to implementation in mind. The emitter is already split into JSX rendering
-and CSF document assembly (`render.ts` / `csf.ts`), so the component target reuses the renderer and
-only owns its own document shape.
+What stays open is the component boundary. Screen JSON carries no information about "this is a
+reusable unit", so the component target emits a single self-contained component with every mock
+value internal and no props lifted out.
 
-- Upside: the generated code can move into the application as-is. The Story becomes "just render
-  this component", matching the shape of the host's other Stories, and it can express which props
-  are lifted out (what gets passed in from outside).
-- Question: where to draw the component boundary — Screen JSON carries no information
-  about "this is a reusable unit". Emitting two files also deepens how much Yosegi reaches into the
-  host's file layout conventions.
-- A single Story file stays the default until Screen JSON can express boundaries.
+- Upside of going further: lifting props (expressing what gets passed in from outside) would let
+  the generated code move into the application as-is, and a thin Story rendering the component
+  would match the shape of the host's other Stories.
+- Question: where to draw the boundary. Emitting two files also deepens how much Yosegi reaches
+  into the host's file layout conventions.
+- A single file with no lifted props stays the default until Screen JSON can express boundaries.
 
 ### How curation should be used
 

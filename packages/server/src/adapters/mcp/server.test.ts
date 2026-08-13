@@ -357,6 +357,62 @@ describe("MCP server", () => {
 		expect(text).toContain("VARIANT_OPERATION_FAILED");
 	});
 
+	it('generate_story は target: "component" で素のコンポーネントファイルを返す', async () => {
+		const client = await connect();
+		const result = await client.callTool({
+			name: "generate_story",
+			arguments: {
+				root: sampleScreen().root,
+				target: "component",
+				storyName: "CustomerList",
+				importMap: "~/components=@host/ui",
+				variants: [
+					{
+						name: "Loading",
+						operations: [
+							{
+								type: "setProps",
+								nodeId: "node-table",
+								props: { loading: true },
+							},
+						],
+					},
+				],
+			},
+		});
+		const text = textOf(result as never);
+		expect(text).toContain('import type { ReactElement } from \\"react\\";');
+		expect(text).toContain('from \\"@host/ui/layout\\";');
+		expect(text).toContain("export function CustomerList(): ReactElement {");
+		expect(text).toContain("export function Loading(): ReactElement {");
+		expect(text).not.toContain("StoryObj");
+		expect(text).not.toContain("meta");
+	});
+
+	// The story target still requires title (it becomes meta.title), and the
+	// component target rejects the CSF-only arguments instead of ignoring them.
+	it("generate_story は target と CSF 専用引数の食い違いを INVALID_ARGUMENT で返す", async () => {
+		const client = await connect();
+		const missingTitle = await client.callTool({
+			name: "generate_story",
+			arguments: { root: sampleScreen().root },
+		});
+		expect((missingTitle as { isError?: boolean }).isError).toBe(true);
+		expect(textOf(missingTitle as never)).toContain("INVALID_ARGUMENT");
+		expect(textOf(missingTitle as never)).toContain("title");
+
+		const titleOnComponent = await client.callTool({
+			name: "generate_story",
+			arguments: {
+				root: sampleScreen().root,
+				target: "component",
+				title: "Examples/顧客一覧",
+			},
+		});
+		expect((titleOnComponent as { isError?: boolean }).isError).toBe(true);
+		expect(textOf(titleOnComponent as never)).toContain("INVALID_ARGUMENT");
+	});
+
 	it("generate_story は検証エラーを VALIDATION_FAILED で返す", async () => {
 		const client = await connect();
 		const result = await client.callTool({

@@ -55,7 +55,9 @@ tooling ends at the Story.
 
 The registry builds from source files and a tsconfig. Storybook's `index.json` is an optional
 curation input and can be a static file, so nothing has to be running — usable in CI or on a fresh
-checkout.
+checkout. Storybook itself is not required either: `screen generate --target component` emits the
+screen as a plain React component file, so a host with no Storybook at all can still assemble and
+validate screens (see [Workflows](./workflows.md#without-storybook)).
 
 ## Where the line sits
 

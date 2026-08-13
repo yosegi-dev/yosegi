@@ -100,6 +100,16 @@ By default the generated meta holds only `title`. Splice in the boilerplate the 
 Yosegi never invents a Figma URL it does not have — but a URL inherited from an existing Story you
 used as the template is carried verbatim, and named in a warning.
 
+### Without Storybook
+
+On a host with no Storybook, `screen generate --target component` emits the same screen as a plain
+React component file instead of CSF. Validation, `fixtures`, `repeat`, and `variants` behave
+identically; each state becomes an exported function rather than a Story export. Yosegi does not
+prescribe where such a file is reviewed — the review is the host's type check plus whatever surface
+its user chooses (rendering the component on a scratch route, for instance), so the agent asks
+rather than assuming. One asymmetry to know: `story import` reads Stories only, so a component file
+cannot be read back into Screen JSON — keep the Screen JSON if the screen may be revised later.
+
 ## Validation error codes
 
 Every error carries a machine-readable `code` and enough `suggestion` to decide the fix.

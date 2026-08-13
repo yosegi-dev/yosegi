@@ -173,17 +173,20 @@ yosegi component inspect "app/components/ui/button#Button" --data-dir .yosegi
 
 ## `screen generate`
 
-Screen JSON を Registry と突き合わせて検証し、Story（CSF）を書き出す。
+Screen JSON を Registry と突き合わせて検証し、Story（CSF）を書き出す。`--target component` を渡す
+と、素の React コンポーネントファイルを書き出す。
 
 ```sh
 yosegi screen generate <screen.json> --out <file.stories.tsx> [options]
+yosegi screen generate <screen.json> --target component --out <file.tsx> [options]
 ```
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--out <path>` | path | — | 必須。Story の出力先。中間ディレクトリは自動作成 |
+| `--out <path>` | path | — | 必須。Story（またはコンポーネントファイル）の出力先。中間ディレクトリは自動作成 |
+| `--target <story\|component>` | string | `story` | 何を出力するか。`component` は Storybook を持たないホスト向けに素の React コンポーネントファイルを書き出す |
 | `--title <title>` | string | `Screens/<画面名>` | Story の `title` |
-| `--story-name <name>` | string | `Default` | Story の export 名。JavaScript の識別子である必要がある |
+| `--story-name <name>` | string | `story`: `Default`、`component`: `Screen` | Story の export 名。JavaScript の識別子である必要がある。`--target component` では export される関数の名前になる |
 | `--import-map <from=to,...>` | string | — | Registry の `packageName` をホストの import 指定子へ前方置換する。生成された import が解決しない場合はここを直す |
 | `--framework <pkg>` | string | `@storybook/react` | `Meta` / `StoryObj` の import 元 |
 | `--meta-template <file>` | path | — | meta 1 つを持つホストのファイル。`title` と `component` 以外がすべて引き継がれる |
@@ -199,6 +202,12 @@ yosegi screen generate tmp/screen.json \
 
 検証エラーがあれば何も書かず、エラーの配列と終了コード 1 が返る。警告は `Wrote <path>` の後に出て、
 生成は止めない。code の一覧は[ワークフロー](./workflows.md#検証エラーの-code)にある。
+
+`--target component` は、import 群・fixture の const・画面の状態ごと（ベースと各 variant）の
+export された関数 1 つずつを書き出す。このとき `--out` は `.tsx` で終わる必要がある
+（`.stories.tsx` を除く）。CSF 専用のフラグ（`--title`・`--framework`・
+`--meta-template`）は無視されず、`INVALID_ARGUMENT` で拒否される。`story import` が読める
+のは Story だけなので、コンポーネントファイルは読み戻せない。
 
 ## `screen context`
 
@@ -279,7 +288,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` |
 | `list_categories` | — | `component list --json` の `categories` フィールド |
 | `get_registry_status` | — | `registry status`。ただし provenance のみで、ソースの変化は再計算しない |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants` | `screen generate`。ただしファイルは書かず CSF のソースを文字列で返す |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants`, `target` | `screen generate`。ただしファイルは書かずソースを文字列で返す |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`。保存済み画面の id で指定する |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |
@@ -288,7 +297,9 @@ claude mcp add yosegi -- npx yosegi mcp
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
 `generate_story` が取る `root` は ScreenNode 単体であって Screen JSON 全体ではない。`importMap` は
-CLI と同じ文字列で、オブジェクトではない。`search_components` は `limit`（既定 50、上限 200）で打ち
+CLI と同じ文字列で、オブジェクトではない。`target: "component"` は CSF の代わりに素のコンポーネント
+ファイルを返す。`title`（story ターゲットでは必須）と `framework` はこのターゲットには適用されず、
+拒否される。`search_components` は `limit`（既定 50、上限 200）で打ち
 切った要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返す。
 `registry build`・`registry metadata`・`story import` は CLI にしか無く、`--meta-template` に相当す
 る MCP の口も無い。

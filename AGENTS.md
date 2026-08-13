@@ -8,6 +8,8 @@ Guidance for coding agents working in this repository. For what Yosegi is and ho
 
 Yosegi assembles screen UIs out of components already registered in a host project's Storybook,
 emits the result as a Story (`.stories.tsx`), and then turns that Story into a real implementation.
+The Story is the default output; on a host without Storybook, `screen generate --target component`
+emits the same screen as a plain React component file instead.
 Its users are coding agents, so the only entry points are a CLI, an MCP server, and an Agent Skill —
 there is no GUI, and no rendering environment of its own. The registry of usable components is
 derived from the host's TypeScript types, and the design centres on two properties: output an agent
@@ -22,7 +24,7 @@ A Bun workspaces monorepo with two packages.
   - `src/domain` (`@yosegi/core`) — Screen JSON schema, validator, synthetic primitives, suggestions
   - `src/application` (`@yosegi/core/app`) — Composer, services, repository, actor context,
     implementation context
-  - `src/emit` (`@yosegi/core/emit`) — Screen JSON → CSF
+  - `src/emit` (`@yosegi/core/emit`) — Screen JSON → CSF, or a plain component file
   - `src/registry` (`@yosegi/core/registry`) — Storybook index.json → registry normalization
   - `src/test-fixtures.ts` (`@yosegi/core/testing`) — fixtures shared by tests
 - `packages/server` (`@yosegi/yosegi`) — the CLI, MCP, and HTTP (Hono) adapters, plus persistence.

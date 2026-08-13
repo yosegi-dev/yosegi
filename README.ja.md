@@ -10,7 +10,8 @@ GUI は無い。
 > コンポーネントを寄せて画面を組む、というこのツールの営みになぞらえている。
 
 React + TypeScript のプロジェクト向け。Component Registry は TypeScript の型から作られ、出力は CSF
-（`.stories.tsx`）。
+（`.stories.tsx`）。Storybook を持たないホストでは、素の React コンポーネントファイル
+（`screen generate --target component`）を出力できる。
 
 ## 仕組み
 

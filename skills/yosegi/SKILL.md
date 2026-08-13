@@ -1,6 +1,6 @@
 ---
 name: yosegi
-description: Build a screen mock or screen proposal (画面モック) out of the components already registered in a host project's Storybook, and deliver it as a Storybook Story (.stories.tsx) that can be reviewed before anything is implemented. Also looks up what a host's components are actually called and what props they actually take, and turns an assembled mock Story into a real page implementation. Use it when asked to draft, propose, or mock up a screen from an existing design system, to make a new screen visible in Storybook first, or to convert a mock Story into an implementation.
+description: Build a screen mock or screen proposal (画面モック) out of the components already registered in a host project's Storybook, and deliver it as a Storybook Story (.stories.tsx) that can be reviewed before anything is implemented. On a host without Storybook, it delivers the same screen as a plain React component file instead. Also looks up what a host's components are actually called and what props they actually take, and turns an assembled mock Story into a real page implementation. Use it when asked to draft, propose, or mock up a screen from an existing design system, to make a new screen visible in Storybook first, or to convert a mock Story into an implementation.
 ---
 
 # Yosegi — building screens from a host's own components
@@ -11,7 +11,9 @@ description: Build a screen mock or screen proposal (画面モック) out of the
 
 Yosegi turns a host project's components into facts you can build a screen from, and emits the
 screen as a Story (CSF) for review before anything is implemented. It has neither a rendering
-environment nor a GUI of its own; you check how things look in the host's Storybook.
+environment nor a GUI of its own; you check how things look in the host's Storybook. On a host
+without Storybook, the deliverable becomes a plain React component file (`--target component`) —
+the step 1 branch below says how the procedure changes.
 
 This document is the procedure, and you are the one carrying it out. The CLI (and the equivalent MCP
 tools) are the instruments it reaches for.
@@ -23,7 +25,7 @@ tools) are the instruments it reaches for.
 - Looking up which components a host has, and what props they really take, before writing any UI.
 - Transcribing an approved mock Story into a real page. Do steps 1 and 2, then jump to step 5.
 
-Not for: one-off component changes, or projects without Storybook.
+Not for: one-off component changes.
 
 ## Where the value is
 
@@ -63,7 +65,21 @@ though, work from it and not from memory of this file alone — its detail is no
 ## Step 1. Build the registry
 
 Yosegi needs a readable `tsconfig.json` from the host (props come from the TypeScript types, and
-that alone is enough) and Storybook (where the Story goes and where you confirm how it renders).
+that alone is enough). Storybook is where the Story goes and where you confirm how it renders — but
+it is not a requirement.
+
+> **If you cannot detect Storybook** — no `.storybook/` (or equivalent) config directory, no
+> `storybook` script in the host's `package.json`, no `index.json` to point `--index` at — the
+> deliverable is a plain React component file instead of a Story
+> (`screen generate --target component`, `references/cli.md`). Do not pick the output location or
+> the review method yourself: before building anything, ask the user (a) where the component file
+> should go, and (b) how they want to confirm the result (rendering it on a scratch route of the
+> host app, for instance). Yosegi does not prescribe the review surface, and guessing either answer
+> violates the same rule as guessing a prop. With those answers the procedure below stays the same,
+> with three differences: `registry build` runs without `--index` / `--storybook-url` (you lose
+> curation, nothing else); on route 3a you write the component file at the location the user named,
+> and on 3b you pass `--target component --out <that location>.tsx`; and step 4's Storybook checks
+> are replaced by the host's type check plus the confirmation method the user named.
 
 1. **Can you run the CLI?** `npx yosegi` (or `pnpm yosegi`, `yarn yosegi`, `bunx yosegi`) with no
    arguments prints every command, once `@yosegi/yosegi` is already a dependency of the host — install
@@ -264,6 +280,14 @@ back.
 
 Write the `.stories.tsx` by hand, following the host's Story conventions from step 2.
 
+**On the no-Storybook branch from step 1, what you write directly is the component file, not a
+Story.** Write it at the location the user named: exported function components, one per screen
+state, with the mock data as consts in the file — the shape `--target component` emits, minus the
+CSF trappings. No meta, no Story conventions, no `.stories.tsx` suffix. The bullets below (imports
+from `inspect`, only props `inspect` listed, mock data in the file) apply unchanged; the two
+Story-shaped paragraphs that follow this one do not — the deliverable's location was already settled
+by the user in step 1, and there is no Storybook review to keep out of the routes directory.
+
 **Decide the shape of the deliverable before writing anything.** A Story here can be an inline
 component tree, or a thin Story that renders a page module (a `route.tsx` or a standalone page
 component) which holds the tree. If step 2 found a page/route generator or an established route
@@ -308,6 +332,12 @@ yosegi screen generate tmp/screen.json \
   --data-dir .yosegi
 ```
 
+Without Storybook (the step 1 branch), swap in `--target component --out <path>.tsx` at the
+location the user named. `--title` / `--framework` / `--meta-template` are CSF-only and rejected on
+that target, and `--story-name` names the exported function instead (default `Screen`). Everything
+else — validation, `fixtures`, `repeat`, `variants` — behaves identically, each variant becoming
+another exported function in the same file.
+
 `--meta-template` is how the host's meta boilerplate gets in; without it the meta is a bare `title`
 (`references/implementation.md`). On validation errors no file is written and an array comes back
 with exit code 1. **Do not clear them one at a time — apply the entire printed array and re-run.**
@@ -341,6 +371,12 @@ against `references/errors.md` before moving on.
 
 If it renders badly, the usual causes are a className that is not one of the host's tokens, or a
 combination of components unlike the host's existing Stories. Go back to step 2.
+
+**On the no-Storybook branch from step 1**, steps 1 and 2 above run unchanged and carry the most
+weight; step 3 has no Story meta to check, and step 4 is replaced by the confirmation method the
+user named there — render or run the component exactly the way they said they would review it. If
+that method never puts the rendered screen in front of a human, say so at the checkpoint below, the
+same way the browserless section does.
 
 ### Step 4.4 without a browser
 
@@ -414,7 +450,8 @@ that a human's eyes are still the only thing that has judged the layout. A Story
 can pass all three checks and still fail the type check, which is why step 1 comes first.
 
 > **Checkpoint — hand it to the user and wait.** Report the Story's file path and its URL in the
-> host's Storybook, and ask the user to review it. **Wait for their approval.** The mock is the
+> host's Storybook (on the no-Storybook branch: the component file's path and how it was
+> verified), and ask the user to review it. **Wait for their approval.** The mock is the
 > deliverable of this half, and its entire purpose is that a human looks at the screen before it is
 > built. Never continue into step 5 on your own judgement.
 
