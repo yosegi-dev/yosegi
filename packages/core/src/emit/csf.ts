@@ -3,11 +3,13 @@ import {
 	type ComponentRegistry,
 	indexRegistry,
 } from "../domain/component-manifest.ts";
+import { applyOperationsToRoot } from "../domain/operation.ts";
 import { expandRepeat } from "../domain/repeat.ts";
 import {
 	EMIT_RESERVED_IDENTIFIERS,
 	isJsIdentifier,
 	type ScreenNode,
+	type ScreenVariant,
 	walkNodes,
 } from "../domain/screen-definition.ts";
 import { isSyntheticManifest } from "../domain/synthetics.ts";
@@ -66,6 +68,11 @@ export type EmitCsfOptions = {
 	// written, so component imports yield the name instead (they get a suffixed
 	// alias) — a fixture const can never be renamed.
 	fixtures?: Record<string, unknown>;
+	// Screen states emitted as additional `export const <name>: Story` blocks
+	// after the base Story, each rendered from the base tree with the variant's
+	// operations applied. Imports, fixtures, and meta are shared — the file stays
+	// one Story module with several states of the same screen.
+	variants?: ScreenVariant[];
 };
 
 // Converts a "./app=~,./packages/x=@y"-style spec into a prefix-replacement function.
@@ -182,8 +189,13 @@ export type ImportPlan = {
 // impossible is left to the rendering side (requireRenderable), so callers like the
 // implementation context — which want the rest returned even when some ids are
 // unregistered — can still go through.
+//
+// Accepts several roots because a Story with variants is one file: every tree —
+// the base and each variant's — shares the same import statements and local
+// names, so one plan has to cover all of them. Passing the base first keeps the
+// local names identical to a variant-free emit.
 export function planImports(
-	root: ScreenNode,
+	roots: ScreenNode | readonly ScreenNode[],
 	registry: ComponentRegistry,
 	resolveImport?: (packageName: string) => string,
 	// Extra identifiers the surrounding file declares (e.g. the Story's export name).
@@ -196,8 +208,11 @@ export function planImports(
 		...EMIT_DECLARED_LOCAL_NAMES,
 		...reservedLocalNames,
 	]);
+	const rootList: readonly ScreenNode[] = Array.isArray(roots)
+		? roots
+		: [roots as ScreenNode];
 
-	for (const node of walkNodes(root)) {
+	for (const node of rootList.flatMap((root) => walkNodes(root))) {
 		const manifest = manifests.get(node.component) ?? null;
 		if (!manifest || isSyntheticManifest(manifest)) {
 			continue;
@@ -316,15 +331,56 @@ export function emitCsf(
 			);
 		}
 	}
+	const variants = options.variants ?? [];
+	const seenVariantNames = new Set<string>();
+	for (const variant of variants) {
+		const name = variant.name;
+		// Second safety net over the variants schema, mirroring the fixtures block
+		// above; only the storyName collision is genuinely emit's to catch, because
+		// the base export's name is chosen per emit rather than stored.
+		if (!isJsIdentifier(name) || EMIT_DECLARED_LOCAL_NAMES.includes(name)) {
+			throw new Error(
+				`Variant name "${name}" is not writable as a Story export (it must be a JavaScript identifier other than ${EMIT_DECLARED_LOCAL_NAMES.join(" / ")}).`,
+			);
+		}
+		if (name === storyName) {
+			throw new Error(
+				`Variant name "${name}" collides with the Story export name. Rename the variant or pass a different story name.`,
+			);
+		}
+		if (Object.hasOwn(fixtures, name)) {
+			throw new Error(
+				`Variant name "${name}" collides with a fixture name. Rename one of them.`,
+			);
+		}
+		if (seenVariantNames.has(name)) {
+			throw new Error(
+				`Variant name "${name}" is used more than once. Each variant becomes its own Story export, so names must be unique.`,
+			);
+		}
+		seenVariantNames.add(name);
+	}
 	// repeat expands here — after validation, before import planning — so the
-	// Screen JSON keeps its single node while the Story shows the copies.
+	// Screen JSON keeps its single node while the Story shows the copies. A
+	// variant's operations apply to the unexpanded base first: they target the
+	// Screen JSON's node ids, which expansion rewrites.
 	const expandedRoot = expandRepeat(root);
-	// The Story's export name and the fixture consts are identifiers this file
-	// declares, so a component import must not take the same local name.
-	const plan = planImports(expandedRoot, registry, options.resolveImport, [
-		storyName,
-		...Object.keys(fixtures),
-	]);
+	const variantRoots = variants.map((variant) =>
+		expandRepeat(applyOperationsToRoot(root, variant.operations)),
+	);
+	// The Story export names (base and variants) and the fixture consts are
+	// identifiers this file declares, so a component import must not take the
+	// same local name.
+	const plan = planImports(
+		[expandedRoot, ...variantRoots],
+		registry,
+		options.resolveImport,
+		[
+			storyName,
+			...variants.map((variant) => variant.name),
+			...Object.keys(fixtures),
+		],
+	);
 	const context: RenderContext = {
 		manifests,
 		localNames: plan.localNames,
@@ -360,11 +416,45 @@ export function emitCsf(
 		"",
 		"export default meta;",
 		"",
-		`export const ${storyName}: StoryObj = {`,
+		...renderStoryExport(storyName, expandedRoot, context),
+	);
+	variants.forEach((variant, index) => {
+		lines.push("");
+		if (variant.description !== undefined) {
+			lines.push(...renderVariantJsdoc(variant.description));
+		}
+		lines.push(
+			...renderStoryExport(variant.name, variantRoots[index], context),
+		);
+	});
+	return `${lines.join("\n")}\n`;
+}
+
+// One `export const <name>: StoryObj` block. The base Story and every variant
+// go through the same function so their shape can't drift.
+function renderStoryExport(
+	name: string,
+	root: ScreenNode,
+	context: RenderContext,
+): string[] {
+	return [
+		`export const ${name}: StoryObj = {`,
 		"\trender: () => (",
-		...renderRoot(expandedRoot, context).map((line) => `\t\t${line}`),
+		...renderRoot(root, context).map((line) => `\t\t${line}`),
 		"\t),",
 		"};",
-	);
-	return `${lines.join("\n")}\n`;
+	];
+}
+
+// The variant's description as a JSDoc directly above its export, where
+// Storybook's autodocs pick it up. `*/` inside the text would close the comment
+// and spill the rest into a code position, so it is defused the same way intent
+// comments are.
+function renderVariantJsdoc(description: string): string[] {
+	const safe = description.replaceAll("*/", "*\\/");
+	const bodyLines = safe.split("\n");
+	if (bodyLines.length === 1) {
+		return [`/** ${bodyLines[0]} */`];
+	}
+	return ["/**", ...bodyLines.map((line) => ` * ${line}`), " */"];
 }

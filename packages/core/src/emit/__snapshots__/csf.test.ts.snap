@@ -36,3 +36,87 @@ export const Default: StoryObj = {
 };
 "
 `;
+
+exports[`emitCsf の variants 生成した CSF が variants 込みで安定した全文になる 1`] = `
+"import type { Meta, StoryObj } from "@storybook/react";
+import { SearchForm } from "~/components/form";
+import { Page, PageHeader } from "~/components/layout";
+import { TextField } from "~/components/shadcn-ui/input";
+import { Table } from "~/components/table";
+
+const customers = [
+	{
+		"name": "Sato"
+	}
+];
+
+const meta: Meta = {
+	title: "Screens/Customer list",
+};
+
+export default meta;
+
+export const Default: StoryObj = {
+	render: () => (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<>
+					<SearchForm
+						fields={
+							<>
+								{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+								<TextField label="Customer name" placeholder="Enter a customer name" />
+							</>
+						}
+					/>
+					{/* TODO(yosegi): {"bindings":{"rows":"customers","loading":"customerQuery.isLoading"},"events":{"onRowClick":{"action":"navigate","arguments":{"to":"/customers/:customerId"}}}} */}
+					<Table rows={customers} />
+				</>
+			}
+		/>
+	),
+};
+
+/** Rows are being fetched. */
+export const Loading: StoryObj = {
+	render: () => (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<>
+					<SearchForm
+						fields={
+							<>
+								{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+								<TextField label="Customer name" placeholder="Enter a customer name" />
+							</>
+						}
+					/>
+					{/* TODO(yosegi): {"bindings":{"rows":"customers","loading":"customerQuery.isLoading"},"events":{"onRowClick":{"action":"navigate","arguments":{"to":"/customers/:customerId"}}}} */}
+					<Table loading rows={customers} />
+				</>
+			}
+		/>
+	),
+};
+
+export const Empty: StoryObj = {
+	render: () => (
+		<Page
+			header={<PageHeader title="Customer list" />}
+			body={
+				<SearchForm
+					fields={
+						<>
+							{/* TODO(yosegi): {"bindings":{"value":"filters.keyword"}} */}
+							<TextField label="Customer name" placeholder="Enter a customer name" />
+						</>
+					}
+				/>
+			}
+		/>
+	),
+};
+"
+`;
