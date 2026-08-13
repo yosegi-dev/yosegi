@@ -391,9 +391,9 @@ variant props are missing from generated Stories.
 **Rescuing it in the extractor is deferred** (decided). Reading the first parameter of the call
 signature directly through the TypeChecker would probably work. But it would mean partially
 reimplementing react-docgen-typescript's type conversion (JSDoc, `defaultValue`, and `required`
-resolution), giving us two extraction paths. Only 3 components on the measured host are affected,
-and all of them do appear in the registry as manifests carrying whatever the TypeChecker can settle
-of `className` / `children`.
+resolution), giving us two extraction paths. This pattern and the re-export pattern below together
+affect only 3 components on the measured host, and all of them do appear in the registry as
+manifests carrying whatever the TypeChecker can settle of `className` / `children`.
 
 **2. Re-exports of third-party components**
 

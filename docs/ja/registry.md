@@ -371,9 +371,9 @@ variant 系 props が欠ける。
 
 **抽出器側での救済は見送る**（決定事項）。TypeChecker で呼び出しシグネチャの第 1 引数を直接読めばお
 そらく動く。ただし react-docgen-typescript の型変換（JSDoc・`defaultValue`・`required` の解決）を部
-分的に再実装することになり、抽出経路が 2 本になる。計測対象のホストで影響を受けるのは 3 コンポーネン
-トだけで、しかも TypeChecker で確定できた分の `className` / `children` を持つ Manifest として
-Registry には載っている。
+分的に再実装することになり、抽出経路が 2 本になる。計測対象のホストで影響を受けるのは、このパターン
+と次の再 export のパターンを合わせて 3 コンポーネントだけ。しかも TypeChecker で確定できた分の
+`className` / `children` を持つ Manifest として Registry には載っている。
 
 **2. サードパーティコンポーネントの再 export**
 
