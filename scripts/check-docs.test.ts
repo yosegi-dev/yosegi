@@ -166,6 +166,25 @@ describe("checkDocs", () => {
 		expect(widthErrors).toEqual([]);
 	});
 
+	it("~~~ フェンス内のリンクと長行も検査から除く", () => {
+		const long = "あ".repeat(51);
+		const text = `# Page\n\n~~~md\n[example](./missing.md)\n${long}\n~~~\n`;
+		const { errors, widthErrors } = checkDocs(
+			[{ path: "docs/ja/page.md", text }],
+			never,
+		);
+		expect(errors).toEqual([]);
+		expect(widthErrors).toEqual([]);
+	});
+
+	// CommonMark closes a fence only with the opener's character, so a backtick
+	// run inside a tilde fence is content, not a boundary.
+	it("~~~ フェンスはバッククォートでは閉じない", () => {
+		const text = "# Page\n\n~~~md\n```\n[example](./missing.md)\n```\n~~~\n";
+		const { errors } = checkDocs([{ path: "docs/ja/page.md", text }], never);
+		expect(errors).toEqual([]);
+	});
+
 	it("docs の外のファイルは幅を検査しない", () => {
 		const { widthErrors } = checkDocs(
 			[{ path: "AGENTS.md", text: en("a".repeat(120)) }],
