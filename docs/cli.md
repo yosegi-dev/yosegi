@@ -181,14 +181,15 @@ Validates a Screen JSON file against the registry and writes the Story (CSF) —
 
 ```sh
 yosegi screen generate <screen.json> --out <file.stories.tsx> [options]
+yosegi screen generate <screen.json> --target component --out <file.tsx> [options]
 ```
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--out <path>` | path | — | Required. Where the Story goes. Intermediate directories are created |
+| `--out <path>` | path | — | Required. Where the Story (or component file) goes. Intermediate directories are created |
 | `--target <story\|component>` | string | `story` | What to emit. `component` writes a plain React component file for hosts without Storybook |
 | `--title <title>` | string | `Screens/<screen name>` | The Story's `title` |
-| `--story-name <name>` | string | `Default` | The Story's export name. Must be a JavaScript identifier. With `--target component`, the exported function's name instead (default `Screen`) |
+| `--story-name <name>` | string | `story`: `Default`, `component`: `Screen` | The Story's export name. Must be a JavaScript identifier. With `--target component`, the exported function's name instead |
 | `--import-map <from=to,...>` | string | — | Prefix-replaces the registry's `packageName` with the host's import specifier. Fix generated imports that do not resolve here |
 | `--framework <pkg>` | string | `@storybook/react` | Where `Meta` / `StoryObj` are imported from |
 | `--meta-template <file>` | path | — | A host file holding one meta; everything except `title` and `component` is carried over |

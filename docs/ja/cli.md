@@ -178,14 +178,15 @@ Screen JSON を Registry と突き合わせて検証し、Story（CSF）を書�
 
 ```sh
 yosegi screen generate <screen.json> --out <file.stories.tsx> [options]
+yosegi screen generate <screen.json> --target component --out <file.tsx> [options]
 ```
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--out <path>` | path | — | 必須。Story の出力先。中間ディレクトリは自動作成 |
+| `--out <path>` | path | — | 必須。Story（またはコンポーネントファイル）の出力先。中間ディレクトリは自動作成 |
 | `--target <story\|component>` | string | `story` | 何を出力するか。`component` は Storybook を持たないホスト向けに素の React コンポーネントファイルを書き出す |
 | `--title <title>` | string | `Screens/<画面名>` | Story の `title` |
-| `--story-name <name>` | string | `Default` | Story の export 名。JavaScript の識別子である必要がある。`--target component` では export される関数の名前になる（既定値 `Screen`） |
+| `--story-name <name>` | string | `story`: `Default`、`component`: `Screen` | Story の export 名。JavaScript の識別子である必要がある。`--target component` では export される関数の名前になる |
 | `--import-map <from=to,...>` | string | — | Registry の `packageName` をホストの import 指定子へ前方置換する。生成された import が解決しない場合はここを直す |
 | `--framework <pkg>` | string | `@storybook/react` | `Meta` / `StoryObj` の import 元 |
 | `--meta-template <file>` | path | — | meta 1 つを持つホストのファイル。`title` と `component` 以外がすべて引き継がれる |

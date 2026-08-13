@@ -8,6 +8,8 @@ Guidance for coding agents working in this repository. For what Yosegi is and ho
 
 Yosegi assembles screen UIs out of components already registered in a host project's Storybook,
 emits the result as a Story (`.stories.tsx`), and then turns that Story into a real implementation.
+The Story is the default output; on a host without Storybook, `screen generate --target component`
+emits the same screen as a plain React component file instead.
 Its users are coding agents, so the only entry points are a CLI, an MCP server, and an Agent Skill —
 there is no GUI, and no rendering environment of its own. The registry of usable components is
 derived from the host's TypeScript types, and the design centres on two properties: output an agent
