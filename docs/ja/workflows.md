@@ -52,9 +52,10 @@ Story か Screen JSON を直して出し直すだけ。
 骨格や合成の作法は Registry ではなくホスト自身の Story やテンプレートから得る。Story をどう書くか
 は形式の選択でしかない。画面上のどれか 1 つでも JSON の形を持たない値を必要とするなら（ランタイム
 のオブジェクト、コンポーネント参照、式で組む `ReactNode`、条件分岐）、Screen JSON には表現する構文が
-無いので直接書く。モックデータと繰り返しは表現できる。`fixtures` が binding の参照する名前付き JSON
-値を運び、`repeat` がサブツリーを一覧の行へ展開する（[Screen JSON](./screen-json.md) を参照）。
-そうでなければ Screen JSON は、JSX を 1 行も書く前の検証と、下流が読み戻す
+無いので直接書く。モックデータ・繰り返し・画面状態は表現できる。`fixtures` が binding の参照する
+名前付き JSON 値を運び、`repeat` がサブツリーを一覧の行へ展開する。`variants` は画面のほかの状態
+（ローディング / エラー / 空）を追加の Story export として出力する（[Screen JSON](./screen-json.md)
+を参照）。そうでなければ Screen JSON は、JSX を 1 行も書く前の検証と、下流が読み戻す
 引き継ぎコメントをくれる。
 
 どちらの経路でも結果を確定させるのはホストの型検査。JSX を実物の型と突き合わせるので、Registry に
@@ -85,8 +86,9 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 
 `COMPONENT_NOT_FOUND`・`UNKNOWN_PROP`・`UNKNOWN_BINDING_TARGET` にはレーベンシュタイン距離で最も近い
 候補が付く。`INVALID_PROP_VALUE` には受け取った値と enum の選択肢が付く。どのエラーもツリー内の位置
-を示す `path` を持つので、id が衝突していてもノードを特定できる。警告は生成を止めず、ファイル書き出
-しの後に並ぶ。
+を示す `path` を持つので、id が衝突していてもノードを特定できる。variant の木で起きた issue はさら
+に variant 名を持つ `variant` を運び、その `path` は variant の operations 適用後の木を指す。警告は
+生成を止めず、ファイル書き出しの後に並ぶ。
 
 生成される meta は既定では `title` だけ。ホストが要求する定型は `--meta-template <file>`
 で差し込む。値はソースの断片として解釈せずに引き継ぐので、Yosegi が持っていない Figma の URL を捏造
@@ -113,6 +115,7 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 | `REPEAT_ON_ROOT` | ルートノードに `repeat` がある。複製を収める親 slot が無い | コンテナノードで包み、子へ `repeat` を付ける |
 | `REPEAT_OUT_OF_RANGE` | `repeat` が 2〜20 の整数でない | 数を直すか、1 つで足りるなら `repeat` を消す |
 | `REPEAT_EXPANSION_TOO_LARGE` | すべての `repeat` を展開すると 2000 ノードを超える。ネストした `repeat` は掛け算で増える | 数を下げるか、ネストを解く |
+| `VARIANT_OPERATION_FAILED` | variant の `operations` をベースの木へ適用できなかった。message に失敗した operation の code が入る | operation が指すすべての `nodeId` がベースの木に存在する（または同じ variant の先行 operation が追加した）ように直す |
 
 生成を止めない警告:
 
@@ -175,6 +178,7 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 | `COMPONENT_AMBIGUOUS` | 同じ export 名の候補が複数ある。`--import-map` で絞る |
 | `IMPORT_PATH_MISMATCH` | export 名は一致するが import 元が Registry と違う。Registry が古い可能性 |
 | `MULTIPLE_ROOTS` | ルート要素が複数あったため `Box` で包んだ |
+| `MULTIPLE_STORIES` | 取り込んだものより多くの Story をファイルが export している（典型は `variants` のファイル）。1 回の実行で読むのは 1 export。別の export は `--story-name` で読む。差分が `variants` へ再構成されることはない |
 
 ## 次に読む
 

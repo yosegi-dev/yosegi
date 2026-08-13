@@ -248,6 +248,14 @@ data, goes in the screen's `fixtures` (named JSON values emitted as consts, refe
 `bindings`), and a row shown N times takes `repeat: N` on the node
 (`references/screen-json.md` for both). Shape the fixture after the data contract found in step 2.
 
+Neither are the screen's other states. `variants` names each one — loading, error, empty — as a
+diff of operations over the base tree, and every variant becomes its own Story export in the same
+generated file (`references/screen-json.md`). Use it to flush out missed states while the screen is
+still a mock: a proposal that shows only the happy path hides exactly the states that get argued
+about during implementation, and the reviewer approves what they saw, not what was implied. The
+data contract from step 2 says which states exist — a nullable list means an empty state, a fetch
+means a loading state.
+
 If the rest is headings, copy, static props, and fixed children — either route works, and the JSON
 route buys you validation before you write a line of JSX plus the hand-off comments step 5 reads
 back.

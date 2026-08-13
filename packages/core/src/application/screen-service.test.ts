@@ -33,6 +33,42 @@ describe("ScreenService.createScreen", () => {
 		expect(screen.componentRegistryVersion).toBe("test:v1");
 	});
 
+	it("fixtures と variants を保存し、省略時はキー自体を持たない", async () => {
+		const { service, repo } = setup();
+		const variants = [
+			{
+				name: "Loading",
+				operations: [
+					{
+						type: "setProps" as const,
+						nodeId: "node-table",
+						props: { loading: true },
+					},
+				],
+			},
+		];
+		const { screen } = await service.createScreen({
+			id: "s1",
+			name: "画面1",
+			root: sampleScreen().root,
+			fixtures: { customers: [] },
+			variants,
+		});
+		expect(screen.fixtures).toEqual({ customers: [] });
+		expect(screen.variants).toEqual(variants);
+		// The stored copy carries them too, not just the returned value.
+		const stored = await repo.get("s1");
+		expect(stored?.variants).toEqual(variants);
+
+		const { screen: bare } = await service.createScreen({
+			id: "s2",
+			name: "画面2",
+			root: sampleScreen().root,
+		});
+		expect(Object.hasOwn(bare, "fixtures")).toBe(false);
+		expect(Object.hasOwn(bare, "variants")).toBe(false);
+	});
+
 	it("不正な構成は ValidationFailedError で拒否する", async () => {
 		const { service } = setup();
 		expect(

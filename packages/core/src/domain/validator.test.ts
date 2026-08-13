@@ -1156,3 +1156,175 @@ describe("validateScreen: repeat", () => {
 		expect(issue?.message).toContain("repeat");
 	});
 });
+
+describe("validateScreen: variants", () => {
+	function withVariants(
+		variants: ScreenDefinition["variants"],
+		fixtures?: Record<string, unknown>,
+	): ScreenDefinition {
+		return parseScreenDefinition({
+			...sampleScreen(),
+			...(fixtures ? { fixtures } : {}),
+			variants,
+		});
+	}
+
+	it("a variant whose applied tree is sound adds no issues", () => {
+		const screen = withVariants([
+			{
+				name: "Loading",
+				operations: [
+					{ type: "setProps", nodeId: "node-table", props: { loading: true } },
+				],
+			},
+		]);
+		const result = validateScreen(screen, sampleRegistry());
+		expect(result.valid).toBe(true);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("an issue raised by a variant's tree carries the variant name", () => {
+		const screen = withVariants([
+			{
+				name: "Errored",
+				operations: [
+					{ type: "setProps", nodeId: "node-table", props: { bogus: 1 } },
+				],
+			},
+		]);
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.UNKNOWN_PROP,
+		);
+		expect(issue?.variant).toBe("Errored");
+		expect(issue?.nodeId).toBe("node-table");
+		// The path addresses the tree after the operations were applied.
+		expect(issue?.path).toBe("$.body[1]");
+	});
+
+	it("an operation targeting a missing node yields VARIANT_OPERATION_FAILED", () => {
+		const screen = withVariants([
+			{
+				name: "Broken",
+				operations: [
+					{ type: "setProps", nodeId: "no-such-node", props: { a: 1 } },
+				],
+			},
+			{
+				name: "Loading",
+				operations: [
+					{ type: "setProps", nodeId: "node-table", props: { loading: true } },
+				],
+			},
+		]);
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.VARIANT_OPERATION_FAILED,
+		);
+		expect(issue?.variant).toBe("Broken");
+		expect(issue?.nodeId).toBe("no-such-node");
+		expect(issue?.message).toContain("NODE_NOT_FOUND");
+		// The failure is scoped to its variant; the other variant still validated.
+		expect(result.errors).toHaveLength(1);
+	});
+
+	// The variant tree contains the whole base tree, so base issues would repeat
+	// once per variant; fixing the base clears them everywhere, so they are
+	// reported once, on the base.
+	it("does not repeat a base issue inside every variant", () => {
+		const broken = withVariants([
+			{ name: "Empty", operations: [] },
+			{ name: "Loading", operations: [] },
+		]);
+		broken.root.slots.body[1].props.bogus = 1;
+		const result = validateScreen(broken, sampleRegistry());
+		const issues = result.errors.filter(
+			(e) => e.code === VALIDATION_CODES.UNKNOWN_PROP,
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0].variant).toBeUndefined();
+	});
+
+	it("a fixture referenced only by a variant's binding is not unused", () => {
+		const withoutVariant = withVariants([], { skeletonRows: [] });
+		expect(
+			validateScreen(withoutVariant, sampleRegistry()).warnings.some(
+				(w) => w.code === VALIDATION_CODES.UNUSED_FIXTURE,
+			),
+		).toBe(true);
+
+		const screen = withVariants(
+			[
+				{
+					name: "Loading",
+					operations: [
+						{
+							type: "setBinding",
+							nodeId: "node-table",
+							bindings: { rows: "skeletonRows" },
+						},
+					],
+				},
+			],
+			{ skeletonRows: [] },
+		);
+		const result = validateScreen(screen, sampleRegistry());
+		expect(
+			result.warnings.some((w) => w.code === VALIDATION_CODES.UNUSED_FIXTURE),
+		).toBe(false);
+	});
+
+	it("a variant that swaps in an out-of-range repeat is reported with its context", () => {
+		const screen = withVariants([
+			{
+				name: "Long",
+				operations: [
+					{
+						type: "replaceNode",
+						nodeId: "node-table",
+						node: {
+							id: "node-table",
+							component: "Table",
+							props: {},
+							slots: {},
+							repeat: 25,
+						},
+					},
+				],
+			},
+		]);
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.REPEAT_OUT_OF_RANGE,
+		);
+		expect(issue?.variant).toBe("Long");
+		expect(issue?.nodeId).toBe("node-table");
+	});
+
+	it("a component added only by a variant is still checked against the registry", () => {
+		const screen = withVariants([
+			{
+				name: "Empty",
+				operations: [
+					{
+						type: "addNode",
+						target: { parentNodeId: "node-page", slot: "body", index: 0 },
+						node: {
+							id: "node-banner",
+							component: "NotRegistered",
+							props: {},
+							slots: {},
+						},
+					},
+				],
+			},
+		]);
+		const result = validateScreen(screen, sampleRegistry());
+		const issue = result.errors.find(
+			(e) => e.code === VALIDATION_CODES.COMPONENT_NOT_FOUND,
+		);
+		expect(issue?.variant).toBe("Empty");
+		// Inserted at index 0, so the applied tree's path reflects the shift.
+		expect(issue?.path).toBe("$.body[0]");
+	});
+});

@@ -1,66 +1,40 @@
-import { z } from "zod";
 import {
 	type ComponentManifest,
 	type ComponentRegistry,
 	indexRegistry,
-	type PropDefinition,
 } from "../domain/component-manifest.ts";
+import { applyOperationsToRoot } from "../domain/operation.ts";
 import { expandRepeat } from "../domain/repeat.ts";
-import type { EventDefinition } from "../domain/screen-definition.ts";
 import {
-	bindingRootIdentifier,
 	EMIT_RESERVED_IDENTIFIERS,
-	eventDefinitionSchema,
-	isEmittableBindingExpression,
 	isJsIdentifier,
 	type ScreenNode,
+	type ScreenVariant,
 	walkNodes,
 } from "../domain/screen-definition.ts";
-import {
-	isSyntheticComponentId,
-	isSyntheticManifest,
-} from "../domain/synthetics.ts";
-import { RESERVED_PROP_NAMES } from "../domain/validator.ts";
+import { isSyntheticManifest } from "../domain/synthetics.ts";
+import { type RenderContext, renderRoot } from "./render.ts";
 
 // Converts a Screen Definition tree into Storybook CSF (Component Story Format)
 // source. The output is a ".stories.tsx" file that can be dropped straight into
 // the host's Storybook — Yosegi has no rendering environment of its own. This is
 // pure string generation with no dependency on React.
+//
+// The JSX rendering itself lives in render.ts; this module owns the CSF document
+// around it: the import plan, the fixture consts, the meta, and the Story exports.
 
 const DEFAULT_STORY_NAME = "Default";
 const DEFAULT_FRAMEWORK_PACKAGE = "@storybook/react";
-// The className emitted by the synthetic Heading primitive. Ordered the way
-// Tailwind recommends (the order lints like useSortedClasses expect). Exported
-// so the reader of a Story can also use it to detect "is this an h1 Yosegi wrote".
-export const SYNTHETIC_HEADING_CLASS_NAME = "font-bold text-2xl tracking-tight";
-// Marker for the comment that carries bindings / events forward. Shared with the reader.
-export const INTENT_COMMENT_PREFIX = "TODO(yosegi):";
-// Name of the JSX children slot. Every other Slot is passed as an attribute.
-const CHILDREN_SLOT = "children";
-// Props that are never emitted as JSX attributes. children is a Slot; key/ref are
-// reserved by React. The set lives in the validator (which rejects values written
-// under these names as RESERVED_PROP) so the two sides can't drift apart.
-const RESERVED_PROPS = RESERVED_PROP_NAMES;
 // Extensions stripped from the import specifier, restoring the form the host's bundler resolves.
 const IMPORT_EXTENSION_PATTERN = /\.(tsx|ts|jsx|js)$/;
 // In a Registry without componentPath, the story file's path ends up in packageName.
 const STORY_SUFFIX_PATTERN = /\.stories$/;
-// Characters that can't be written as raw JSX text; when present, escape into an
-// expression container instead. Newlines are included because JSX collapses raw
-// text newlines into a single space, which would change the value on read-back.
-// "&" is included because JSX decodes HTML entities in raw text and attribute
-// values — "&amp;" would render as "&", silently changing the value.
-const JSX_UNSAFE_TEXT_PATTERN = /[{}<>\r\n&]/;
-// Characters that can't be left inside a double-quoted JSX attribute value.
-const JSX_UNSAFE_ATTRIBUTE_PATTERN = /["\r\n&]/;
 // Local names the emitted file itself declares: `const meta` and the Meta / StoryObj
 // type imports. A host export with one of these names must take a suffixed alias, or
 // the generated Story declares the same identifier twice and cannot compile. The
 // list lives in the domain (screen-definition.ts) because the fixtures schema
 // rejects the same names, and the two sides must not drift apart.
 const EMIT_DECLARED_LOCAL_NAMES: readonly string[] = EMIT_RESERVED_IDENTIFIERS;
-// Mocks have no handler implementation. The "do nothing" value placed on a required function prop.
-const NOOP_HANDLER = "() => {}";
 
 // Boilerplate the host requires on a Story's meta (`tags` / `parameters`, the JSDoc
 // directly above meta, etc.). Yosegi doesn't interpret this — it just splices the
@@ -94,6 +68,11 @@ export type EmitCsfOptions = {
 	// written, so component imports yield the name instead (they get a suffixed
 	// alias) — a fixture const can never be renamed.
 	fixtures?: Record<string, unknown>;
+	// Screen states emitted as additional `export const <name>: Story` blocks
+	// after the base Story, each rendered from the base tree with the variant's
+	// operations applied. Imports, fixtures, and meta are shared — the file stays
+	// one Story module with several states of the same screen.
+	variants?: ScreenVariant[];
 };
 
 // Converts a "./app=~,./packages/x=@y"-style spec into a prefix-replacement function.
@@ -204,52 +183,19 @@ export type ImportPlan = {
 	localNames: Map<string, string>;
 };
 
-type RenderContext = {
-	manifests: Map<string, ComponentManifest>;
-	// Component id -> the local name used in JSX.
-	localNames: Map<string, string>;
-	// Fixture names this file declares as consts. A binding whose head is one of
-	// these references a value that exists, so it can be written into the JSX.
-	fixtureNames: ReadonlySet<string>;
-};
-
-function indent(line: string): string {
-	return `\t${line}`;
-}
-
-// An id that's neither in the Registry nor a synthetic primitive can't be
-// generated. Callers are expected to run validateScreen beforehand, but this
-// fails explicitly here too as a second safety net.
-function requireRenderable(
-	node: ScreenNode,
-	manifests: Map<string, ComponentManifest>,
-): ComponentManifest | null {
-	const manifest = manifests.get(node.component) ?? null;
-	if (!manifest && !isSyntheticComponentId(node.component)) {
-		throw new Error(
-			`Component "${node.component}" (node "${node.id}") is not registered.`,
-		);
-	}
-	return manifest;
-}
-
-function isSynthetic(
-	node: ScreenNode,
-	manifest: ComponentManifest | null,
-): boolean {
-	return manifest
-		? isSyntheticManifest(manifest)
-		: isSyntheticComponentId(node.component);
-}
-
 // Walks the tree to decide import statements and local names. Local-name collisions are resolved with a "Name2" suffix.
 //
 // Unregistered ids are silently skipped here. Deciding whether generation is
 // impossible is left to the rendering side (requireRenderable), so callers like the
 // implementation context — which want the rest returned even when some ids are
 // unregistered — can still go through.
+//
+// Accepts several roots because a Story with variants is one file: every tree —
+// the base and each variant's — shares the same import statements and local
+// names, so one plan has to cover all of them. Passing the base first keeps the
+// local names identical to a variant-free emit.
 export function planImports(
-	root: ScreenNode,
+	roots: ScreenNode | readonly ScreenNode[],
 	registry: ComponentRegistry,
 	resolveImport?: (packageName: string) => string,
 	// Extra identifiers the surrounding file declares (e.g. the Story's export name).
@@ -262,10 +208,13 @@ export function planImports(
 		...EMIT_DECLARED_LOCAL_NAMES,
 		...reservedLocalNames,
 	]);
+	const rootList: readonly ScreenNode[] = Array.isArray(roots)
+		? roots
+		: [roots as ScreenNode];
 
-	for (const node of walkNodes(root)) {
+	for (const node of rootList.flatMap((root) => walkNodes(root))) {
 		const manifest = manifests.get(node.component) ?? null;
-		if (!manifest || isSynthetic(node, manifest)) {
+		if (!manifest || isSyntheticManifest(manifest)) {
 			continue;
 		}
 		if (localNames.has(node.component)) {
@@ -320,394 +269,8 @@ export function renderImportStatements(plan: ImportPlan): string[] {
 		.map(([specifier, bindings]) => renderImportStatement(specifier, bindings));
 }
 
-// Reduces a string to a JSX attribute value. When it contains double quotes or
-// newlines, escape into an expression container + JSON literal so the literal can't
-// be closed early. Attributes written by synthetic primitives (Box's className,
-// etc.) always go through this function too.
-function stringAttribute(name: string, value: string): string {
-	return JSX_UNSAFE_ATTRIBUTE_PATTERN.test(value)
-		? `${name}={${JSON.stringify(value)}}`
-		: `${name}="${value}"`;
-}
-
-function serializeProp(name: string, value: unknown): string | null {
-	if (typeof value === "string") {
-		return stringAttribute(name, value);
-	}
-	if (typeof value === "number") {
-		return `${name}={${value}}`;
-	}
-	if (typeof value === "boolean") {
-		return value ? name : `${name}={false}`;
-	}
-	if (value === null || typeof value === "object") {
-		return `${name}={${JSON.stringify(value)}}`;
-	}
-	// function / undefined / symbol can't be reduced to Story source, so they aren't emitted.
-	return null;
-}
-
-// The expression placed on a prop that's only declared via bindings / events.
-//
-// bindings / events are a declaration of "wire it up like this at implementation
-// time" — they don't carry a value. Dropping a valueless prop from the output is
-// harmless when it's optional, but when it's required the generated code fails
-// tsc and breaks in Storybook too (the prop vanishes entirely, e.g. `<DataTable />`).
-// For required props only, we place the smallest expression we can build from the
-// declaration, just so the prop never disappears outright. The intent itself is
-// carried by the TODO comment.
-//
-// A binding whose head names a fixture is the exception to "required only": the
-// const exists in this very file, so the expression is written regardless of
-// requiredness — the point of a fixture is that the mock actually shows the data
-// while the binding stays the implementation intent.
-function declaredPropExpression(
-	node: ScreenNode,
-	def: PropDefinition | undefined,
-	propName: string,
-	fixtureNames: ReadonlySet<string>,
-): string | null {
-	// Handlers have no implementation in a mock, so a required one is filled with a
-	// no-op function. Nothing happening when it's triggered is correct behavior for
-	// a mock, and it type-checks in a handler position too. A fixture is JSON, so
-	// it can never satisfy a handler position — the fixture path is skipped.
-	if (def?.kind === "function") {
-		return def.required === true ? NOOP_HANDLER : null;
-	}
-	const expression = Object.hasOwn(node.bindings ?? {}, propName)
-		? node.bindings?.[propName]
-		: undefined;
-	if (expression === undefined || !isEmittableBindingExpression(expression)) {
-		return null;
-	}
-	const head = bindingRootIdentifier(expression);
-	if (head !== null && fixtureNames.has(head)) {
-		return expression;
-	}
-	if (def?.required !== true) {
-		return null;
-	}
-	// The identifier doesn't exist inside the Story, so this Story won't pass type
-	// checking. There's no way to fill a required prop with no data in a mock, and
-	// failing loudly by naming "this prop is needed" is easier to fix than dropping it
-	// and breaking silently. The validator warns about the same thing before generation.
-	return expression;
-}
-
-function stringProp(node: ScreenNode, name: string): string {
-	const value = node.props[name];
-	return typeof value === "string" ? value : "";
-}
-
-// Written as-is when it's safe as raw text, otherwise escaped into an expression
-// container. forceContainer exists to keep adjacent text nodes from fusing into one
-// on read-back.
-function renderText(text: string, forceContainer = false): string {
-	if (
-		forceContainer ||
-		text === "" ||
-		JSX_UNSAFE_TEXT_PATTERN.test(text) ||
-		text !== text.trim()
-	) {
-		return `{${JSON.stringify(text)}}`;
-	}
-	return text;
-}
-
-// The contents of the comment that carries bindings / events / when / each forward.
-export type NodeIntent = {
-	bindings: Record<string, string>;
-	events: Record<string, EventDefinition>;
-	// Conditional-display / repetition declaration. null on nodes that don't have one.
-	when: string | null;
-	each: string | null;
-};
-
-const intentPayloadSchema = z.object({
-	bindings: z.record(z.string(), z.string()).optional(),
-	events: z.record(z.string(), eventDefinitionSchema).optional(),
-	when: z.string().optional(),
-	each: z.string().optional(),
-});
-
-// The shape written out. Items that aren't present drop the key entirely, so this uses optional rather than null.
-export type NodeIntentPayload = z.infer<typeof intentPayloadSchema>;
-
-// Writes the intent down as JSON. A format built around chosen delimiter characters
-// breaks on read-back the moment the same character (`/`, `,`, `←`, etc.) shows up
-// on the expression or argument side. With JSON, quotes close the string boundary,
-// so any value can be restored as-is. `*/` alone would terminate the comment, so it's
-// escaped to `*\/` (in JSON, `\/` is equivalent to `/`, so the reader just needs to
-// call JSON.parse).
-export function encodeIntent(intent: NodeIntentPayload): string {
-	return JSON.stringify(intent).replaceAll("*/", "*\\/");
-}
-
-// The inverse of encodeIntent. Anything with the wrong shape becomes null (callers treat that as "not an intent").
-export function decodeIntent(encoded: string): NodeIntent | null {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(encoded);
-	} catch {
-		return null;
-	}
-	const result = intentPayloadSchema.safeParse(parsed);
-	if (!result.success) {
-		return null;
-	}
-	return {
-		bindings: result.data.bindings ?? {},
-		events: result.data.events ?? {},
-		when: result.data.when ?? null,
-		each: result.data.each ?? null,
-	};
-}
-
-// bindings / events / when / each are declarative intent with no implementation
-// code behind them. Left as a TODO comment so implementers can pick them up.
-//
-// when / each are conditional and repetition declarations that have no matching
-// JSX in a mock (repetition is expressed by laying out however many nodes you want
-// shown). They still get put in the comment — if the declaration disappeared from
-// the generated output, it would be lost both when the Story is read back and when
-// it's handed off to implementation.
-function intentComment(node: ScreenNode): string | null {
-	const intent: NodeIntentPayload = {};
-	if (Object.keys(node.bindings ?? {}).length > 0) {
-		intent.bindings = node.bindings;
-	}
-	if (Object.keys(node.events ?? {}).length > 0) {
-		intent.events = node.events;
-	}
-	if (node.when !== undefined) {
-		intent.when = node.when;
-	}
-	if (node.each !== undefined) {
-		intent.each = node.each;
-	}
-	if (Object.keys(intent).length === 0) {
-		return null;
-	}
-	return `{/* ${INTENT_COMMENT_PREFIX} ${encodeIntent(intent)} */}`;
-}
-
-// If even one attribute spans multiple lines, stack everything vertically (avoid mixing single-line and stacked forms).
-function renderTag(
-	tagName: string,
-	attributes: string[][],
-	childrenLines: string[],
-): string[] {
-	const selfClosing = childrenLines.length === 0;
-	const lines: string[] = [];
-	if (attributes.length === 0) {
-		lines.push(selfClosing ? `<${tagName} />` : `<${tagName}>`);
-	} else if (attributes.every((attribute) => attribute.length === 1)) {
-		const inline = attributes.map((attribute) => attribute[0]).join(" ");
-		lines.push(
-			selfClosing ? `<${tagName} ${inline} />` : `<${tagName} ${inline}>`,
-		);
-	} else {
-		lines.push(`<${tagName}`);
-		for (const attribute of attributes) {
-			lines.push(...attribute.map(indent));
-		}
-		lines.push(selfClosing ? "/>" : ">");
-	}
-	if (!selfClosing) {
-		// If the opening tag is one line and the child is a single line of text, collapse
-		// onto one line, matching JSX a person would write. Element children (starting with
-		// "<") are never collapsed.
-		const isTextOnlyChild =
-			childrenLines.length === 1 && !childrenLines[0].startsWith("<");
-		if (lines.length === 1 && isTextOnlyChild) {
-			return [`${lines[0]}${childrenLines[0]}</${tagName}>`];
-		}
-		lines.push(...childrenLines.map(indent));
-		lines.push(`</${tagName}>`);
-	}
-	return lines;
-}
-
-function renderFragment(lines: string[]): string[] {
-	return ["<>", ...lines.map(indent), "</>"];
-}
-
-// The rendering result. The type distinguishes a JSX element from raw text that can
-// only be placed in a children position. In positions that require an "expression"
-// — an attribute value, a render return value — text isn't valid syntax on its own
-// and must always be wrapped, so this keeps callers from mixing the two up.
-type RenderedNode =
-	| { kind: "element"; lines: string[] }
-	| { kind: "text"; text: string };
-
-// Lines to place in a children position.
-function asChildLines(
-	rendered: RenderedNode,
-	forceContainer: boolean,
-): string[] {
-	return rendered.kind === "text"
-		? [renderText(rendered.text, forceContainer)]
-		: rendered.lines;
-}
-
-// Lines to place in a position that requires an expression. Text alone isn't an expression, so it's wrapped in a Fragment.
-function asExpressionLines(rendered: RenderedNode): string[] {
-	return rendered.kind === "text"
-		? [`<>${renderText(rendered.text)}</>`]
-		: rendered.lines;
-}
-
-function isTextNode(node: ScreenNode | undefined): boolean {
-	return node?.component === "Text";
-}
-
-// The form used as JSX children (intent comment + element).
-function renderChild(
-	node: ScreenNode,
-	context: RenderContext,
-	forceTextContainer = false,
-): string[] {
-	const comment = intentComment(node);
-	const lines = asChildLines(renderNode(node, context), forceTextContainer);
-	return comment ? [comment, ...lines] : lines;
-}
-
-// Renders a sequence of child elements. Adjacent raw text would fuse into one text
-// node on read-back, so only spots where text nodes are adjacent get an expression
-// container to preserve the boundary.
-function renderChildren(
-	children: ScreenNode[],
-	context: RenderContext,
-): string[] {
-	return children.flatMap((child, index) =>
-		renderChild(
-			child,
-			context,
-			isTextNode(child) &&
-				(isTextNode(children[index - 1]) || isTextNode(children[index + 1])),
-		),
-	);
-}
-
-// A named Slot becomes an attribute value. An expression container can hold only
-// one expression, so when there are multiple children or an intent comment is
-// attached, wrap them in a Fragment.
-function renderSlotAttribute(
-	slotName: string,
-	children: ScreenNode[],
-	context: RenderContext,
-): string[] {
-	const needsFragment =
-		children.length > 1 || intentComment(children[0]) !== null;
-	const value = needsFragment
-		? renderFragment(renderChildren(children, context))
-		: asExpressionLines(renderNode(children[0], context));
-	if (value.length === 1) {
-		return [`${slotName}={${value[0]}}`];
-	}
-	return [`${slotName}={`, ...value.map(indent), "}"];
-}
-
-function renderSynthetic(
-	node: ScreenNode,
-	context: RenderContext,
-): RenderedNode {
-	switch (node.component) {
-		case "Text":
-			return { kind: "text", text: stringProp(node, "text") };
-		case "Heading":
-			return {
-				kind: "element",
-				lines: [
-					`<h1 ${stringAttribute("className", SYNTHETIC_HEADING_CLASS_NAME)}>${renderText(stringProp(node, "text"))}</h1>`,
-				],
-			};
-		case "Box": {
-			const className = stringProp(node, "className");
-			const attributes =
-				className === "" ? [] : [[stringAttribute("className", className)]];
-			const children = renderChildren(node.slots[CHILDREN_SLOT] ?? [], context);
-			return { kind: "element", lines: renderTag("div", attributes, children) };
-		}
-		default:
-			throw new Error(
-				`Component "${node.component}" (node "${node.id}") is marked synthetic but has no renderer.`,
-			);
-	}
-}
-
-function renderNode(node: ScreenNode, context: RenderContext): RenderedNode {
-	const manifest = requireRenderable(node, context.manifests);
-	if (isSynthetic(node, manifest)) {
-		return renderSynthetic(node, context);
-	}
-	const localName = context.localNames.get(node.component);
-	if (!localName) {
-		throw new Error(
-			`Component "${node.component}" (node "${node.id}") has no import binding.`,
-		);
-	}
-
-	const attributes: string[][] = [];
-	for (const [propName, value] of Object.entries(node.props)) {
-		if (RESERVED_PROPS.has(propName)) {
-			continue;
-		}
-		const attribute = serializeProp(propName, value);
-		if (attribute) {
-			attributes.push([attribute]);
-		}
-	}
-	// A prop that appears only in bindings / events without ever carrying a value. Only required ones get filled in.
-	const declaredPropNames = new Set([
-		...Object.keys(node.bindings ?? {}),
-		...Object.keys(node.events ?? {}),
-	]);
-	for (const propName of declaredPropNames) {
-		if (RESERVED_PROPS.has(propName) || Object.hasOwn(node.props, propName)) {
-			continue;
-		}
-		// Guarded with hasOwn: a plain bracket lookup keyed by a screen-supplied name
-		// walks the prototype chain, so a prop named "toString" would look defined.
-		const expression = declaredPropExpression(
-			node,
-			manifest && Object.hasOwn(manifest.props, propName)
-				? manifest.props[propName]
-				: undefined,
-			propName,
-			context.fixtureNames,
-		);
-		if (expression !== null) {
-			attributes.push([`${propName}={${expression}}`]);
-		}
-	}
-	for (const [slotName, children] of Object.entries(node.slots)) {
-		if (slotName === CHILDREN_SLOT || children.length === 0) {
-			continue;
-		}
-		attributes.push(renderSlotAttribute(slotName, children, context));
-	}
-
-	const childrenLines = renderChildren(
-		node.slots[CHILDREN_SLOT] ?? [],
-		context,
-	);
-	return {
-		kind: "element",
-		lines: renderTag(localName, attributes, childrenLines),
-	};
-}
-
-// An intent comment can't be prefixed onto the root (it would put two expressions
-// side by side in the expression container), so only when there's a comment do we
-// wrap in a Fragment to avoid losing the information.
-function renderRoot(root: ScreenNode, context: RenderContext): string[] {
-	const comment = intentComment(root);
-	const rendered = renderNode(root, context);
-	if (!comment) {
-		return asExpressionLines(rendered);
-	}
-	return renderFragment([comment, ...asChildLines(rendered, false)]);
+function indent(line: string): string {
+	return `\t${line}`;
 }
 
 // Reduces meta template properties into the body of the meta object. A fragment can
@@ -768,15 +331,56 @@ export function emitCsf(
 			);
 		}
 	}
+	const variants = options.variants ?? [];
+	const seenVariantNames = new Set<string>();
+	for (const variant of variants) {
+		const name = variant.name;
+		// Second safety net over the variants schema, mirroring the fixtures block
+		// above; only the storyName collision is genuinely emit's to catch, because
+		// the base export's name is chosen per emit rather than stored.
+		if (!isJsIdentifier(name) || EMIT_DECLARED_LOCAL_NAMES.includes(name)) {
+			throw new Error(
+				`Variant name "${name}" is not writable as a Story export (it must be a JavaScript identifier other than ${EMIT_DECLARED_LOCAL_NAMES.join(" / ")}).`,
+			);
+		}
+		if (name === storyName) {
+			throw new Error(
+				`Variant name "${name}" collides with the Story export name. Rename the variant or pass a different story name.`,
+			);
+		}
+		if (Object.hasOwn(fixtures, name)) {
+			throw new Error(
+				`Variant name "${name}" collides with a fixture name. Rename one of them.`,
+			);
+		}
+		if (seenVariantNames.has(name)) {
+			throw new Error(
+				`Variant name "${name}" is used more than once. Each variant becomes its own Story export, so names must be unique.`,
+			);
+		}
+		seenVariantNames.add(name);
+	}
 	// repeat expands here — after validation, before import planning — so the
-	// Screen JSON keeps its single node while the Story shows the copies.
+	// Screen JSON keeps its single node while the Story shows the copies. A
+	// variant's operations apply to the unexpanded base first: they target the
+	// Screen JSON's node ids, which expansion rewrites.
 	const expandedRoot = expandRepeat(root);
-	// The Story's export name and the fixture consts are identifiers this file
-	// declares, so a component import must not take the same local name.
-	const plan = planImports(expandedRoot, registry, options.resolveImport, [
-		storyName,
-		...Object.keys(fixtures),
-	]);
+	const variantRoots = variants.map((variant) =>
+		expandRepeat(applyOperationsToRoot(root, variant.operations)),
+	);
+	// The Story export names (base and variants) and the fixture consts are
+	// identifiers this file declares, so a component import must not take the
+	// same local name.
+	const plan = planImports(
+		[expandedRoot, ...variantRoots],
+		registry,
+		options.resolveImport,
+		[
+			storyName,
+			...variants.map((variant) => variant.name),
+			...Object.keys(fixtures),
+		],
+	);
 	const context: RenderContext = {
 		manifests,
 		localNames: plan.localNames,
@@ -812,11 +416,45 @@ export function emitCsf(
 		"",
 		"export default meta;",
 		"",
-		`export const ${storyName}: StoryObj = {`,
+		...renderStoryExport(storyName, expandedRoot, context),
+	);
+	variants.forEach((variant, index) => {
+		lines.push("");
+		if (variant.description !== undefined) {
+			lines.push(...renderVariantJsdoc(variant.description));
+		}
+		lines.push(
+			...renderStoryExport(variant.name, variantRoots[index], context),
+		);
+	});
+	return `${lines.join("\n")}\n`;
+}
+
+// One `export const <name>: StoryObj` block. The base Story and every variant
+// go through the same function so their shape can't drift.
+function renderStoryExport(
+	name: string,
+	root: ScreenNode,
+	context: RenderContext,
+): string[] {
+	return [
+		`export const ${name}: StoryObj = {`,
 		"\trender: () => (",
-		...renderRoot(expandedRoot, context).map((line) => `\t\t${line}`),
+		...renderRoot(root, context).map((line) => `\t\t${line}`),
 		"\t),",
 		"};",
-	);
-	return `${lines.join("\n")}\n`;
+	];
+}
+
+// The variant's description as a JSDoc directly above its export, where
+// Storybook's autodocs pick it up. `*/` inside the text would close the comment
+// and spill the rest into a code position, so it is defused the same way intent
+// comments are.
+function renderVariantJsdoc(description: string): string[] {
+	const safe = description.replaceAll("*/", "*\\/");
+	const bodyLines = safe.split("\n");
+	if (bodyLines.length === 1) {
+		return [`/** ${bodyLines[0]} */`];
+	}
+	return ["/**", ...bodyLines.map((line) => ` * ${line}`), " */"];
 }

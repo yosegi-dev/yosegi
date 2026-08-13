@@ -479,6 +479,7 @@ async function generateStory(
 		resolveImport: importMap ? buildImportMapResolver(importMap) : undefined,
 		meta: metaTemplate?.template,
 		fixtures: screen.fixtures,
+		variants: screen.variants,
 	});
 	await mkdir(dirname(out), { recursive: true });
 	await writeFile(out, source);
@@ -1298,6 +1299,8 @@ export async function runCli(argv: string[]): Promise<number> {
 								name: screen.name,
 								root: screen.root,
 								status: screen.status,
+								fixtures: screen.fixtures,
+								variants: screen.variants,
 							});
 					print(result);
 					return 0;

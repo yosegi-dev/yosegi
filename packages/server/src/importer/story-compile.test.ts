@@ -263,6 +263,70 @@ describe("生成した Story の型検査", () => {
 		expect(source).toContain('import { Card as Card2 } from "./ui/card";');
 	});
 
+	// Variants share one file with the base Story; the whole thing — several
+	// exports, the JSDoc, the shared fixtures — has to type-check as one module.
+	it("variants を含む Story がコンパイルできる", () => {
+		const registry: ComponentRegistry = withSyntheticComponents(
+			parseComponentRegistry({
+				version: "v1",
+				components: [
+					{
+						id: "Table",
+						name: "Table",
+						import: { packageName: "./ui/table", exportName: "Table" },
+						props: {
+							loading: { kind: "boolean" },
+							rows: { kind: "json", editable: false },
+						},
+						slots: {},
+					},
+				],
+			}),
+		);
+		const source = emitCsf(
+			{
+				id: "root",
+				component: "Box",
+				props: {},
+				slots: {
+					children: [
+						{
+							id: "table",
+							component: "Table",
+							props: {},
+							slots: {},
+							bindings: { rows: "customers" },
+						},
+					],
+				},
+			},
+			registry,
+			{
+				title: "T",
+				fixtures: { customers: [{ name: "Sato" }] },
+				variants: [
+					{
+						name: "Loading",
+						description: "Rows are being fetched.",
+						operations: [
+							{ type: "setProps", nodeId: "table", props: { loading: true } },
+						],
+					},
+					{
+						name: "Empty",
+						operations: [{ type: "removeNode", nodeId: "table" }],
+					},
+				],
+			},
+		);
+
+		expect(
+			compile(source, { "/host/ui/table.ts": componentStub(["Table"]) }),
+		).toEqual([]);
+		expect(source).toContain("export const Loading: StoryObj = {");
+		expect(source).toContain("export const Empty: StoryObj = {");
+	});
+
 	it("Story の export 名と衝突する export 名でもコンパイルできる", () => {
 		const registry: ComponentRegistry = withSyntheticComponents(
 			parseComponentRegistry({

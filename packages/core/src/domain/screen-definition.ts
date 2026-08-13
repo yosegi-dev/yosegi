@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type ScreenOperation, screenOperationSchema } from "./operation.ts";
 
 // A Screen Definition is the intermediate representation of a screen assembled in
 // the Composer. It's a declarative format independent of any specific framework,
@@ -165,7 +166,9 @@ export function isJsIdentifier(name: string): boolean {
 // time, the collision is rejected up front, here in the schema.
 export const EMIT_RESERVED_IDENTIFIERS = ["meta", "Meta", "StoryObj"] as const;
 
-const RESERVED_FIXTURE_NAMES: ReadonlySet<string> = new Set(
+// Both a fixture (a top-level const) and a variant (a Story export) declare
+// their name verbatim in the generated file, so both face the same reserved set.
+const RESERVED_DECLARED_NAMES: ReadonlySet<string> = new Set(
 	EMIT_RESERVED_IDENTIFIERS,
 );
 
@@ -220,7 +223,7 @@ export const fixturesSchema = z
 				});
 				continue;
 			}
-			if (RESERVED_FIXTURE_NAMES.has(name)) {
+			if (RESERVED_DECLARED_NAMES.has(name)) {
 				ctx.addIssue({
 					code: "custom",
 					path: [name],
@@ -228,6 +231,72 @@ export const fixturesSchema = z
 				});
 			}
 		}
+	});
+
+// A variant is a named diff over the base tree: the same screen in another
+// state (loading / error / empty), expressed as operations that are applied to
+// the base at generation time. The Screen JSON stores only the diff, so editing
+// the base never requires re-editing every state by hand.
+export type ScreenVariant = {
+	// Becomes the additional Story export's identifier, verbatim.
+	name: string;
+	// Emitted as a JSDoc above the variant's export.
+	description?: string;
+	// The diff against the base tree, applied with the same machinery as
+	// applyOperations. An empty array is legal (the base state under another name).
+	operations: ScreenOperation[];
+};
+
+// z.lazy on the operations side of the screen-definition <-> operation import
+// cycle; see the note on screenOperationSchema.
+export const screenVariantSchema: z.ZodType<ScreenVariant> = z.lazy(() =>
+	z.object({
+		name: z.string().min(1),
+		description: z.string().optional(),
+		operations: z.array(screenOperationSchema),
+	}),
+);
+
+// Name legality is checked here rather than with a validation code, on the same
+// reasoning as fixturesSchema: a variant name's writability as an export
+// identifier is a structural property of the document itself, not a
+// registry-dependent one, so it fails as INVALID_REQUEST before validation is
+// ever reached. Whether the operations apply cleanly does depend on the tree,
+// and that is the validator's job (VARIANT_OPERATION_FAILED).
+export const screenVariantsSchema = z
+	.array(screenVariantSchema)
+	.superRefine((variants, ctx) => {
+		const seen = new Set<string>();
+		variants.forEach((variant, index) => {
+			const name = variant.name;
+			if (isJsReservedWord(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [index, "name"],
+					message: `Variant name "${name}" is a reserved word in JavaScript, so it cannot be declared as a Story export. Rename the variant.`,
+				});
+			} else if (!isJsIdentifier(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [index, "name"],
+					message: `Variant name "${name}" is not a valid JavaScript identifier. Use letters, digits, "_" or "$", and do not start with a digit.`,
+				});
+			} else if (RESERVED_DECLARED_NAMES.has(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [index, "name"],
+					message: `Variant name "${name}" collides with an identifier the generated Story declares (${EMIT_RESERVED_IDENTIFIERS.join(", ")}). Rename the variant.`,
+				});
+			}
+			if (seen.has(name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: [index, "name"],
+					message: `Variant name "${name}" is used more than once. Each variant becomes its own Story export, so names must be unique.`,
+				});
+			}
+			seen.add(name);
+		});
 	});
 
 export const screenStatusSchema = z.enum(["draft", "published"]);
@@ -245,19 +314,38 @@ export const screenIdSchema = z
 		'Screen id may only contain letters, digits, "-" and "_" (it is used as a file name).',
 	);
 
-export const screenDefinitionSchema = z.object({
-	schemaVersion: z.literal(SCHEMA_VERSION),
-	id: screenIdSchema,
-	name: z.string().min(1),
-	status: screenStatusSchema.default("draft"),
-	// The version of the Component Registry being referenced. Used for compatibility checks.
-	componentRegistryVersion: z.string().min(1),
-	// Revision for optimistic locking. Incremented by 1 on every update.
-	revision: z.number().int().nonnegative(),
-	// Mock data emitted into the Story as top-level consts, referenced by bindings.
-	fixtures: fixturesSchema.optional(),
-	root: screenNodeSchema,
-});
+export const screenDefinitionSchema = z
+	.object({
+		schemaVersion: z.literal(SCHEMA_VERSION),
+		id: screenIdSchema,
+		name: z.string().min(1),
+		status: screenStatusSchema.default("draft"),
+		// The version of the Component Registry being referenced. Used for compatibility checks.
+		componentRegistryVersion: z.string().min(1),
+		// Revision for optimistic locking. Incremented by 1 on every update.
+		revision: z.number().int().nonnegative(),
+		// Mock data emitted into the Story as top-level consts, referenced by bindings.
+		fixtures: fixturesSchema.optional(),
+		// Screen states emitted as additional Story exports, each a diff over root.
+		variants: screenVariantsSchema.optional(),
+		root: screenNodeSchema,
+	})
+	// A fixture const and a variant export land in the same file scope, and
+	// neither side can be renamed (bindings reference the fixture as written; the
+	// variant name IS the export). Cross-field, but still a structural property
+	// of the document, so it is rejected here with the rest of the name checks.
+	.superRefine((screen, ctx) => {
+		const fixtureNames = new Set(Object.keys(screen.fixtures ?? {}));
+		(screen.variants ?? []).forEach((variant, index) => {
+			if (fixtureNames.has(variant.name)) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["variants", index, "name"],
+					message: `Variant name "${variant.name}" collides with a fixture of the same name. Both become top-level declarations in the generated Story, so rename one of them.`,
+				});
+			}
+		});
+	});
 export type ScreenDefinition = z.infer<typeof screenDefinitionSchema>;
 
 export function parseScreenDefinition(input: unknown): ScreenDefinition {

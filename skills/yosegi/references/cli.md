@@ -262,6 +262,9 @@ yosegi screen generate tmp/screen.json \
 On validation errors nothing is written and an array of errors comes back with exit code 1
 (`errors.md`). Warnings are printed after `Wrote <path>` and do not stop generation.
 
+A screen with `variants` (`screen-json.md`) needs no extra flag: the one output file carries the
+base export plus one export per variant, and `--story-name` still names only the base export.
+
 `screen validate` is a different command: it targets screens already saved in the screen store (the
 ones you have `screen push`ed). A Screen JSON file is validated by `screen generate` itself, so you
 do not need it here.
@@ -303,7 +306,7 @@ yosegi story import <host>/app/components/examples/customer-list.stories.tsx \
 | Flag | Meaning |
 | --- | --- |
 | `--import-map <from=to,...>` | Same direction and value as in `screen generate` (registry paths → host aliases); the importer reads it in reverse when matching import statements. Without it, resolution falls back to a trailing-segment path match, which is less reliable |
-| `--story-name <name>` | Which Story to take. Defaults to the first export that has a `render` |
+| `--story-name <name>` | Which Story to take. Defaults to the first export that has a `render`. A file with several exports (a `variants` file) is read one export per run; the others come back in a `MULTIPLE_STORIES` warning |
 | `--screen-id <id>` | The screen id. Defaults to the file name minus `.stories.tsx`. Letters, digits, `-` and `_` only |
 | `--screen-name <name>` | The screen name. Defaults to the last segment of the Story title |
 | `--registry <file>` | Use a registry other than the one in `--data-dir` |
@@ -344,7 +347,7 @@ claude mcp add yosegi -- npx yosegi mcp
 | `get_component` | `componentId` | `component inspect` — an unknown id returns `COMPONENT_NOT_FOUND` with the same did-you-mean `suggestion` |
 | `list_categories` | — | the `categories` field of `component list --json` |
 | `get_registry_status` | — | `registry status`, provenance only: it reports version / build time / inputs and the version-mismatch warning, but does not recompute source drift |
-| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures` | `screen generate` — but it writes no file and returns the CSF source as a string, so the caller decides where it goes |
+| `generate_story` | `root`, `title`, `storyName`, `importMap`, `framework`, `fixtures`, `variants` | `screen generate` — but it writes no file and returns the CSF source as a string, so the caller decides where it goes |
 | `generate_implementation_context` | `screenId`, `route`, `preferredPath`, `importMap` | `screen context`, addressed by stored screen id |
 | `validate_screen` | `screenId` | `screen validate` |
 | `list_screens` / `get_screen` | — / `screenId` | `screen list` / `screen pull` |
@@ -355,8 +358,8 @@ claude mcp add yosegi -- npx yosegi mcp
 Two differences from the CLI are easy to get wrong:
 
 - `generate_story` takes `root` — the ScreenNode alone, which is the `root` field of the Screen
-  JSON, not the whole document. The other top-level fields have no MCP equivalent; `title` and
-  `fixtures` are passed separately.
+  JSON, not the whole document. The other top-level fields have no MCP equivalent; `title`,
+  `fixtures`, and `variants` are passed separately.
 - `importMap` is the same string the CLI takes (`"./app=~,./lib=~/lib"`), not an object.
 
 `generate_implementation_context` takes a `screenId`, so the screen has to be in the store first

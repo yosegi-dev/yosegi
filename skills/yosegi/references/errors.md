@@ -60,6 +60,7 @@ This loop needs no confirmation from anyone. Run it to completion.
 | `REPEAT_ON_ROOT` | `repeat` sits on the root node, which has no parent slot to hold the copies | Wrap the repeated content in a container node (a `Box`, say) and put `repeat` on the child |
 | `REPEAT_OUT_OF_RANGE` | `repeat` is not an integer between 2 and 20 | Fix the count. Remove `repeat` entirely if a single node is enough |
 | `REPEAT_EXPANSION_TOO_LARGE` | Expanding every `repeat` would produce more than 2000 nodes — nested repeats multiply | Lower the counts or un-nest the repeated subtrees |
+| `VARIANT_OPERATION_FAILED` | A variant's `operations` could not be applied to the base tree; the message names the failing operation's code (`NODE_NOT_FOUND`, ...) | Fix the operation so every `nodeId` it targets exists in the base tree (or was added by an earlier operation of the same variant). Issues from a variant's applied tree carry a `variant` field, and their `path` addresses the tree after the operations |
 
 ### `UNKNOWN_PROP` on a prop that really exists
 
@@ -142,6 +143,7 @@ shape is only decided at runtime cannot be read**.
 | `COMPONENT_AMBIGUOUS` | Several registry entries share the export name. Narrow it with `--import-map` |
 | `IMPORT_PATH_MISMATCH` | The export name matches but the import source differs from the registry. Suspect a stale registry |
 | `MULTIPLE_ROOTS` | There was more than one root element, so they were wrapped in a `Box` |
+| `MULTIPLE_STORIES` | The file exports more Stories than the imported one (a `variants` file, typically). One export is read per run; pass `--story-name` to read another. The diff is never reconstructed into `variants` |
 
 **Anything that produced a warning is absent from the Screen JSON.** Ignore them and that part of the
 screen goes missing from the implementation entirely. Read the original Story directly for every

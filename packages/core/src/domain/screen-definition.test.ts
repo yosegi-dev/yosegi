@@ -199,3 +199,77 @@ describe("repeat schema", () => {
 		expect(withRepeat("3")).toThrow();
 	});
 });
+
+describe("variants constraints", () => {
+	function withVariants(variants: unknown, fixtures?: Record<string, unknown>) {
+		return () =>
+			parseScreenDefinition({
+				...sampleScreen(),
+				...(fixtures ? { fixtures } : {}),
+				variants,
+			});
+	}
+
+	it("accepts named variants carrying operations", () => {
+		const screen = withVariants([
+			{
+				name: "Loading",
+				description: "Every row replaced by a skeleton.",
+				operations: [
+					{ type: "setProps", nodeId: "node-table", props: { loading: true } },
+				],
+			},
+			{ name: "Empty", operations: [] },
+		])();
+		expect(screen.variants?.map((variant) => variant.name)).toEqual([
+			"Loading",
+			"Empty",
+		]);
+		expect(screen.variants?.[0].operations).toHaveLength(1);
+	});
+
+	it("rejects a name that is not a JavaScript identifier", () => {
+		expect(withVariants([{ name: "loading state", operations: [] }])).toThrow();
+		expect(withVariants([{ name: "1st", operations: [] }])).toThrow();
+	});
+
+	// Same mechanism as fixture names: the name lands verbatim in an identifier
+	// position (`export const <name>`), so a reserved word can never compile.
+	it("rejects a name that is a reserved word", () => {
+		expect(withVariants([{ name: "default", operations: [] }])).toThrow(
+			"reserved word",
+		);
+		expect(withVariants([{ name: "class", operations: [] }])).toThrow(
+			"reserved word",
+		);
+	});
+
+	it("rejects the identifiers the generated Story itself declares", () => {
+		expect(withVariants([{ name: "meta", operations: [] }])).toThrow();
+		expect(withVariants([{ name: "Meta", operations: [] }])).toThrow();
+		expect(withVariants([{ name: "StoryObj", operations: [] }])).toThrow();
+	});
+
+	it("rejects two variants sharing a name", () => {
+		expect(
+			withVariants([
+				{ name: "Loading", operations: [] },
+				{ name: "Loading", operations: [] },
+			]),
+		).toThrow("more than once");
+	});
+
+	it("rejects a variant name colliding with a fixture name", () => {
+		expect(
+			withVariants([{ name: "customers", operations: [] }], {
+				customers: [],
+			}),
+		).toThrow("collides with a fixture");
+	});
+
+	it("rejects an operation with an unknown shape", () => {
+		expect(
+			withVariants([{ name: "Loading", operations: [{ type: "explode" }] }]),
+		).toThrow();
+	});
+});

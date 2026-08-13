@@ -996,6 +996,229 @@ describe("emitCsf の fixtures", () => {
 	});
 });
 
+describe("emitCsf の variants", () => {
+	it("ベースと各 variant を複数の Story export として 1 ファイルに出力する", () => {
+		const source = emitCsf(sampleScreen().root, sampleRegistry(), {
+			title: "S/T",
+			variants: [
+				{
+					name: "Loading",
+					operations: [
+						{
+							type: "setProps",
+							nodeId: "node-table",
+							props: { loading: true },
+						},
+					],
+				},
+				{
+					name: "Empty",
+					operations: [{ type: "removeNode", nodeId: "node-table" }],
+				},
+			],
+		});
+		expect(source).toContain("export const Default: StoryObj = {");
+		expect(source).toContain("export const Loading: StoryObj = {");
+		expect(source).toContain("export const Empty: StoryObj = {");
+		// meta and the default export appear exactly once.
+		expect(source.split("const meta: Meta = {").length - 1).toBe(1);
+		expect(source.split("export default meta;").length - 1).toBe(1);
+	});
+
+	it("variant には operations を適用した木が描画される", () => {
+		const source = emitCsf(sampleScreen().root, sampleRegistry(), {
+			title: "S/T",
+			variants: [
+				{
+					name: "Loading",
+					operations: [
+						{
+							type: "setProps",
+							nodeId: "node-table",
+							props: { loading: true },
+						},
+					],
+				},
+			],
+		});
+		const base = source.slice(0, source.indexOf("export const Loading"));
+		const variant = source.slice(source.indexOf("export const Loading"));
+		expect(base).not.toContain("<Table loading");
+		expect(variant).toContain("loading");
+	});
+
+	it("description を export 直上の JSDoc として出力する", () => {
+		const source = emitCsf(sampleScreen().root, sampleRegistry(), {
+			title: "S/T",
+			variants: [
+				{
+					name: "Empty",
+					description: "No customers yet.",
+					operations: [{ type: "removeNode", nodeId: "node-table" }],
+				},
+			],
+		});
+		expect(source).toContain(
+			"/** No customers yet. */\nexport const Empty: StoryObj = {",
+		);
+	});
+
+	// If a description containing `*/` closed the JSDoc, the rest would land in a code position.
+	it("description の */ は JSDoc を閉じない", () => {
+		const source = emitCsf(sampleScreen().root, sampleRegistry(), {
+			title: "S/T",
+			variants: [
+				{
+					name: "Empty",
+					description: "a */ b",
+					operations: [],
+				},
+			],
+		});
+		expect(source).toContain("/** a *\\/ b */");
+	});
+
+	it("variant だけが使うコンポーネントの import も出力する", () => {
+		const source = emitCsf(sampleScreen().root, sampleRegistry(), {
+			title: "S/T",
+			variants: [
+				{
+					name: "Empty",
+					operations: [
+						{ type: "removeNode", nodeId: "node-table" },
+						{
+							type: "addNode",
+							target: { parentNodeId: "node-page", slot: "body" },
+							node: {
+								id: "node-banner",
+								component: "LegacyBanner",
+								props: {},
+								slots: {},
+							},
+						},
+					],
+				},
+			],
+		});
+		expect(source).toContain(
+			'import { LegacyBanner } from "~/components/legacy";',
+		);
+		// Imports appear once, not repeated per variant.
+		expect(source.split('from "~/components/legacy"').length - 1).toBe(1);
+	});
+
+	// A variant name is an export this file declares, so a component import
+	// sharing it must take the suffixed alias — same rule as the Story name.
+	it("variant 名と衝突する export 名は退避する", () => {
+		const source = emitCsf(
+			node("root", "Card"),
+			withSyntheticComponents(singleComponentRegistry("Card")),
+			{ title: "S/T", variants: [{ name: "Card", operations: [] }] },
+		);
+		expect(source).toContain('import { Card as Card2 } from "~/x";');
+		expect(source).toContain("<Card2 />");
+		expect(source).toContain("export const Card: StoryObj = {");
+	});
+
+	it("variant の repeat も展開する", () => {
+		const source = emit(
+			node("root", "Box", {
+				slots: { children: [node("row", "Table")] },
+			}),
+		);
+		expect(source.split("<Table />").length - 1).toBe(1);
+		const withVariant = emitCsf(
+			node("root", "Box", {
+				slots: { children: [node("row", "Table")] },
+			}),
+			withSyntheticComponents(sampleRegistry()),
+			{
+				title: "S/T",
+				variants: [
+					{
+						name: "Long",
+						operations: [
+							{
+								type: "replaceNode",
+								nodeId: "row",
+								node: {
+									id: "row",
+									component: "Table",
+									props: {},
+									slots: {},
+									repeat: 3,
+								},
+							},
+						],
+					},
+				],
+			},
+		);
+		expect(withVariant.split("<Table />").length - 1).toBe(1 + 3);
+	});
+
+	it("storyName・fixture・variant 同士の名前衝突を拒否する", () => {
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				variants: [{ name: "Default", operations: [] }],
+			}),
+		).toThrow("collides with the Story export name");
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				fixtures: { Empty: [] },
+				variants: [{ name: "Empty", operations: [] }],
+			}),
+		).toThrow("collides with a fixture name");
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				variants: [
+					{ name: "Empty", operations: [] },
+					{ name: "Empty", operations: [] },
+				],
+			}),
+		).toThrow("more than once");
+		expect(() =>
+			emitCsf(sampleScreen().root, sampleRegistry(), {
+				title: "S/T",
+				variants: [{ name: "1st", operations: [] }],
+			}),
+		).toThrow("not writable as a Story export");
+	});
+
+	it("生成した CSF が variants 込みで安定した全文になる", () => {
+		const screen = parseScreenDefinition({
+			...sampleScreen(),
+			fixtures: { customers: [{ name: "Sato" }] },
+			variants: [
+				{
+					name: "Loading",
+					description: "Rows are being fetched.",
+					operations: [
+						{
+							type: "setProps",
+							nodeId: "node-table",
+							props: { loading: true },
+						},
+					],
+				},
+				{
+					name: "Empty",
+					operations: [{ type: "removeNode", nodeId: "node-table" }],
+				},
+			],
+		});
+		const source = emitCsf(screen.root, sampleRegistry(), {
+			title: `Screens/${screen.name}`,
+			fixtures: screen.fixtures,
+			variants: screen.variants,
+		});
+		expect(source).toMatchSnapshot();
+	});
+});
+
 describe("emitCsf の repeat", () => {
 	it("repeat を持つノードを -1..-N の複製として展開する", () => {
 		const source = emit(

@@ -779,6 +779,140 @@ describe("runCli", () => {
 		});
 	});
 
+	// Variants ride from Screen JSON into one file with several Story exports.
+	// The read-back imports one export per run and names the ones it skipped.
+	it("screen generate は variants を複数の Story export として書き出す", async () => {
+		const screen = {
+			...sampleScreen(),
+			variants: [
+				{
+					name: "Loading",
+					description: "Rows are being fetched.",
+					operations: [
+						{
+							type: "setProps",
+							nodeId: "node-table",
+							props: { loading: true },
+						},
+					],
+				},
+			],
+		};
+		const screenFile = join(dataDir, "variants-screen.json");
+		await writeFile(screenFile, JSON.stringify(screen));
+		const storyFile = join(dataDir, "variants.stories.tsx");
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			storyFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+
+		const source = await Bun.file(storyFile).text();
+		expect(source).toContain("export const Default: StoryObj = {");
+		expect(source).toContain(
+			"/** Rows are being fetched. */\nexport const Loading: StoryObj = {",
+		);
+
+		logs = [];
+		const importCode = await runCli([
+			"story",
+			"import",
+			storyFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(importCode).toBe(0);
+		expect(output()).toContain("MULTIPLE_STORIES");
+		expect(output()).toContain('also exports \\"Loading\\"');
+
+		logs = [];
+		const variantImportCode = await runCli([
+			"story",
+			"import",
+			storyFile,
+			"--story-name",
+			"Loading",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(variantImportCode).toBe(0);
+		// The variant export reads back as its applied tree.
+		expect(output()).toContain('"loading": true');
+	});
+
+	it("variant の検証エラーは variant 名付きで報告され、ファイルを書かない", async () => {
+		const screen = {
+			...sampleScreen(),
+			variants: [
+				{
+					name: "Broken",
+					operations: [
+						{ type: "setProps", nodeId: "no-such-node", props: { a: 1 } },
+					],
+				},
+			],
+		};
+		const screenFile = join(dataDir, "broken-variant.json");
+		await writeFile(screenFile, JSON.stringify(screen));
+		const storyFile = join(dataDir, "broken-variant.stories.tsx");
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			storyFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		expect(output()).toContain("VARIANT_OPERATION_FAILED");
+		expect(output()).toContain('"variant": "Broken"');
+		expect(existsSync(storyFile)).toBe(false);
+	});
+
+	it("screen push は variants を保存し、pull で返す", async () => {
+		const screen = {
+			...sampleScreen(),
+			id: "with-variants",
+			variants: [
+				{
+					name: "Loading",
+					operations: [
+						{
+							type: "setProps",
+							nodeId: "node-table",
+							props: { loading: true },
+						},
+					],
+				},
+			],
+		};
+		const file = join(dataDir, "with-variants.json");
+		await writeFile(file, JSON.stringify(screen));
+
+		expect(await runCli(["screen", "push", file, "--data-dir", dataDir])).toBe(
+			0,
+		);
+
+		logs = [];
+		expect(
+			await runCli(["screen", "pull", "with-variants", "--data-dir", dataDir]),
+		).toBe(0);
+		const pulled = JSON.parse(output()) as {
+			variants?: { name: string }[];
+		};
+		expect(pulled.variants?.map((variant) => variant.name)).toEqual([
+			"Loading",
+		]);
+	});
+
 	it("story import は --out 無しなら screen と warnings を標準出力へ返す", async () => {
 		const storyFile = join(dataDir, "hand-written.stories.tsx");
 		await writeFile(

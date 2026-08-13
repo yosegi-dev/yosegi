@@ -245,7 +245,7 @@ export function createMcpServer(composer: Composer): McpServer {
 		"generate_story",
 		{
 			description:
-				"Generate Storybook Story (CSF) source from a screen tree. Save it under the host's stories directory",
+				"Generate Storybook Story (CSF) source from a screen tree. Save it under the host's stories directory. Optional variants ({ name, description?, operations }) emit additional Story exports for the screen's other states (loading / error / empty)",
 			inputSchema: {
 				root: z.unknown(),
 				title: z.string(),
@@ -253,17 +253,27 @@ export function createMcpServer(composer: Composer): McpServer {
 				importMap: z.string().optional(),
 				framework: z.string().optional(),
 				fixtures: z.record(z.string(), z.unknown()).optional(),
+				variants: z.array(z.unknown()).optional(),
 			},
 		},
-		async ({ root, title, storyName, importMap, framework, fixtures }) => {
+		async ({
+			root,
+			title,
+			storyName,
+			importMap,
+			framework,
+			fixtures,
+			variants,
+		}) => {
 			try {
 				const parsedRoot = screenNodeSchema.parse(root);
 				const registry = withSyntheticComponents(
 					composer.components.getRegistry(),
 				);
 				// A throwaway Screen Definition, used only for pre-generation validation. Never
-				// persisted. Routing fixtures through it also runs the fixtures schema (name
-				// legality), so the MCP path rejects the same inputs the CLI path does.
+				// persisted. Routing fixtures and variants through it also runs their schemas
+				// (name legality, operation shapes), so the MCP path rejects the same inputs
+				// the CLI path does.
 				const screen = parseScreenDefinition({
 					schemaVersion: "1.0",
 					id: "generate-story",
@@ -271,6 +281,7 @@ export function createMcpServer(composer: Composer): McpServer {
 					componentRegistryVersion: registry.version,
 					revision: 0,
 					fixtures,
+					variants,
 					root: parsedRoot,
 				});
 				const result = validateScreen(screen, registry);
@@ -286,6 +297,7 @@ export function createMcpServer(composer: Composer): McpServer {
 							? buildImportMapResolver(importMap)
 							: undefined,
 						fixtures: screen.fixtures,
+						variants: screen.variants,
 					}),
 				);
 			} catch (error) {

@@ -4,6 +4,7 @@ import { ComposerError, OPERATION_CODES } from "./errors.ts";
 import {
 	applyOperation,
 	applyOperations,
+	applyOperationsToRoot,
 	parseScreenOperation,
 } from "./operation.ts";
 import { collectNodeIds, findLocation, findNode } from "./screen-definition.ts";
@@ -313,5 +314,67 @@ describe("applyOperation: setBinding / setEvent", () => {
 		const events = findNode(next.root, "node-table")?.events;
 		expect(events?.onRowSelect?.action).toBe("select");
 		expect(events?.onRowClick?.action).toBe("navigate");
+	});
+});
+
+describe("applyOperationsToRoot", () => {
+	it("applies operations in sequence, later ones seeing earlier results", () => {
+		const root = sampleScreen().root;
+		const next = applyOperationsToRoot(root, [
+			{
+				type: "addNode",
+				target: { parentNodeId: "node-page", slot: "body" },
+				node: { id: "node-banner", component: "Button", props: {}, slots: {} },
+			},
+			// Targets the node the first operation just added.
+			{
+				type: "setProps",
+				nodeId: "node-banner",
+				props: { variant: "ghost" },
+			},
+		]);
+		expect(findNode(next, "node-banner")?.props).toEqual({ variant: "ghost" });
+	});
+
+	it("does not mutate the input root", () => {
+		const root = sampleScreen().root;
+		const before = structuredClone(root);
+		const next = applyOperationsToRoot(root, [
+			{ type: "setProps", nodeId: "node-table", props: { loading: true } },
+			{ type: "removeNode", nodeId: "node-search" },
+		]);
+		expect(root).toEqual(before);
+		expect(findNode(next, "node-search")).toBeNull();
+		expect(findNode(root, "node-search")).not.toBeNull();
+	});
+
+	it("returns the replacement when replaceNode targets the root", () => {
+		const root = sampleScreen().root;
+		const next = applyOperationsToRoot(root, [
+			{
+				type: "replaceNode",
+				nodeId: "node-page",
+				node: { id: "node-page", component: "Table", props: {}, slots: {} },
+			},
+		]);
+		expect(next.component).toBe("Table");
+		expect(root.component).toBe("Page");
+	});
+
+	it("throws the same ComposerError as applyOperation on a missing node", () => {
+		expect(() =>
+			applyOperationsToRoot(sampleScreen().root, [
+				{ type: "setProps", nodeId: "no-such-node", props: { a: 1 } },
+			]),
+		).toThrow(ComposerError);
+		try {
+			applyOperationsToRoot(sampleScreen().root, [
+				{ type: "setProps", nodeId: "no-such-node", props: { a: 1 } },
+			]);
+		} catch (error) {
+			expect((error as ComposerError).code).toBe(
+				OPERATION_CODES.NODE_NOT_FOUND,
+			);
+		}
 	});
 });

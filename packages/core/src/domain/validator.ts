@@ -4,7 +4,12 @@ import {
 	indexRegistry,
 	type PropDefinition,
 } from "./component-manifest.ts";
-import { VALIDATION_CODES, type ValidationCode } from "./errors.ts";
+import {
+	ComposerError,
+	VALIDATION_CODES,
+	type ValidationCode,
+} from "./errors.ts";
+import { applyOperationsToRoot } from "./operation.ts";
 import {
 	expandRepeat,
 	MAX_EXPANDED_NODE_COUNT,
@@ -30,6 +35,11 @@ export type ValidationIssue = {
 	// the implementation context's StructureNode.path. nodeId alone cannot locate a node
 	// once ids collide, and an agent editing the JSON navigates by position anyway.
 	path?: string;
+	// The variant whose applied tree raised the issue. Absent on issues from the
+	// base tree, so existing consumers keep reading the same shape. `path` on a
+	// variant issue addresses the tree *after* the variant's operations — the tree
+	// the generated Story shows — not the base document.
+	variant?: string;
 	code: ValidationCode;
 	message: string;
 	suggestion?: string;
@@ -538,34 +548,29 @@ function validateFixtureUsage(
 	}
 }
 
-// Validates a Screen Definition against a Registry. Call this before saving,
-// sharing, or implementing.
-export function validateScreen(
-	screen: ScreenDefinition,
-	registry: ComponentRegistry,
-): ValidationResult {
-	const errors: ValidationIssue[] = [];
-	const warnings: ValidationIssue[] = [];
-	const manifests = indexRegistry(registry);
+// Everything a single tree is validated against. Shared between the base tree
+// and every variant's applied tree so the two can never check different rules.
+type TreeValidationContext = {
+	manifests: Map<string, ComponentManifest>;
+	shadowedSyntheticNames: Map<string, string[]>;
+	// Shared across trees: `Text` shadowing a host component reads the same
+	// whichever tree it appears in, so it's still reported once per name.
+	reportedShadowedNames: Set<string>;
+	fixtureNames: ReadonlySet<string>;
+};
 
-	// Registry version compatibility.
-	if (screen.componentRegistryVersion !== registry.version) {
-		warnings.push({
-			nodeId: null,
-			code: VALIDATION_CODES.REGISTRY_VERSION_MISMATCH,
-			message: `Screen references registry "${screen.componentRegistryVersion}" but current registry is "${registry.version}".`,
-			suggestion:
-				"Re-validate against the current registry before implementing.",
-		});
-	}
-
-	const shadowedSyntheticNames = indexShadowedSyntheticNames(registry);
-	const reportedShadowedNames = new Set<string>();
-	const nodes = walkNodes(screen.root);
-	const nodePaths = indexNodePaths(screen.root);
-	const fixtureNames: ReadonlySet<string> = new Set(
-		Object.keys(screen.fixtures ?? {}),
-	);
+// Validates one tree (the base root, or a variant's tree after its operations
+// were applied). Pushes into the given sinks so the caller decides whose issues
+// they are.
+function validateTree(
+	root: ScreenNode,
+	context: TreeValidationContext,
+	errors: ValidationIssue[],
+	warnings: ValidationIssue[],
+): void {
+	const { manifests, shadowedSyntheticNames, reportedShadowedNames } = context;
+	const nodes = walkNodes(root);
+	const nodePaths = indexNodePaths(root);
 
 	// Node ID duplication check. Both colliding paths are named — the id alone can't say
 	// which of the two nodes to rename.
@@ -590,8 +595,7 @@ export function validateScreen(
 	// to the first occurrence's path.
 	const pathOf = (node: ScreenNode): string => nodePaths.get(node) ?? "$";
 
-	validateRepeat(screen.root, nodes, pathOf, errors);
-	validateFixtureUsage(nodes, fixtureNames, warnings);
+	validateRepeat(root, nodes, pathOf, errors);
 
 	for (const node of nodes) {
 		const manifest = manifests.get(node.component);
@@ -629,7 +633,14 @@ export function validateScreen(
 				message: `Component "${node.component}" is deprecated.`,
 			});
 		}
-		validateProps(node, manifest, fixtureNames, pathOf, errors, warnings);
+		validateProps(
+			node,
+			manifest,
+			context.fixtureNames,
+			pathOf,
+			errors,
+			warnings,
+		);
 		validateSlots(node, manifest, pathOf, errors, warnings);
 
 		for (const children of Object.values(node.slots)) {
@@ -645,6 +656,102 @@ export function validateScreen(
 						errors,
 					);
 				}
+			}
+		}
+	}
+}
+
+// A variant tree contains the whole base tree, so re-validating it re-raises
+// every base issue the operations didn't fix. Those repeats say nothing new —
+// fixing the base clears them everywhere — so a variant only reports what the
+// base didn't. The key deliberately omits `path`: an operation that inserts
+// nodes shifts sibling indices without changing what's wrong.
+function issueKey(issue: ValidationIssue): string {
+	return `${issue.code} ${issue.nodeId ?? ""} ${issue.message}`;
+}
+
+// Validates a Screen Definition against a Registry. Call this before saving,
+// sharing, or implementing.
+export function validateScreen(
+	screen: ScreenDefinition,
+	registry: ComponentRegistry,
+): ValidationResult {
+	const errors: ValidationIssue[] = [];
+	const warnings: ValidationIssue[] = [];
+	const manifests = indexRegistry(registry);
+
+	// Registry version compatibility.
+	if (screen.componentRegistryVersion !== registry.version) {
+		warnings.push({
+			nodeId: null,
+			code: VALIDATION_CODES.REGISTRY_VERSION_MISMATCH,
+			message: `Screen references registry "${screen.componentRegistryVersion}" but current registry is "${registry.version}".`,
+			suggestion:
+				"Re-validate against the current registry before implementing.",
+		});
+	}
+
+	const context: TreeValidationContext = {
+		manifests,
+		shadowedSyntheticNames: indexShadowedSyntheticNames(registry),
+		reportedShadowedNames: new Set<string>(),
+		fixtureNames: new Set(Object.keys(screen.fixtures ?? {})),
+	};
+
+	// Variant trees are derived up front: fixture-usage below must see a binding
+	// that only a variant adds, or the fixture would be reported unused. An apply
+	// failure becomes an issue rather than a throw — validation's contract is to
+	// report everything it can, and the other variants may still be derivable.
+	const appliedVariants: { name: string; root: ScreenNode }[] = [];
+	const applyFailures: ValidationIssue[] = [];
+	for (const variant of screen.variants ?? []) {
+		try {
+			appliedVariants.push({
+				name: variant.name,
+				root: applyOperationsToRoot(screen.root, variant.operations),
+			});
+		} catch (error) {
+			if (!(error instanceof ComposerError)) {
+				throw error;
+			}
+			applyFailures.push({
+				nodeId: error.nodeId,
+				variant: variant.name,
+				code: VALIDATION_CODES.VARIANT_OPERATION_FAILED,
+				message: `Variant "${variant.name}": operations could not be applied to the base tree (${error.code}): ${error.message}`,
+				suggestion:
+					"A variant's operations run against the base root, in order. Check that every nodeId they target exists in the base tree (or was added by an earlier operation of the same variant).",
+			});
+		}
+	}
+
+	validateTree(screen.root, context, errors, warnings);
+	validateFixtureUsage(
+		[
+			...walkNodes(screen.root),
+			...appliedVariants.flatMap((variant) => walkNodes(variant.root)),
+		],
+		context.fixtureNames,
+		warnings,
+	);
+
+	// Base issues first, then the variants in declaration order — the base is
+	// where a shared problem gets fixed.
+	const baseErrorKeys = new Set(errors.map(issueKey));
+	const baseWarningKeys = new Set(warnings.map(issueKey));
+	errors.push(...applyFailures);
+	for (const { name, root } of appliedVariants) {
+		const variantErrors: ValidationIssue[] = [];
+		const variantWarnings: ValidationIssue[] = [];
+		validateTree(root, context, variantErrors, variantWarnings);
+		for (const issue of variantErrors) {
+			if (!baseErrorKeys.has(issueKey(issue))) {
+				errors.push({ ...issue, variant: name });
+			}
+		}
+		for (const issue of variantWarnings) {
+			if (!baseWarningKeys.has(issueKey(issue))) {
+				warnings.push({ ...issue, variant: name });
 			}
 		}
 	}
