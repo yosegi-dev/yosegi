@@ -34,6 +34,10 @@ jobs:
         run: bun run lint
       - name: Docs (textlint)
         run: bun run textlint
+      # Links, anchors, English/Japanese twin parity, and line width — the
+      # executable form of the checklist in docs/conventions.md.
+      - name: Docs (structure)
+        run: bun run check:docs
       # The site build is where a broken cross-document link surfaces. Without
       # this, a dead link would only be caught by the deploy on main.
       - name: Docs (site build)

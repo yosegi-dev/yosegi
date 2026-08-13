@@ -55,7 +55,19 @@ bun add -d @yosegi/yosegi
 
 | 概念 | 英語 | 日本語 | 使わない語 |
 | --- | --- | --- | --- |
-| 部品のカタログ | Component Registry、短くは "the registry" | Component Registry、短くは「Registry」 | 台帳, コンポーネント一覧, "component index" |
+| コンポーネントのカタログ | Component Registry、短くは "the registry" | Component Registry、短くは「Registry」 | `台帳`、`コンポーネント一覧`、`"component index"` |
+| UI の構成単位 | `component` | コンポーネント | `部品`、地の文の `component` |
+| Registry の 1 コンポーネント分の記録 | `manifest`（`ComponentManifest`） | Manifest | 小文字のままの `manifest` |
+| 検証の失敗 | `error` | エラー | `error` のまま |
+| 生成を止めない指摘 | `warning` | 警告 | `warning` のまま |
+| Story 由来の信号 | `curation` | キュレーション | `curation` のまま |
+| ホストの外から来るコード | `third-party` | サードパーティ | `第三者` |
+| 別モジュールの export の公開 | `re-export` | 再 export | `再エクスポート` |
+| 別のコンポーネントを包むもの | `wrapper` | ラッパー | `wrapper` のまま |
+| MCP / dev サーバ | `server` | サーバ | `サーバー` |
+| 固定された単一のバージョン | `exact version` | 厳密なバージョン | `実バージョン` |
+| 置換後の実在するバージョン | `a real version` | 実際のバージョン | `実バージョン` |
+| npm レジストリ | `npm registry` | npm レジストリ | 単なる `レジストリ`（Registry と紛れる） |
 | 中間表現のツリー | Screen JSON | Screen JSON | Screen Definition, 画面定義, "screen spec" |
 | `Text` / `Box` / `Heading` | synthetic primitives | 合成プリミティブ | built-ins, fallback components |
 | Yosegi を走らせる対象のプロジェクト | the host | ホスト | your project, the client, the consumer app |
@@ -65,8 +77,9 @@ bun add -d @yosegi/yosegi
 
 ## 英語 / 日本語の対応
 
-英語が正。ページや差分はまず英語で書き、そのあと日本語へ訳し、両方を同じコミットに載せる。訳した日本語は
-`docs/ja/**` を対象に `bun run textlint`（`.textlintrc.json`）でチェックする。英語ページは対象外。
+英語が正。ページや差分はまず英語で書き、そのあと日本語へ訳し、両方を同じコミットに載せる。
+訳した日本語（`README.ja.md` と `docs/ja/**`）は `bun run textlint`（`.textlintrc.json`）で
+チェックする。英語ページは対象外。
 
 - `docs/x.md` には必ず `docs/ja/x.md` の対があり、`README.md` にはリポジトリ直下に並ぶ `README.ja.md`
   がある。両方を同じコミットで変更する。
@@ -79,6 +92,19 @@ bun add -d @yosegi/yosegi
   `CONTRIBUTING.md` などリポジトリ直下のファイル）で辿る。識別子・フラグ・エラー code・パスはどちらでも
   英語のまま。
 - `skills/` は英語のみ。ホストで作業するエージェントが読むものだから。
+
+## 翻訳レビューの観点
+
+日本語ページを英語の原文と突き合わせるときは、訳文が次を満たすことを確認する。
+
+- 原文に無い評価・結論・理由づけを足していない。
+- ヘッジ（may・usually・still など）は原文にある場所へそのまま残す。落とさず、勝手に足さない。
+- 否定と条件節は書かれたとおりに保つ。条件を理由に読み替えない。
+- 見出しは条件まで含めて訳す。
+- 複数ページに現れる同一の英文には、どのページでも同一の訳文を当てる。
+- 用語表に無い訳語を持ち込まない。
+- 訳出後は、東アジア文字幅で数えて 100 桁で折り返し直す。
+- 英語のダッシュ（—）を「——」で写さない。括弧への置き換えか文の分割で受ける。
 
 ## 匿名性
 
@@ -105,42 +131,15 @@ node <repo>/packages/server/bin/yosegi.js registry build \
   --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --data-dir .yosegi
 ```
 
-続いてリポジトリルートで、リンクとアンカーが解決すること、対のページが揃っていることを確認する。
+続いてリポジトリルートで次を確認する。リンクとアンカーが解決すること。対のページが揃っている
+こと（見出しと表は行数が同じ、フェンスは訳されるコメントを除いて内容まで同じ）。各行が東アジア
+文字幅で数えて 100 桁に収まっていること（表・コードブロック・front matter は除く）。
 
 ```sh
-python3 - <<'PY'
-import pathlib, re, sys
-
-md = sorted(pathlib.Path(".").glob("*.md")) + sorted(pathlib.Path("docs").glob("**/*.md"))
-raw = {f: f.read_text() for f in md}
-prose = {f: re.sub(r"^`{3}.*?^`{3}", "", t, flags=re.M | re.S) for f, t in raw.items()}
-links = {f: re.sub(r"`[^`]*`", "", p) for f, p in prose.items()}
-slug = lambda h: re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", h.strip().lower()))
-heads = {f.resolve(): [slug(m) for m in re.findall(r"^#+\s+(.*)$", p, re.M)] for f, p in prose.items()}
-bad = []
-for f in md:
-	for link in re.findall(r"\]\((?!https?:|mailto:)([^)\s]+)\)", links[f]):
-		path, _, anchor = link.partition("#")
-		target = (f.parent / path if path else f).resolve()
-		if not target.exists():
-			bad.append(f"{f}: missing file -> {link}")
-		elif anchor and anchor not in heads.get(target, []):
-			bad.append(f"{f}: missing anchor -> {link}")
-for en in md:
-	if en.parent.name == "ja" or not (en.parent.name == "docs" or en.name == "README.md"):
-		continue
-	ja = en.parent / "README.ja.md" if en.name == "README.md" else en.parent / "ja" / en.name
-	if not ja.exists():
-		bad.append(f"{en}: no Japanese twin")
-	else:
-		for label, pat, src in (("headings", r"^#+\s", prose), ("fences", r"^`{3}", raw), ("table rows", r"^\|", prose)):
-			a, b = (len(re.findall(pat, src[p], re.M)) for p in (en, ja))
-			if a != b:
-				bad.append(f"{en.name} vs {ja.name}: {label} {a} != {b}")
-print("\n".join(bad) or "docs ok")
-sys.exit(1 if bad else 0)
-PY
+bun run check:docs
 ```
+
+スクリプトの実体は `scripts/check-docs.ts` で、CI が push のたびに実行する。
 
 `docs/ja/**` を変更した場合（新規・再翻訳のいずれも）は `bun run textlint` を実行し、指摘を全て直す。
 訳文に対する自己レビューであり、指摘が残ったままコミットしない。

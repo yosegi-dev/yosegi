@@ -57,7 +57,19 @@ bun add -d @yosegi/yosegi
 
 | Concept | English | Japanese | Do not write |
 | --- | --- | --- | --- |
-| The component catalog | Component Registry, short "the registry" | Component Registry, short "Registry" | 台帳, コンポーネント一覧, "component index" |
+| The component catalog | Component Registry, short "the registry" | Component Registry, short "Registry" | `台帳`, `コンポーネント一覧`, `"component index"` |
+| A UI building block | `component` | コンポーネント | `部品`; bare `component` in Japanese prose |
+| The registry's per-component record | `manifest` (`ComponentManifest`) | Manifest | lowercase `manifest` in Japanese prose |
+| A validation failure | `error` | エラー | `error` as-is in Japanese prose |
+| A non-blocking finding | `warning` | 警告 | `warning` as-is in Japanese prose |
+| The Story-derived signal | `curation` | キュレーション | `curation` as-is in Japanese prose |
+| Code from outside the host | `third-party` | サードパーティ | `第三者` |
+| Exposing another module's export | `re-export` | 再 export | `再エクスポート` |
+| A component wrapping another | `wrapper` | ラッパー | `wrapper` as-is in Japanese prose |
+| The MCP / dev server | `server` | サーバ | `サーバー` |
+| A pinned, single version | `exact version` | 厳密なバージョン | `実バージョン` |
+| A substituted, existing version | `a real version` | 実際のバージョン | `実バージョン` |
+| npm's package registry | `npm registry` | npm レジストリ | bare `レジストリ` — it collides with the Registry |
 | The intermediate tree | Screen JSON | Screen JSON | Screen Definition, 画面定義, "screen spec" |
 | `Text` / `Box` / `Heading` | synthetic primitives | 合成プリミティブ | built-ins, fallback components |
 | The project Yosegi runs against | the host | ホスト | your project, the client, the consumer app |
@@ -68,8 +80,8 @@ bun add -d @yosegi/yosegi
 ## English / Japanese parity
 
 English is the source. Write a page or an edit in English first, translate it to Japanese, and land
-both in the same commit. `bun run textlint` checks the translated Japanese under `docs/ja/**`
-(`.textlintrc.json`); English pages are not linted.
+both in the same commit. `bun run textlint` checks the translated Japanese — `README.ja.md` and
+everything under `docs/ja/**` (`.textlintrc.json`); English pages are not linted.
 
 - Every `docs/x.md` has a twin at `docs/ja/x.md`, and `README.md` has `README.ja.md` next to it at
   the repository root. Both change in the same commit.
@@ -82,6 +94,20 @@ both in the same commit. `bun run textlint` checks the translated Japanese under
   (`../../x.md`, a repository-root file such as `AGENTS.md` or `CONTRIBUTING.md`). Identifiers,
   flags, error codes, and paths stay in English on both sides.
 - `skills/` is English only — it is read by agents working in a host project.
+
+## Translation review checklist
+
+Reviewing a Japanese page against its English source, check that the translation:
+
+- adds no evaluation, conclusion, or reasoning the English does not have.
+- keeps hedges (may, usually, still, ...) exactly where the English has them — none dropped, none
+  invented.
+- keeps negations and conditional clauses as written; a condition must not come back as a reason.
+- translates headings in full, conditions included.
+- renders the same English sentence identically wherever it appears across pages.
+- introduces no translation the terminology table does not list.
+- is re-wrapped at 100 columns counted in East Asian character width after translating.
+- does not copy an English em dash (—) as 「——」; parentheses or a sentence split take its place.
 
 ## Anonymity
 
@@ -109,42 +135,16 @@ node <repo>/packages/server/bin/yosegi.js registry build \
   --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --data-dir .yosegi
 ```
 
-Then, from the repository root, check that links and anchors resolve and that the twins line up:
+Then, from the repository root, check that links and anchors resolve, that the twins line up —
+headings and table rows in matching numbers, fences matching in content with translated comments
+set aside — and that lines stay within 100 columns counted in East Asian character width (tables,
+code blocks, and front matter are exempt):
 
 ```sh
-python3 - <<'PY'
-import pathlib, re, sys
-
-md = sorted(pathlib.Path(".").glob("*.md")) + sorted(pathlib.Path("docs").glob("**/*.md"))
-raw = {f: f.read_text() for f in md}
-prose = {f: re.sub(r"^`{3}.*?^`{3}", "", t, flags=re.M | re.S) for f, t in raw.items()}
-links = {f: re.sub(r"`[^`]*`", "", p) for f, p in prose.items()}
-slug = lambda h: re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", h.strip().lower()))
-heads = {f.resolve(): [slug(m) for m in re.findall(r"^#+\s+(.*)$", p, re.M)] for f, p in prose.items()}
-bad = []
-for f in md:
-	for link in re.findall(r"\]\((?!https?:|mailto:)([^)\s]+)\)", links[f]):
-		path, _, anchor = link.partition("#")
-		target = (f.parent / path if path else f).resolve()
-		if not target.exists():
-			bad.append(f"{f}: missing file -> {link}")
-		elif anchor and anchor not in heads.get(target, []):
-			bad.append(f"{f}: missing anchor -> {link}")
-for en in md:
-	if en.parent.name == "ja" or not (en.parent.name == "docs" or en.name == "README.md"):
-		continue
-	ja = en.parent / "README.ja.md" if en.name == "README.md" else en.parent / "ja" / en.name
-	if not ja.exists():
-		bad.append(f"{en}: no Japanese twin")
-	else:
-		for label, pat, src in (("headings", r"^#+\s", prose), ("fences", r"^`{3}", raw), ("table rows", r"^\|", prose)):
-			a, b = (len(re.findall(pat, src[p], re.M)) for p in (en, ja))
-			if a != b:
-				bad.append(f"{en.name} vs {ja.name}: {label} {a} != {b}")
-print("\n".join(bad) or "docs ok")
-sys.exit(1 if bad else 0)
-PY
+bun run check:docs
 ```
+
+The script is `scripts/check-docs.ts`, and CI runs it on every push.
 
 If `docs/ja/**` changed — authored or re-translated — run `bun run textlint` and fix every
 violation. It is the self-review on the translated output; do not commit with violations.

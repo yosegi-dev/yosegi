@@ -9,6 +9,25 @@
 			},
 			"ja-no-mixed-period": false,
 			"no-unmatched-pair": false
+		},
+		"prh": {
+			"severity": "warning",
+			"rulePaths": ["prh/yosegi-terms.yml"]
+		},
+		"preset-ja-spacing": {
+			"ja-nakaguro-or-halfwidth-space-between-katakana": false,
+			"ja-no-space-around-parentheses": false,
+			"ja-no-space-around-slash": false,
+			"ja-no-space-between-full-width": false,
+			"ja-space-between-half-and-full-width": {
+				"space": "always"
+			},
+			"ja-space-after-exclamation": false,
+			"ja-space-after-question": false,
+			"ja-space-around-code": false,
+			"ja-space-around-emphasis": false,
+			"ja-space-around-link": false,
+			"ja-space-around-strong": false
 		}
 	}
 }
