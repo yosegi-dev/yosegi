@@ -139,10 +139,66 @@ describe("checkDocs", () => {
 		expect(errors).toContain(
 			"docs/page.md vs docs/ja/page.md: headings 2 != 1",
 		);
-		expect(errors).toContain("docs/page.md vs docs/ja/page.md: fences 2 != 0");
+		expect(errors).toContain("docs/page.md vs docs/ja/page.md: fences 1 != 0");
 		expect(errors).toContain(
 			"docs/page.md vs docs/ja/page.md: table rows 2 != 3",
 		);
+	});
+
+	it("同数でも内容が食い違うフェンスを報告する", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/page.md",
+					text: en("```sh\nyosegi registry build\n```"),
+				},
+				{
+					path: "docs/ja/page.md",
+					text: en("```sh\nyosegi registry check\n```"),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([
+			'docs/page.md vs docs/ja/page.md: fence 1 content "yosegi registry build" != "yosegi registry check"',
+		]);
+	});
+
+	it("info string が食い違うフェンスを報告する", () => {
+		const { errors } = checkDocs(
+			[
+				{ path: "docs/page.md", text: en("```sh\nx\n```") },
+				{ path: "docs/ja/page.md", text: en("```ts\nx\n```") },
+			],
+			never,
+		);
+		expect(errors).toEqual([
+			'docs/page.md vs docs/ja/page.md: fence 1 info "sh" != "ts"',
+		]);
+	});
+
+	// Comments inside a code block are translated (docs/conventions.md), so
+	// comment text — including a translation re-wrapped onto a different number
+	// of lines — must not read as a content mismatch.
+	it("フェンス内の訳されたコメントは内容差に数えない", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/page.md",
+					text: en(
+						"```sh\n# Build the registry from your types\nyosegi registry build # from types\n```",
+					),
+				},
+				{
+					path: "docs/ja/page.md",
+					text: en(
+						"```sh\n# 型から Component Registry を\n# 作る（2 行に折り返す）\n\nyosegi registry build # 型から\n```",
+					),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([]);
 	});
 
 	it("東アジア文字幅で 100 桁を超えた行を報告する", () => {
@@ -164,6 +220,25 @@ describe("checkDocs", () => {
 			never,
 		);
 		expect(widthErrors).toEqual([]);
+	});
+
+	it("~~~ フェンス内のリンクと長行も検査から除く", () => {
+		const long = "あ".repeat(51);
+		const text = `# Page\n\n~~~md\n[example](./missing.md)\n${long}\n~~~\n`;
+		const { errors, widthErrors } = checkDocs(
+			[{ path: "docs/ja/page.md", text }],
+			never,
+		);
+		expect(errors).toEqual([]);
+		expect(widthErrors).toEqual([]);
+	});
+
+	// CommonMark closes a fence only with the opener's character, so a backtick
+	// run inside a tilde fence is content, not a boundary.
+	it("~~~ フェンスはバッククォートでは閉じない", () => {
+		const text = "# Page\n\n~~~md\n```\n[example](./missing.md)\n```\n~~~\n";
+		const { errors } = checkDocs([{ path: "docs/ja/page.md", text }], never);
+		expect(errors).toEqual([]);
 	});
 
 	it("docs の外のファイルは幅を検査しない", () => {
