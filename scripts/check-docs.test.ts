@@ -233,6 +233,21 @@ describe("checkDocs", () => {
 		expect(widthErrors).toEqual([]);
 	});
 
+	// CommonMark allows a fence to be indented by up to three spaces, as under
+	// a list item; its contents are still code, not prose.
+	it("インデントされたフェンス内のリンクと長行も検査から除く", () => {
+		const long = "あ".repeat(51);
+		for (const marker of ["```", "~~~"]) {
+			const text = `# Page\n\n-  a\n\n   ${marker}md\n   [example](./missing.md)\n   ${long}\n   ${marker}\n`;
+			const { errors, widthErrors } = checkDocs(
+				[{ path: "docs/ja/page.md", text }],
+				never,
+			);
+			expect(errors).toEqual([]);
+			expect(widthErrors).toEqual([]);
+		}
+	});
+
 	// CommonMark closes a fence only with the opener's character, so a backtick
 	// run inside a tilde fence is content, not a boundary.
 	it("~~~ フェンスはバッククォートでは閉じない", () => {
