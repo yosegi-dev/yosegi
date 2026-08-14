@@ -301,9 +301,10 @@ yosegi screen context tmp/screen.json \
 
 ## `story import`
 
-Story → Screen JSON. **It only works on a Story that `screen generate` wrote.** On a hand-written
-Story it typically returns a single node and no warnings at all — read the limitation in
-`implementation.md` before spending a cycle on it.
+Story → Screen JSON. **It only works on a Story that `screen generate` wrote.** A hand-written
+Story fails one of two ways: a `component` + `args` Story (the most common shape) exits 1 with
+`STORY_NOT_FOUND`, and a `render`-wrapper Story silently returns a single node and no warnings —
+read the limitation in `implementation.md` before spending a cycle on it.
 
 ```sh
 yosegi story import <host>/app/components/examples/customer-list.stories.tsx \

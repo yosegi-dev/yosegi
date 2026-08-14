@@ -127,12 +127,15 @@ Fix the shape, then enter the validation loop above.
 
 ## `story import` warnings (downstream)
 
-`story import` never fails outright — it returns the part of the tree it could read and reports the
-rest. Analysis works purely on the source AST and the Story is never executed, so **any syntax whose
-shape is only decided at runtime cannot be read**.
+`story import` fails outright in exactly one case: no Story with a `render` function
+(`STORY_NOT_FOUND`, exit 1) — which is what a `component` + `args` Story produces, and that is the
+most common hand-written shape. When it does find a `render`, it returns the part of the tree it
+could read and reports the rest. Analysis works purely on the source AST and the Story is never
+executed, so **any syntax whose shape is only decided at runtime cannot be read**.
 
 | code | Meaning |
 | --- | --- |
+| `STORY_NOT_FOUND` | No export with a `render` function. A `component` + `args` Story always lands here; so does a `--target component` file. There is nothing to import — read the Story as text |
 | `OPAQUE_EXPRESSION` | An expression that cannot be read statically, such as `{items.map(...)}` or a conditional. That node is dropped |
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box`, but the tag name is lost |
@@ -150,7 +153,7 @@ screen goes missing from the implementation entirely. Read the original Story di
 place a warning points at.
 
 **An empty `warnings` array is not proof the import worked.** A Story whose `render` returns one
-wrapper component — the normal shape of a hand-written Story — imports cleanly to a single node,
+wrapper component — the other common hand-written shape — imports cleanly to a single node,
 with nothing to warn about. Count the nodes against the Story you can see. `implementation.md`
 covers when to use this command at all.
 

@@ -5,7 +5,7 @@ description: Build a screen mock or screen proposal (画面モック) out of the
 
 # Yosegi — building screens from a host's own components
 
-> **Version: 2026-08-13.** An agent harness can load a stale copy of a skill without saying so. If
+> **Version: 2026-08-14.** An agent harness can load a stale copy of a skill without saying so. If
 > this date is older than the one in the repository's `skills/yosegi/SKILL.md`, you are reading an
 > out-of-date copy — re-install it before going further.
 
@@ -36,13 +36,16 @@ have been renamed, their size scales differ between siblings, an icon prop takes
 reference rather than an element, a `ReactNode` prop is a named slot rather than children, and three
 different components share one export name. None of that is derivable from familiarity with React or
 with the upstream library, and every one of those is a defect you will ship if you write the prop you
-expect instead of the prop the registry says exists. That is what steps 1 and 2's `inspect` calls are
-for, and skipping them is how a plausible-looking mock ships a defect.
+expect instead of the prop the host declares. That is what steps 1 and 2's `inspect` calls are for:
+confirming the API instead of guessing it.
 
 The registry does not give you the screen's skeleton, the composition idiom, or the layout — a
 grid-library hook call a DataGrid is driven by, a host-specific `meta` such as
 `{ stickyHeader: true }`, which wrapper a component expects around it. That comes from the host's
-own Stories and, on a host with a page/route generator, its Example templates (step 2). The richer a
+own Stories and, on a host with a page/route generator, its Example templates (step 2). It also
+cannot tell you what a component *does* with a value at render time — whether it prepends the `@`
+to a handle, formats a date, pluralizes a count; types cannot carry that, so `inspect` cannot
+either, and the same Stories are where it shows. The richer a
 host's template and Story coverage, the smaller the registry's share of what you actually needed to
 build the screen — and that is not a shortfall. The registry and the host's own examples answer
 different questions, and both are load-bearing for the question they answer.
@@ -473,6 +476,7 @@ Then read `references/implementation.md` and follow it: read the host's implemen
 transcribe the Story, wire up the data and the handlers, and compare the result against the mock.
 
 **Do not expect `story import` and `screen context` to help here.** They read back a Story that
-Yosegi itself generated; against a hand-written one they usually return a single node and no
-warnings at all, because real Stories render one wrapper component rather than inlining the tree.
+Yosegi itself generated. Against a hand-written one they fail one of two ways: a
+`component` + `args` Story (the most common shape) exits with `STORY_NOT_FOUND`, and a
+`render`-wrapper Story silently returns a single node and no warnings.
 `references/implementation.md` states the limitation in full. Read the Story.
