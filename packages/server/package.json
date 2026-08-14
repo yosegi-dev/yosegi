@@ -1,7 +1,7 @@
 {
 	"name": "@yosegi/yosegi",
 	"description": "Yosegi CLI / MCP / HTTP adapters, including registry generation from host types and importing Stories back",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"license": "MIT",
 	"author": "dachi023",
 	"homepage": "https://github.com/yosegi-dev/yosegi#readme",
@@ -57,7 +57,7 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.30.0",
-		"@yosegi/core": "0.2.0",
+		"@yosegi/core": "0.3.0",
 		"hono": "^4.13.1",
 		"react-docgen-typescript": "2.4.0",
 		"typescript": ">=5.4.0 <7",
