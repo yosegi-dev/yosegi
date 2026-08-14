@@ -35,8 +35,12 @@ features:
 
 278 components from 120 files in about 4 seconds, 98.9% with props read from types, deterministic
 output. How types become a catalog, and what the numbers mean:
-[Component Registry](./registry.md). What the registry changes in an agent's output, measured
-across four UI libraries: [Benchmark](./benchmark.md).
+[Component Registry](./registry.md).
+
+And benchmarked across four UI libraries: an agent given any carrier of your components' API —
+the source, a package's `.d.ts`, or the registry — produces the same clean screen. The registry
+is the smallest of those reads at design-system scale: a fifth of the source, a third of the
+`.d.ts` a package ships. Same output, least context: [Benchmark](./benchmark.md).
 
 ## Install
 
