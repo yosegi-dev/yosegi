@@ -7,16 +7,16 @@ Yosegi は 2 方向に走る。上流は登録済みのコンポーネントか�
 
 ```mermaid
 flowchart TD
-  reg["registry build, then component list / inspect"] --> route{"Route"}
-  route -->|"directly"| hand["Write the file by hand"]
+  reg["registry build、そして component list / inspect"] --> route{"経路"}
+  route -->|"直接書く"| hand["ファイルを手で書く"]
   route -->|"Screen JSON"| gen["screen generate"]
-  hand --> file["*.stories.tsx, or *.tsx"]
+  hand --> file["*.stories.tsx、または *.tsx"]
   gen --> file
-  file --> check["Host type check, then a human"]
-  check --> page["Implementation, through story import and screen context"]
+  file --> check["ホストの型検査、そして人の目"]
+  check --> page["story import と screen context を経て実装"]
 ```
 
-必須なのは `registry build` と `component list` / `inspect` で、`Route` から先はこのページが順に
+必須なのは `registry build` と `component list` / `inspect` で、図の「経路」から先はこのページが順に
 説明する選択になる。
 
 ## ユースケース
@@ -77,14 +77,14 @@ Story か Screen JSON を直して出し直すだけ。
 
 ```mermaid
 flowchart TD
-  q{"A value with no JSON form?"}
-  q -->|"yes, even one"| direct["Write the file directly"]
-  q -->|"no"| sj["Screen JSON"]
-  direct --> tc["Host type check is the only net"]
+  q{"JSON の形を持たない値があるか"}
+  q -->|"1 つでもある"| direct["直接書く"]
+  q -->|"無い"| sj["Screen JSON"]
+  direct --> tc["検証はホストの型検査だけ"]
   sj --> gen["screen generate"]
-  gen -->|"errors[], no file written"| fix["Apply the whole array"]
+  gen -->|"エラーの配列、ファイルは書かれない"| fix["配列全体を反映する"]
   fix --> sj
-  gen -->|"valid"| out["File written, warnings listed after"]
+  gen -->|"検証を通る"| out["ファイルを書き、警告はその後"]
   out --> tc
 ```
 
@@ -134,15 +134,15 @@ Screen JSON へ読み戻せない。画面をあとで直す可能性がある�
 
 ```mermaid
 flowchart TD
-  tree["One screen tree"] --> t{"Storybook on the host?"}
-  t -->|"yes"| story["--target story, the default"]
-  t -->|"no"| comp["--target component"]
+  tree["同じ画面のツリー"] --> t{"ホストに Storybook があるか"}
+  t -->|"ある"| story["--target story（既定）"]
+  t -->|"無い"| comp["--target component"]
   story --> csf["*.stories.tsx"]
   comp --> tsx["*.tsx"]
-  csf --> rv1["Reviewed in the host's Storybook"]
-  tsx --> rv2["Host type check, plus the surface the user names"]
-  csf -.->|"story import"| back["Read back into Screen JSON"]
-  tsx -.->|"no importer"| keep["Keep the Screen JSON"]
+  csf --> rv1["ホストの Storybook で見る"]
+  tsx --> rv2["ホストの型検査と、利用者が選んだ確認手段"]
+  csf -.->|"story import"| back["Screen JSON へ読み戻す"]
+  tsx -.->|"importer が無い"| keep["Screen JSON を残す"]
 ```
 
 どちらのターゲットも同じレンダラと同じ import プランを通るので、JSX は同一になる。
@@ -201,12 +201,12 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 
 ```mermaid
 flowchart TD
-  gen["Story written by screen generate"] -->|"story import"| sj["Screen JSON"]
+  gen["screen generate が書いた Story"] -->|"story import"| sj["Screen JSON"]
   sj --> ctx["screen context"]
   ctx --> keys["imports, structure.outline, components[], tasks[]"]
-  keys --> impl["Implementation"]
-  hand["Hand-written Story"] -.->|"one node, no warnings — read the Story"| impl
-  comp["File from --target component"] -.->|"no importer — read the file"| impl
+  keys --> impl["実装"]
+  hand["手書きの Story"] -.->|"1 ノードだけ・警告も無い。Story を読む"| impl
+  comp["--target component が書いたファイル"] -.->|"importer が無い。ファイルを読む"| impl
 ```
 
 `screen context` は Screen JSON を実装コンテキストへ展開する。実装中に効くのは主に 4 つ。

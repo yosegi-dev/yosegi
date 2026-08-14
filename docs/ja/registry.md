@@ -33,12 +33,12 @@ Registry のどれで供給しても同じクリーンな画面になり、Regis
 
 ```mermaid
 flowchart TD
-  src["--source + --tsconfig"] -->|"required"| build["registry build"]
-  idx["--index"] -.->|"optional"| build
-  meta["--metadata"] -.->|"optional"| build
+  src["--source + --tsconfig"] -->|"必須"| build["registry build"]
+  idx["--index"] -.->|"任意"| build
+  meta["--metadata"] -.->|"任意"| build
   build --> reg["registry.json"]
-  reg --> a["From types: props, slots, enums, import specifier"]
-  reg --> b["From Stories: categories, recommended, deep links"]
+  reg --> a["型から: props、slots、enum、import の specifier"]
+  reg --> b["Story から: カテゴリ、recommended、ディープリンク"]
 ```
 
 props を型から読めることが検証を可能にしている。`variant` のような enum は取りうる値が分かるので、誤

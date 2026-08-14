@@ -32,13 +32,13 @@ React + TypeScript のプロジェクト向け。Component Registry は TypeScri
 
 ```mermaid
 flowchart TD
-  src["Host source + tsconfig"] -->|"TypeScript types"| build["registry build"]
-  idx["Storybook index.json"] -.->|"curation, optional"| build
+  src["ホストのソース + tsconfig"] -->|"TypeScript の型"| build["registry build"]
+  idx["Storybook の index.json"] -.->|"キュレーション、任意"| build
   build --> look["component list / inspect"]
-  look --> asm["Screen JSON, or JSX written directly"]
-  asm --> out["*.stories.tsx, or *.tsx"]
-  out --> review["Host type check, then a human"]
-  review --> impl["Implementation"]
+  look --> asm["Screen JSON、または直接書く JSX"]
+  asm --> out["*.stories.tsx、または *.tsx"]
+  out --> review["ホストの型検査、そして人の目"]
+  review --> impl["実装"]
 ```
 
 Storybook が要るのは破線の 1 本だけ。Registry は型から作られ、出力も Story ではなく素のコンポーネン

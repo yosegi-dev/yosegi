@@ -89,8 +89,9 @@ everything under `docs/ja/**` (`.textlintrc.json`); English pages are not linted
   `[English](../x.md) | 日本語` on the Japanese side.
 - Same headings in the same order, same code blocks, same tables. Comments inside a code block are
   translated; the commands themselves are not.
-- A diagram is a ```` ```mermaid ```` fence, so the parity check holds it to the same content as any
-  other fence: its labels stay in English on both sides, and the sentence around it is translated.
+- A diagram is a ```` ```mermaid ```` fence, and its labels are translated. The parity check blanks
+  quoted text and compares what is left — node ids, arrows, direction — so quote every label, and
+  keep the two sides the same diagram.
 - A Japanese page links to a sibling Japanese page with `./x.md` — both live in `docs/ja/`. It links
   to an English-only target one level up (`../x.md`, another page under `docs/`) or two levels up
   (`../../x.md`, a repository-root file such as `AGENTS.md` or `CONTRIBUTING.md`). Identifiers,
