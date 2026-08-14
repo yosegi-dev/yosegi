@@ -19,13 +19,13 @@ domain-specific enums gains the most, because none of that is guessable from gen
 knowledge.
 
 On synthetic hosts built to diverge this way — one product layer implemented identically on four
-UI libraries, measured 2026-08-13/14 — an agent with no source access and no registry produced
-24–36 type errors per screen, and two of the four screens crash at render; the same condition
-with the registry produced zero type errors across twelve runs at three host sizes, off
-12.5–49KB of registry output. Its one blind spot was a rendering convention the types cannot
-carry (2 of 12 runs). When the agent can read the host's source, registry or not, everything
-ties — the registry's payoff is the condition where reading the source is not an option, and
-part of the reading everywhere else. Tables, method, corrections, and what the design does not
+UI libraries, measured 2026-08-13/14 — an agent given only the screen spec produced 24–36 type
+errors per screen, and two of the four screens crash at render. Supplying the API through any
+carrier — the source, the compiled package's `.d.ts`, or the registry — took the same agent to
+zero type errors on every run; the registry is not more correct than the alternatives, it is
+the smallest read at design-system scale (a third of the declarations a package ships, at 240
+components). The shared blind spot of every type-level carrier, registry included, is rendering
+conventions the types cannot express. Tables, method, corrections, and what the design does not
 show: [Benchmark](./benchmark.md).
 
 ## Three sources, three roles

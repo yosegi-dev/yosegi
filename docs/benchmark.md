@@ -2,14 +2,13 @@
 
 English | [日本語](./ja/benchmark.md)
 
-Does the registry change what an agent writes? One screen, four UI libraries, three host
-sizes, and one variable per comparison: what the agent is allowed to see. 60 measured
-implementations — 36 across the visibility conditions and sizes, 12 registry-only, 8 on the
-Screen JSON route, 4 on the implementation handoff — measured 2026-08-13/14, one run per
-cell, no repeats.
+What does an agent have to know to build a screen on a diverged design system — and what is
+the smallest thing that carries it? One screen, four UI libraries, three host sizes, and one
+variable per comparison: what the agent is allowed to see. 68 measured implementations,
+2026-08-13/14, one run per cell, no repeats.
 
 The harness — hosts, specs, scripts, arm prompts, and every generated screen — will be
-published as a separate repository. The numbers were once corrected after an adversarial
+published as a separate repository. The numbers were corrected once after an adversarial
 review of the method found two scoring defects; the corrections and the review's findings
 ship with the harness.
 
@@ -33,73 +32,70 @@ none can iterate against the compiler; the first submitted file is scored with
 `tsc --noEmit`, checked against the spec by script, and spot-checked in a rendering
 Storybook.
 
-## Four conditions
+## Five conditions
 
 Type errors in the submitted story, at 20 components per host ("crashes" = the story also
-throws at render). The registry-only and source conditions were additionally run at 80 and
-240 components; every such run scored zero, so the table shows the size where anything
-happens at all.
+throws at render). Every condition except the first was additionally run at larger sizes —
+declarations and registry at 240, source conditions at 80 and 240 — and every such run
+scored zero, so the table shows the one size where anything happens at all.
 
-| Host | Spec only | Spec + registry | Spec + source | Source + registry |
-| --- | --- | --- | --- | --- |
-| shadcn/ui | 36, crashes | 0 | 0 | 0 |
-| MUI | 33, crashes | 0 | 0 | 0 |
-| Chakra UI | 26 | 0 | 0 | 0 |
-| Mantine | 24 | 0 | 0 | 0 |
+| Host | Spec only | + declarations | + registry | + source | source + registry |
+| --- | --- | --- | --- | --- | --- |
+| shadcn/ui | 36, crashes | 0 | 0 | 0 | 0 |
+| MUI | 33, crashes | 0 | 0 | 0 | 0 |
+| Chakra UI | 26 | 0 | 0 | 0 | 0 |
+| Mantine | 24 | 0 | 0 | 0 | 0 |
 
-Two comparisons live in this grid, and they say different things.
+*+ declarations* is the separate-repository case: the design system arrives as a compiled
+package, and the agent reads the `.d.ts` files the way it would read `node_modules`.
+*+ registry* is the isolation case — registry output and nothing else; rarer in practice,
+but it is what pins down exactly which information mattered.
 
-**Against no information, the registry supplies the API — which is the thing missing.**
-The spec-only condition is not how anyone works; it isolates what the registry adds when
-nothing else is present. Re-examining those screens shows their *content* is almost
-entirely right — the quote, the media, the visibilities, the pinned counts all match the
-spec — and the API is wrong, loudly, the same way on all four libraries: children passed
-to a card that takes named slots, loose `replyCount` / `liked` props where the component
-takes one `post` model, `onReply` for `onReplyPress`, `timestamp` for `label`. The spec
-supplied the semantics; nothing supplied the API. The registry is that missing half:
-12.5–16KB of `component list` and `component inspect` output takes the same condition to
-zero on all four libraries — and to zero again at 80 and 240 components, where the hosts
-deliberately contain near-miss names like `PostCardCompact` and `SearchBar` that shadow
-real components with different props. Across twelve registry-only runs, no near-miss was
-ever picked. That is the condition an agent is in when it works over MCP against a
-repository it has no checkout of, or keeps a large host out of its context window.
+**What was missing was the API, and any carrier of it suffices.** The spec-only screens
+have their *content* almost entirely right — the quote, the media, the visibilities, the
+pinned counts all match the spec — and the API wrong, loudly, the same way on all four
+libraries: children passed to a card that takes named slots, loose `replyCount` / `liked`
+props where the component takes one `post` model, `onReply` for `onReplyPress`,
+`timestamp` for `label`. The spec supplied the semantics; nothing supplied the API. Supply
+it through any of the three carriers — the source, the declarations, or the registry — and
+the same agent produces the same clean screen, at every size, without once picking one of
+the near-miss components (`PostCardCompact`, `SearchBar`, …) the larger hosts planted:
+zero near-miss picks across all twenty no-source runs.
 
-**Against a source-reading agent, the registry changes nothing.** Every source-visible
-cell is zero at every size. Mistakes that compile are just as even: across twelve runs per
-side, the source arm picked a near-miss once (`SearchBar` for the `SearchField` — having
-read both files and been warned), the registry-assisted arm picked one once
-(`IconActionButton` for the `NotificationBell`). Both slots are `ReactNode`; both compile.
-Choosing among similar names is judgement, and no lookup takes that over.
+**Every type-derived carrier shares one blind spot: rendering conventions.** MUI is the
+one host whose `PostAuthorLine` renders the handle raw instead of prepending `@`, so the
+correct data is `"@rin"` on MUI and `"rin"` everywhere else. All six source-reading MUI
+arms got it right. The arms working from types alone mostly did not — registry-only missed
+it in 2 of 3 MUI runs, declarations-only in 2 of 2. The screen compiles and reads
+`Rin Amano rin`. Types say `handle: string`; what the component *does* with it lives only
+in the source, a Story, or a screenshot. If your components encode conventions like this,
+a type-level interface will not carry them — that is a real limit of the registry, and
+equally of the `.d.ts` files a package ships.
 
-**The registry's blind spot is rendering conventions.** MUI is the one host whose
-`PostAuthorLine` renders the handle raw instead of prepending `@`, so the correct data is
-`"@rin"` on MUI and `"rin"` everywhere else. All six source-reading MUI arms got it right.
-Of the three registry-only MUI arms, two shipped a screen that reads `Rin Amano rin` — the
-registry says `handle: string` and cannot say what the component does with it. Compiles,
-looks wrong, and is the one defect class the no-source condition produced (2 findings in
-12 runs). A fact like this lives in the source, a Story, or a screenshot; the registry
-does not carry it.
+**With the source in reach, the registry changes nothing.** Every source-visible cell is
+zero at every size, and mistakes that compile are just as even: one near-miss pick per
+twelve runs on each side (once having read both candidate files and been warned). Choosing
+among similar names is judgement, and no lookup takes that over.
 
-## What the registry costs to consult
+## What each carrier costs to read
 
-Correctness ties whenever the source is readable, so the difference is the reading. These
-are corpus sizes, not observed reads — three honest columns: the full component directory
-(upper bound; an agent with grep reads less), the `*Props` interface blocks alone (lower
-bound; assumes the agent already knows exactly where to look), and the registry (one full
-`component list` plus `component inspect` for the 18 components the screen uses).
+Corpus sizes, not observed reads. Source full-read is an upper bound (an agent with grep
+reads less); props-only is the matching lower bound (just the `*Props` interface blocks,
+assuming the agent knows exactly where to look); declarations are the emitted `.d.ts`
+files; registry is one full `component list` plus `component inspect` for the 18
+components the screen uses.
 
-| Components | Source, full read | Source, props only | Registry |
-| --- | ---: | ---: | ---: |
-| 20 | 20–27KB | 5.5–6KB | 12.5–16KB |
-| 80 | 75–110KB | 21–27KB | 22–25KB |
-| 240 | 231–332KB | 64–80KB | 44–49KB |
+| Components | Source, full read | Source, props only | Declarations | Registry |
+| --- | ---: | ---: | ---: | ---: |
+| 20 | 20–27KB | 5.5–6KB | 10.9–17.6KB | 12.5–16KB |
+| 80 | 75–110KB | 21–27KB | 38.8–45.7KB | 22–25KB |
+| 240 | 231–332KB | 64–80KB | 114–136KB | 44–49KB |
 
-Both curves are linear in host size; the registry has a smaller constant, not a better
-growth rate. Against the targeted lower bound it reads more at 20 components, breaks even
-at 80, and reads about two-thirds as much at 240. The honest cost claim is modest — a
-third to a fifth of a full read at design-system scale — and the stronger form is the
-condition above: the host source an agent needs can be zero, at the price of the
-rendering-convention blind spot.
+All curves are linear in host size; the registry's constant is the smallest. At 20
+components everything is cheap and the registry buys nothing. At 240 it is a third of the
+declarations a package would ship and under the targeted props-only read — the aggregated
+listing replaces per-file discovery. The claim this table supports is deliberately modest:
+same output as every other carrier, smallest read at design-system scale.
 
 ## The other two mechanisms
 
@@ -129,7 +125,11 @@ emits — and on those recovered the tree faithfully (28 nodes, 7 fixtures).
 - One run per cell, no repeats. The silent-error rates (1–2 findings per 12 runs) are
   exactly the regime where a single further run could move any cell.
 - The spec names every component and pins the data, so no arm ever had to decide *which*
-  components to use — the discovery and curation half of the workflow is unmeasured.
+  components to use — the discovery and curation half of the workflow, where the registry's
+  Story-based recommendations would matter, is unmeasured.
+- The declarations condition used `.d.ts` emitted from these hosts, which carry the same
+  JSDoc the registry reads. A package built without declaration-level JSDoc would be a
+  darker condition than measured here.
 - 240 components is an order of magnitude below the largest design systems, and the
   near-miss families are 20 names out of 220.
 - The same model family wrote the hosts, the filler, every screen, and the scoring
