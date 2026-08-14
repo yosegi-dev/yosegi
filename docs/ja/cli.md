@@ -40,6 +40,7 @@ Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情�
 
 ```sh
 yosegi registry build --source <glob> --tsconfig <path> [options]
+yosegi registry build --index <path|url> [options]
 ```
 
 | フラグ | 型 | 既定値 | 意味 |

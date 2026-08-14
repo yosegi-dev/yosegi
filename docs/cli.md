@@ -41,6 +41,7 @@ Builds the Component Registry from the host's TypeScript types.
 
 ```sh
 yosegi registry build --source <glob> --tsconfig <path> [options]
+yosegi registry build --index <path|url> [options]
 ```
 
 | Flag | Type | Default | Meaning |
