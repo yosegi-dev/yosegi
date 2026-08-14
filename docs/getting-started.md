@@ -102,7 +102,7 @@ Pass the same `--data-dir` to every command; it is where the registry and the sa
 The default is `.yosegi` under the current directory.
 
 Steps 1 and 2 are the mandatory part: a component's real props, enum options, slots, and import
-specifier come from there and nowhere else. The output lands in the host's repository and is
+specifier are confirmed there instead of guessed. The output lands in the host's repository and is
 reviewed as the host's code, so step 3 is not optional either. The
 [Agent Skill](../skills/yosegi/SKILL.md) covers both.
 

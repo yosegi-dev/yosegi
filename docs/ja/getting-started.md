@@ -101,9 +101,9 @@ yosegi screen context tmp/screen.json \
 `--data-dir` は全コマンドへ同じ値を渡す。Registry と保存済み画面の置き場で、既定はカレント
 ディレクトリ直下の `.yosegi`。
 
-必須なのは手順 1 と 2。コンポーネントの本当の props・enum の選択肢・slots・import specifier は、そこ
-からしか得られない。出力はホストのリポジトリに入り、ホストのコードとしてレビューされるので、手順 3
-も省略できない。どちらも [Agent Skill](../../skills/yosegi/SKILL.md) が扱う。
+必須なのは手順 1 と 2。コンポーネントの本当の props・enum の選択肢・slots・import specifier を、
+推測ではなくここで確定させる。出力はホストのリポジトリに入り、ホストのコードとしてレビューされる
+ので、手順 3 も省略できない。どちらも [Agent Skill](../../skills/yosegi/SKILL.md) が扱う。
 
 ## 一度だけやっておくとよいこと
 
