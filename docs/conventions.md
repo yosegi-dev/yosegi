@@ -87,6 +87,8 @@ everything under `docs/ja/**` (`.textlintrc.json`); English pages are not linted
   the repository root. Both change in the same commit.
 - The line under the H1 is the switcher: `English | [日本語](./ja/x.md)` on the English side,
   `[English](../x.md) | 日本語` on the Japanese side.
+- Japanese prose is written in the polite です / ます register. Headings, and the nominal or
+  imperative fragments that act as labels, stay as they are. `no-mix-dearu-desumasu` checks it.
 - Same headings in the same order, same code blocks, same tables. Comments inside a code block are
   translated; the commands themselves are not.
 - A diagram is a ```` ```mermaid ```` fence, and its labels are translated. The parity check blanks
