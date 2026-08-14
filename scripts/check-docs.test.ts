@@ -201,6 +201,71 @@ describe("checkDocs", () => {
 		expect(errors).toEqual([]);
 	});
 
+	// A diagram's labels are translated (docs/conventions.md); its structure is
+	// what has to match.
+	it("mermaid フェンスの訳されたラベルは内容差に数えない", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/page.md",
+					text: en(
+						'```mermaid\nflowchart TD\n  a["Write it directly"] -->|"valid"| b["A Story"]\n```',
+					),
+				},
+				{
+					path: "docs/ja/page.md",
+					text: en(
+						'```mermaid\nflowchart TD\n  a["直接書く"] -->|"検証を通る"| b["Story"]\n```',
+					),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([]);
+	});
+
+	// A diagram carries `%%` comments and blank lines for the same reason a code
+	// block carries `#` ones, and a translation re-wraps them.
+	it("mermaid フェンスの %% コメントと空行は内容差に数えない", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/page.md",
+					text: en(
+						'```mermaid\n%% the upstream half\nflowchart TD\n\n  a["x"] --> b["y"]\n```',
+					),
+				},
+				{
+					path: "docs/ja/page.md",
+					text: en(
+						'```mermaid\nflowchart TD\n  %% 上流の半分\n  %% 2 行に折り返す\n  a["x"] --> b["y"]\n\n```',
+					),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([]);
+	});
+
+	it("mermaid フェンスの構造の食い違いは報告する", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/page.md",
+					text: en('```mermaid\nflowchart TD\n  a["x"] --> b["y"]\n```'),
+				},
+				{
+					path: "docs/ja/page.md",
+					text: en('```mermaid\nflowchart TD\n  a["x"] --> c["y"]\n```'),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([
+			'docs/page.md vs docs/ja/page.md: fence 1 content "  a[""] --> b[""]" != "  a[""] --> c[""]"',
+		]);
+	});
+
 	it("東アジア文字幅で 100 桁を超えた行を報告する", () => {
 		const long = "あ".repeat(51);
 		const { widthErrors } = checkDocs(

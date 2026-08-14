@@ -31,6 +31,16 @@ Registry のどれで供給しても同じクリーンな画面になり、Regis
   示す。
 - **Storybook は描画環境。** 組んだものを見る場所。
 
+```mermaid
+flowchart TD
+  src["--source + --tsconfig"] -->|"必須"| build["registry build"]
+  idx["--index"] -.->|"任意"| build
+  meta["--metadata"] -.->|"任意"| build
+  build --> reg["registry.json"]
+  reg --> a["型から: props、slots、enum、import の specifier"]
+  reg --> b["Story から: カテゴリ、recommended、ディープリンク"]
+```
+
 props を型から読めることが検証を可能にしている。`variant` のような enum は取りうる値が分かるので、誤
 った値は選択肢付きの `INVALID_PROP_VALUE` として返り、人のレビューへ持ち越されない。Story の有無に関
 わらず export されているコンポーネントはすべて見え、import 先はファイルパスからの推測ではなく確定値

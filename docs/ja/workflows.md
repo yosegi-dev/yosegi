@@ -5,6 +5,21 @@
 Yosegi は 2 方向に走る。上流は登録済みのコンポーネントから Story を組み立てる向き、下流はその Story
 を実ページへ転換する向き。
 
+```mermaid
+flowchart TD
+  reg["registry build、そして component list / inspect"] --> route{"経路"}
+  route -->|"直接書く"| hand["ファイルを手で書く"]
+  route -->|"Screen JSON"| gen["screen generate"]
+  hand --> file["*.stories.tsx、または *.tsx"]
+  gen --> file
+  file --> check["ホストの型検査、そして人の目"]
+  check -->|"生成された Story: story import、screen context"| page["実装"]
+  check -->|"それ以外: ファイルを読む"| page
+```
+
+必須なのは `registry build` と `component list` / `inspect` で、図の「経路」から先はこのページが順に
+説明する選択になる。
+
 ## ユースケース
 
 想定する読み手は、既に Storybook 上のデザインシステムを持つプロダクトチーム。Yosegi を叩くのは人では
@@ -61,6 +76,19 @@ Story か Screen JSON を直して出し直すだけ。
 どちらの経路でも結果を確定させるのはホストの型検査。JSX を実物の型と突き合わせるので、Registry に
 対する検証より多くを見る。
 
+```mermaid
+flowchart TD
+  q{"JSON の形を持たない値があるか"}
+  q -->|"1 つでもある"| direct["直接書く"]
+  q -->|"無い"| sj["Screen JSON"]
+  direct --> tc["検証はホストの型検査だけ"]
+  sj --> gen["screen generate"]
+  gen -->|"エラーの配列、ファイルは書かれない"| fix["配列全体を反映する"]
+  fix --> sj
+  gen -->|"検証を通る"| out["ファイルを書き、警告はその後"]
+  out --> tc
+```
+
 `screen generate` は書き出す前に検証する。エラーがあれば何も書かず、エラーの配列とともに終了コード 1
 で終わる。1 件ずつ直すのではなく、配列全体を反映してから再実行する。
 
@@ -104,6 +132,21 @@ Yosegi は規定しない。レビューはホストの型検査に加えて、�
 ルートにコンポーネントを描画する）で行うものなので、エージェントは推測せずに確認する。知っておく
 べき非対称が 1 つある。`story import` が読めるのは Story だけなので、コンポーネントファイルは
 Screen JSON へ読み戻せない。画面をあとで直す可能性があるなら Screen JSON を残しておく。
+
+```mermaid
+flowchart TD
+  tree["同じ画面のツリー"] --> t{"ホストに Storybook があるか"}
+  t -->|"ある"| story["--target story（既定）"]
+  t -->|"無い"| comp["--target component"]
+  story --> csf["*.stories.tsx"]
+  comp --> tsx["*.tsx"]
+  csf --> rv1["ホストの Storybook で見る"]
+  tsx --> rv2["ホストの型検査と、利用者が選んだ確認手段"]
+  csf -.->|"story import"| back["Screen JSON へ読み戻す"]
+  tsx -.->|"importer が無い"| keep["Screen JSON を残す"]
+```
+
+どちらのターゲットも同じレンダラと同じ import プランを通るので、JSX は同一になる。
 
 ## 検証エラーの code
 
@@ -156,6 +199,16 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 
 `screen generate` が書いた Story は、ノード id を除いてそのまま読み戻る。形が実行時にしか決まらない
 構文は `warnings` に載り、読めた範囲のツリーは返る。
+
+```mermaid
+flowchart TD
+  gen["screen generate が書いた Story"] -->|"story import"| sj["Screen JSON"]
+  sj --> ctx["screen context"]
+  ctx --> keys["imports, structure.outline, components[], tasks[]"]
+  keys --> impl["実装"]
+  hand["手書きの Story"] -.->|"1 ノードだけ・警告も無い。Story を読む"| impl
+  comp["--target component が書いたファイル"] -.->|"importer が無い。ファイルを読む"| impl
+```
 
 `screen context` は Screen JSON を実装コンテキストへ展開する。実装中に効くのは主に 4 つ。
 

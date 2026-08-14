@@ -5,6 +5,21 @@ English | [日本語](./ja/workflows.md)
 Yosegi runs in two directions: upstream, assembling a Story out of registered components, and
 downstream, turning that Story into a real page.
 
+```mermaid
+flowchart TD
+  reg["registry build, then component list / inspect"] --> route{"Route"}
+  route -->|"directly"| hand["Write the file by hand"]
+  route -->|"Screen JSON"| gen["screen generate"]
+  hand --> file["*.stories.tsx, or *.tsx"]
+  gen --> file
+  file --> check["Host type check, then a human"]
+  check -->|"a generated Story: story import, screen context"| page["Implementation"]
+  check -->|"anything else: read the file"| page
+```
+
+`registry build` and `component list` / `inspect` are the mandatory part; everything after `Route`
+is a choice this page walks through.
+
 ## Use cases
 
 The audience is a product team that already has a design system in Storybook. Yosegi is invoked by a
@@ -65,6 +80,19 @@ the hand-off comments the downstream half reads back.
 Either way the host's type check is what confirms the result: it reads the JSX against the real
 component types, which is more than validation against the registry can do.
 
+```mermaid
+flowchart TD
+  q{"A value with no JSON form?"}
+  q -->|"yes, even one"| direct["Write the file directly"]
+  q -->|"no"| sj["Screen JSON"]
+  direct --> tc["Host type check is the only net"]
+  sj --> gen["screen generate"]
+  gen -->|"errors[], no file written"| fix["Apply the whole array"]
+  fix --> sj
+  gen -->|"valid"| out["File written, warnings listed after"]
+  out --> tc
+```
+
 `screen generate` validates before writing. On errors it writes no file and exits 1 with an array of
 errors. Apply the whole array and re-run rather than fixing them one at a time.
 
@@ -109,6 +137,21 @@ prescribe where such a file is reviewed — the review is the host's type check 
 its user chooses (rendering the component on a scratch route, for instance), so the agent asks
 rather than assuming. One asymmetry to know: `story import` reads Stories only, so a component file
 cannot be read back into Screen JSON — keep the Screen JSON if the screen may be revised later.
+
+```mermaid
+flowchart TD
+  tree["One screen tree"] --> t{"Storybook on the host?"}
+  t -->|"yes"| story["--target story, the default"]
+  t -->|"no"| comp["--target component"]
+  story --> csf["*.stories.tsx"]
+  comp --> tsx["*.tsx"]
+  csf --> rv1["Reviewed in the host's Storybook"]
+  tsx --> rv2["Host type check, plus the surface the user names"]
+  csf -.->|"story import"| back["Read back into Screen JSON"]
+  tsx -.->|"no importer"| keep["Keep the Screen JSON"]
+```
+
+Both targets go through the same renderer and the same import plan, so the JSX is identical.
 
 ## Validation error codes
 
@@ -163,6 +206,16 @@ that the screen is missing. Against a hand-written Story, read the Story instead
 A Story written by `screen generate` reads back unchanged apart from node ids. Syntax whose shape is
 only decided at runtime is reported in `warnings`, and the part of the tree that could be read is
 still returned.
+
+```mermaid
+flowchart TD
+  gen["Story written by screen generate"] -->|"story import"| sj["Screen JSON"]
+  sj --> ctx["screen context"]
+  ctx --> keys["imports, structure.outline, components[], tasks[]"]
+  keys --> impl["Implementation"]
+  hand["Hand-written Story"] -.->|"one node, no warnings — read the Story"| impl
+  comp["File from --target component"] -.->|"no importer — read the file"| impl
+```
 
 `screen context` expands the Screen JSON into implementation context. Four keys matter most:
 

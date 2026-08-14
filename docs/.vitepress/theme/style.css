@@ -70,3 +70,12 @@
 .VPFeature {
 	border-radius: 4px;
 }
+
+/* Mermaid measures a label's height with its own line-height and then draws it with the page's,
+   which is taller — the last line of a wrapped label ends up outside the box. Give the labels back
+   the line-height mermaid sized them for. */
+.mermaid .nodeLabel,
+.mermaid .edgeLabel,
+.mermaid .label foreignObject div {
+	line-height: 1.25;
+}

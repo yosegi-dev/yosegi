@@ -151,6 +151,15 @@ function fencedBlocks(text: string): Fence[] {
 // whitespace on both sides of the marker, which keeps component ids such as
 // `button#Button` and `https://` URLs intact.
 function comparableFenceLines(fence: Fence): string[] {
+	// A mermaid fence is a diagram, and its labels are translated the way a
+	// comment is. Every label is quoted (docs/conventions.md requires it), so
+	// blanking the quoted text leaves the structure — node ids, arrows, direction
+	// — which is what the two sides have to keep in step.
+	if (fence.info === "mermaid") {
+		return fence.body
+			.map((line) => line.replace(/"[^"]*"/g, '""').trimEnd())
+			.filter((line) => line !== "" && !/^\s*%%/.test(line));
+	}
 	return fence.body
 		.map((line) => line.replace(/\s(#|\/\/)\s.*$/, "").trimEnd())
 		.filter((line) => line !== "" && !/^\s*(#|\/\/|\/\*|\*)/.test(line));
