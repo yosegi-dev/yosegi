@@ -2,8 +2,8 @@
 
 [English](../workflows.md) | 日本語
 
-Yosegi は 2 方向に走ります。上流は登録済みのコンポーネントから Story を組み立てる向き、下流はその
-Story を実ページへ転換する向き。
+Yosegi は 2 方向に走ります。上流では登録済みのコンポーネントから Story を組み立て、下流ではその
+Story を実ページへ転換します。
 
 ```mermaid
 flowchart TD
@@ -22,8 +22,8 @@ flowchart TD
 
 ## ユースケース
 
-想定する読み手は、既に Storybook 上のデザインシステムを持つプロダクトチーム。Yosegi を叩くのは人では
-なくコーディングエージェントで、人は普段の言葉でエージェントに頼みます。
+想定する読み手は、既に Storybook 上のデザインシステムを持つプロダクトチームです。Yosegi を叩くのは
+人ではなくコーディングエージェントで、人は普段の言葉でエージェントに頼みます。
 
 ### ユースケース 1: 画面モックを速く作る
 
@@ -121,7 +121,7 @@ $ yosegi screen generate tmp/screen.json --out ... --data-dir .yosegi
 issue はさらに variant 名を持つ `variant` を運び、その `path` は variant の operations 適用後の木を
 指します。警告は生成を止めず、ファイル書き出しの後に並びます。
 
-生成される meta は既定では `title` だけ。ホストが要求する定型は `--meta-template <file>`
+生成される meta は既定では `title` だけです。ホストが要求する定型は `--meta-template <file>`
 で差し込みます。値はソースの断片として解釈せずに引き継ぐので、Yosegi が持っていない Figma の URL を
 捏造することはありません。ただしテンプレート元にした既存 Story の URL
 はそのまま引き継がれ、警告で名指しされます。
@@ -223,7 +223,7 @@ flowchart TD
 - `tasks[]`: `bindings` と `events` を結線タスクへ平坦化したもの。各タスクは `nodeId` と
   `$.children[1]` 形式の `path` を持ちます。
 
-残り（`requirements` / `target` / `implementation` / `screen`）は補助情報。
+残り（`requirements` / `target` / `implementation` / `screen`）は補助情報です。
 
 ## `story import` の警告
 

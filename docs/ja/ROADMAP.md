@@ -70,13 +70,13 @@ Registry を正とみなすための前提条件になります。
 
 ### `@yosegi/core` をファイルシステムから切り離す
 
-`packages/core` を `node:fs` に縛っているのは `FileScreenRepository` だけ。これを
+`packages/core` を `node:fs` に縛っているのは `FileScreenRepository` だけです。これを
 `@yosegi/core/node` サブパスへ分離すれば、core 本体をブラウザや Workers 環境でも使えるように
 なります。
 
 ### 7.1 が API を出すまで TypeScript 6.x に留まる
 
-`typescript` の `<7` は意図的な上限。TypeScript 7.0 はコンパイラ API を同梱しておらず、
+`typescript` の `<7` は意図的な上限です。TypeScript 7.0 はコンパイラ API を同梱しておらず、
 `require("typescript")` は `{ version, versionMajorMinor }` しか返しません。`source-registry.ts`
 と `react-docgen-typescript` はどちらも 6.x の API の上に成り立っています。7 のホストは互換
 パッケージ経由でその API を保てます。導入手順は [`registry.md`](./registry.md) に記載しています。

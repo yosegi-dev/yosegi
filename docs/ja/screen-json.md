@@ -6,7 +6,7 @@ Yosegi が Story へ変換する画面ツリー。`screen generate` は何かを
 Registry と突き合わせて検証するので、このページは書き手（多くはエージェント）向けの仕様書になり
 ます。
 
-Screen JSON は中間表現。一時ファイルとして扱ってよく、成果物ではありません。
+Screen JSON は中間表現です。一時ファイルとして扱ってよく、成果物ではありません。
 
 ## 形
 
@@ -66,9 +66,9 @@ Screen JSON は中間表現。一時ファイルとして扱ってよく、成�
 
 必須フィールドの欠落は検証の警告ではなく `INVALID_REQUEST` になります。
 
-ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須。ノード
-の `id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の slot 名は
-prop として渡されます。
+ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須です。
+ノードの `id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の
+slot 名は prop として渡されます。
 
 ## コンポーネント id
 
@@ -88,7 +88,7 @@ app/components/ui/card#CardHeader
 
 ## 合成プリミティブ
 
-Registry に無くても使える構造用のコンポーネント。import を必要としません。
+Registry に無くても使える構造用のコンポーネントです。import を必要としません。
 
 | id | props | 出力 |
 | --- | --- | --- |
@@ -116,7 +116,8 @@ Registry に無くても使える構造用のコンポーネント。import を�
 | `bindings` | `{ "<prop 名>": "<データ式の文字列>" }` | `"bindings": { "title": "segment.name" }` |
 | `events` | `{ "<イベント名>": { "action": "<action 名>", "arguments": { ... } } }` | `"events": { "onClick": { "action": "navigate", "arguments": { "to": "/x" } } }` |
 
-`bindings` の値は文字列そのもの。`{ "expression": "..." }` のようにオブジェクトで包むとスキーマ違反
+`bindings` の値は文字列そのものです。`{ "expression": "..." }` のようにオブジェクトで包むとスキーマ
+違反
 です（`INVALID_REQUEST`。正しい形は `hints` に出ます）。`events` の `arguments` は省略できます。
 
 どちらのキーも Manifest と突き合わせて検証されます。存在しない prop を指す `bindings` のキーは
@@ -160,7 +161,7 @@ prop が出力されないだけでモックは描画できます。**required**
 
 ## fixtures
 
-`fixtures` は画面のモックデータ層。名前付きの JSON 値で、生成される Story では import と meta の
+`fixtures` は画面のモックデータ層です。名前付きの JSON 値で、生成される Story では import と meta の
 間に、書いた順で、トップレベルの `const <名前> = <値>;` 宣言になります。式が fixture 名から始まる
 binding は、実在する値への参照になります。モックが表示する値と実装が置き換える結線先を、1 つの宣言が
 両方運びます。
@@ -186,8 +187,8 @@ fixture 名は JavaScript の識別子であること。また `meta` / `Meta` /
 （`Default`、または `--story-name`）と同じ名前は生成時に弾かれます。fixture 名と衝突する
 コンポーネント import はサフィックス付きの別名へ退避します。
 
-fixtures が持てるのは JSON だけ。JSON の形を持たない値（テーブルインスタンス、コンポーネント参照、
-関数）は依然として表現できません。そうした画面は Story を直接書きます。
+fixtures が持てるのは JSON だけです。JSON の形を持たない値（テーブルインスタンス、コンポーネント
+参照、関数）は依然として表現できません。そうした画面は Story を直接書きます。
 
 ## variants
 

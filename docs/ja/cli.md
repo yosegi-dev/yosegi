@@ -30,10 +30,10 @@ bun add -d @yosegi/yosegi
 繰り返し指定できるフラグ（`--source`、`--query`）はカンマ区切りも受け付けます。glob は必ず
 クォートします（しないと CLI へ届く前にシェルが展開します）。
 
-エラーは `error.code` を持つ JSON で返り、終了コードは 1。未知のコマンド・フラグは近い候補付きで
-拒否され（`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`）、必須引数の不足は `MISSING_ARGUMENT` を返します。
+エラーは `error.code` を持つ JSON で返り、終了コードは 1 です。未知のコマンド・フラグは近い候補付き
+で拒否され（`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`）、必須引数の不足は `MISSING_ARGUMENT` を返します。
 `--help`（`-h`）は usage を表示して終了コード 0、`--version` は `{ "version", "cliPath" }` を返して
-終了コード 0。
+終了コード 0 です。
 
 ## `registry build`
 
@@ -67,17 +67,18 @@ yosegi registry build \
 
 実行の最後に統計が出ます。`files: 0` は glob が 1 件も拾えなかったということ（警告も出ますが、合成プ
 リミティブ 3 件入りの Registry はそのまま書き出されます）。`componentCandidates` は React コンポー
-ネントと判定した export の件数。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆っていま
+ネントと判定した export の件数です。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆って
+いま
 せん（警告も出ます。`.tsx` を含んでいるか確認してください）。`withNodeSlots: 0` かつ
 `anyShapedProps` が高い場合、`--tsconfig` から `@types/react` が解決できていません。ReactNode の
 props は `json` / `shape: any` に劣化し、slot は 1 つも検出されません（警告が直し方を示します）。
 `propsUnreadable` が高い場合、渡した tsconfig がホストのものではない可能性が高いです。`props` に
-対する `documentedProps` は JSDoc の付いている props の割合。
+対する `documentedProps` は JSDoc の付いている props の割合です。
 `undocumentedRequiredOpaqueProps` は「必須で、リテラルでは値を書けず、どこにも説明が無い」props の
-件数。
+件数です。
 
 `--report` の `undocumented` セクションがその props を列挙します。1 件は
-`{ component, prop, kind, priority, recommended, shape? }` の形。並びは `required-opaque` /
+`{ component, prop, kind, priority, recommended, shape? }` の形です。並びは `required-opaque` /
 `optional-opaque` / `required-literal` / `optional-literal` の順で、上限 100 件、残りは `omitted`
 に件数だけ残ります。上から潰していけば十分です。
 [Component Registry](./registry.md#ホスト側が-inspect-を有用にするためにできること) を参照。
@@ -282,7 +283,7 @@ yosegi screen validate <screenId>
 yosegi screen apply <screenId> <operations.json>
 ```
 
-`screen validate` の対象は保存済みの画面だけ。Screen JSON ファイルは `screen generate` が実行の
+`screen validate` の対象は保存済みの画面だけです。Screen JSON ファイルは `screen generate` が実行の
 一部として検証します。
 
 ## `mcp`

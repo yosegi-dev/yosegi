@@ -41,7 +41,7 @@ flowchart TD
   review --> impl["実装"]
 ```
 
-破線は任意。Registry は型から作られます。Story のレビューは Storybook で行いますが、Storybook を
+破線は任意です。Registry は型から作られます。Story のレビューは Storybook で行いますが、Storybook を
 持たないホストは代わりに素のコンポーネントファイルを書き出し、そのホストなりの方法でレビューします。
 
 実運用の React デザインシステムでの実測: 120 ファイルから 278 コンポーネントを約 4 秒、98.9% は
