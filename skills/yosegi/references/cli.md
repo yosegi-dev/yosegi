@@ -49,14 +49,14 @@ user.
   `registry build`'s output to one location and then passing a different `--data-dir` to
   `component list` produces `REGISTRY_NOT_FOUND` (its `path` / `dataDir` fields name the location
   that was actually consulted). The directory is created if it does not exist.
-- Repeatable flags (`--source`) also accept comma-separated values.
+- Repeatable flags (`--source`, `--query`) also accept comma-separated values.
 - **Always quote globs.** `--source app/components/**/*.tsx` is expanded by the shell first and only
   one file reaches the CLI. Write `--source "app/components/**/*.tsx"`.
 - Output is JSON on stdout unless stated otherwise. Errors are JSON carrying `error.code` and exit
   code 1 (`errors.md`): an unknown command or flag is rejected with the nearest candidates
   (`UNKNOWN_COMMAND` / `UNKNOWN_FLAG` — a misspelled flag is never silently ignored), and a missing
-  required argument returns `MISSING_ARGUMENT`. Usage text only appears via `--help` (`-h`, exit 0);
-  `--version` prints `{ "version", "cliPath" }` with exit 0.
+  required argument returns `MISSING_ARGUMENT`. Usage text appears via `--help` (`-h`, exit 0) and on
+  a bare `yosegi` (exit 1); `--version` prints `{ "version", "cliPath" }` with exit 0.
 
 ## `registry build`
 
@@ -84,7 +84,7 @@ to you exactly.
 | `--storybook-url <url>` | Attaches deep links to the Stories |
 | `--metadata <file>` | Supplies props the types could not (see `registry metadata`). Applies on both the `--source` and the `--index` path |
 | `--import-map <from=to,...>` | Overrides the import specifiers stored in the registry. Only needed when the host's aliases are not declared in tsconfig |
-| `--report <path>` | Writes `{ stats, missed, undocumented }`. In `missed`, `reason: "props-unreadable"` marks the components `--metadata` exists for and `reason: "unnamed-default"` an anonymous `export default` that has no name to use as an id. `undocumented` lists the props worth writing JSDoc on, ranked |
+| `--report <path>` | Writes `{ stats, missed, undocumented, outsideSources }`. In `missed`, `reason: "props-unreadable"` marks the components `--metadata` exists for and `reason: "unnamed-default"` an anonymous `export default` that has no name to use as an id. `undocumented` lists the props worth writing JSDoc on, ranked; `outsideSources` the host files props reference outside `--source`'s globs. `--source` path only; ignored without a warning on an `--index`-only build |
 | `--out <path>` | Overrides the output path (default: `<data-dir>/registry.json`) |
 | `--version <ref>` | Overrides the registry version string |
 | `--json` | Returns `{ out, version, count, stats, warnings, hints }` as one object instead of the mixed text output (`stats` is `null` on the `--index`-only path). The warnings below still appear, inside `warnings` |
@@ -176,7 +176,7 @@ yosegi registry status --data-dir .yosegi
 
 | Flag | Meaning |
 | --- | --- |
-| `--json` | Return `{ version, generatedAt, builtWith, builtWithCliPath, inputs, runningVersion, sourceCheck }` instead of the text summary |
+| `--json` | Return `{ version, generatedAt, builtWith, builtWithCliPath, inputs, runningVersion, sourceCheck, indexCheck }` instead of the text summary |
 
 It prints the same provenance `component list`'s header does (built at, built by which Yosegi, the
 recorded inputs), then goes one step further: it recomputes the registry's content hash from those
@@ -198,13 +198,18 @@ yosegi component list --data-dir .yosegi
 yosegi component list --category app/components/ui --data-dir .yosegi
 yosegi component list --query card --data-dir .yosegi
 yosegi component inspect "app/components/ui/button#Button" --data-dir .yosegi
+yosegi component inspect "app/components/ui/card#Card" "app/components/ui/card#CardHeader" --data-dir .yosegi
 ```
+
+`inspect` takes several ids in one call: the provenance header prints once above all of them, and an
+unknown id among several exits 1 after still printing the rest.
 
 | Flag | Meaning |
 | --- | --- |
 | `--category <name>` | Filter by category (the component's directory, or the Story title when `--index` was used) |
-| `--query <text>` | Substring match over id, name, and description |
-| `--json` | Return the manifests themselves rather than the text summary |
+| `--query <text>` | Substring match over id, name, and description. Repeatable / comma-separated; several terms match any of them |
+| `--json` | Return the manifests themselves rather than the text summary (an array when `inspect` is given several ids) |
+| `--quiet` | Drop the registry provenance header |
 
 `list` opens with the registry it is reading, then a three-line summary per component:
 
@@ -228,7 +233,7 @@ says `built: not recorded`; rebuild it. Separately, if the registry was built by
 version** than the CLI you are running, every command that reads it prints a `Warning:` naming both
 versions and the rebuild command — heed it, because an older Yosegi omits fields a newer one emits
 and nothing else reveals the gap. `--json` returns `version`, `generatedAt`, `builtWith` (the Yosegi
-that wrote it), and `inputs`.
+that wrote it), `builtWithCliPath`, `inputs`, `total`, `categories`, and `components`.
 
 `inspect` returns the import statement, the Story coordinates, the props (type, required, default,
 the full set of enum options, the shape of an opaque prop, description), and the slots. **Never

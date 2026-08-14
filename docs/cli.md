@@ -27,8 +27,8 @@ bun add -d @yosegi/yosegi
 | --- | --- | --- | --- |
 | `--data-dir <dir>` | path | `.yosegi` under the cwd | Where the registry and the saved screens live. Created if missing. Pass the same value to every command |
 
-Repeatable flags (`--source`) also accept comma-separated values. Always quote globs — the shell
-expands an unquoted one before the CLI sees it.
+Repeatable flags (`--source`, `--query`) also accept comma-separated values. Always quote globs —
+the shell expands an unquoted one before the CLI sees it.
 
 Errors exit with code 1 as JSON carrying `error.code`. An unknown command or flag is rejected with
 the nearest candidates (`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`), and a missing required argument returns
@@ -48,11 +48,11 @@ yosegi registry build --source <glob> --tsconfig <path> [options]
 | `--source <glob>` | glob | — | The host's component sources. Repeatable and comma-separated. `*.stories.*` / `*.test.*` are excluded automatically |
 | `--tsconfig <path>` | path | — | The host's tsconfig. Required with `--source`; its type resolution settings, `paths` included, are used as-is |
 | `--project-root <dir>` | path | the `--tsconfig` directory | The base for `--source` globs and for the module paths in component ids. Never the cwd |
-| `--index <path\|url>` | path or URL | — | Storybook's `index.json`. Adds Story-derived categories, `curation.recommended`, and Story titles |
+| `--index <path\|url>` | path or URL | `storybook-static/index.json` under the cwd, when `--source` is also absent | Storybook's `index.json`. Adds Story-derived categories, `curation.recommended`, and Story titles |
 | `--storybook-url <url>` | URL | — | Base URL of the Storybook `--index` came from. Attaches deep links. Only has an effect with `--index` |
 | `--metadata <file>` | path | — | Hand-supplied props for components whose types could not be read. Applies on both the `--source` and `--index` paths |
 | `--import-map <from=to,...>` | string | tsconfig `paths` | Overrides the import specifiers stored in the registry. Only needed when the host's aliases are not in tsconfig |
-| `--report <path>` | path | — | Writes `{ stats, missed, undocumented }`: the exports that could not be extracted, and the props worth writing JSDoc on, ranked |
+| `--report <path>` | path | — | Writes `{ stats, missed, undocumented, outsideSources }`: the exports that could not be extracted, the props worth writing JSDoc on (ranked), and the host files props reference outside `--source`'s globs. `--source` path only; ignored without a warning on an `--index`-only build |
 | `--out <path>` | path | `registry.json` under `--data-dir` | Where the registry is written. Intermediate directories are created |
 | `--version <ref>` | string | a content hash | The registry's `version` string, which a Screen JSON copies into `componentRegistryVersion` |
 | `--json` | boolean | `false` | Return `{ out, version, count, stats, warnings, hints }` as one object instead of the text output (`stats` is `null` on the `--index`-only path) |
@@ -121,7 +121,7 @@ yosegi registry status [options]
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--json` | boolean | `false` | Return the manifest instead of the text summary |
+| `--json` | boolean | `false` | Return the status object (`version`, `generatedAt`, `builtWith`, `builtWithCliPath`, `inputs`, `runningVersion`, `sourceCheck`, `indexCheck`) instead of the text summary |
 
 ```sh
 yosegi registry status --data-dir .yosegi
@@ -129,7 +129,10 @@ yosegi registry status --data-dir .yosegi
 
 Recomputes the registry's content hash from its recorded inputs and reports `source: current` or
 `source: stale` (with the exact rebuild command). A registry with no recorded inputs, or one pinned
-with `--version`, reports `source: unknown` instead — there is nothing to recompute from.
+with `--version`, reports `source: unknown` instead — there is nothing to recompute from. A second
+`index:` line reports the Storybook-derived layer the same way — `current`, `stale` when the
+recommended flags or story links changed since the build, or `unknown` with the reason when the
+recorded index cannot be re-read (an unreachable dev server, say).
 
 ## `component list`
 
@@ -142,8 +145,9 @@ yosegi component list [options]
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `--category <name>` | string | — | Narrow to one category |
-| `--query <text>` | string | — | Substring match over id, name, and description |
+| `--query <text>` | string | — | Substring match over id, name, and description. Repeatable / comma-separated; several terms match any of them |
 | `--json` | boolean | `false` | Return the manifests instead of the text summary |
+| `--quiet` | boolean | `false` | Drop the registry provenance header |
 
 ```sh
 yosegi component list --query card --data-dir .yosegi
@@ -152,7 +156,8 @@ yosegi component list --query card --data-dir .yosegi
 The header names the registry in use, when it was built, and the `registry build` that would rebuild
 it — carrying every flag that shapes the result (`--storybook-url` included), so running it verbatim
 reproduces the same version and deep links. `--json` returns `version`, `generatedAt`, `builtWith`
-(the Yosegi that wrote it), and `inputs`. A registry written before this was recorded reports
+(the Yosegi that wrote it), `builtWithCliPath`, `inputs`, `total`, `categories`, and
+`components`. A registry written before this was recorded reports
 `built: not recorded`; one built by a different Yosegi version than the running CLI prints a
 `Warning:` naming both versions and the rebuild command. To judge whether the registry is actually
 stale, use `registry status` (above) rather than reading this header by eye.
@@ -163,12 +168,17 @@ Returns one component's import statement, props (type, required, default, enum o
 description), and slots. An id that is not registered comes back with the nearest candidate.
 
 ```sh
-yosegi component inspect <componentId> [--json]
+yosegi component inspect <componentId> [<componentId> ...] [--json]
 ```
+
+Several ids in one call print the provenance header once above all of them; `--json` then returns
+an array instead of a bare object. An unknown id among several exits 1 after still printing the
+rest.
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--json` | boolean | `false` | Return the manifest instead of the text summary |
+| `--json` | boolean | `false` | Return the manifest instead of the text summary (an array for two or more ids) |
+| `--quiet` | boolean | `false` | Drop the registry provenance header |
 
 ```sh
 yosegi component inspect "app/components/ui/button#Button" --data-dir .yosegi

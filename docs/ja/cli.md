@@ -26,8 +26,8 @@ Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情�
 | --- | --- | --- | --- |
 | `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ作成する。全コマンドへ同じ値を渡す |
 
-繰り返し指定できるフラグ（`--source`）はカンマ区切りも受け付ける。glob は必ずクォートする（しないと
-CLI へ届く前にシェルが展開する）。
+繰り返し指定できるフラグ（`--source`、`--query`）はカンマ区切りも受け付ける。glob は必ず
+クォートする（しないと CLI へ届く前にシェルが展開する）。
 
 エラーは `error.code` を持つ JSON で返り、終了コードは 1。未知のコマンド・フラグは近い候補付きで
 拒否され（`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`）、必須引数の不足は `MISSING_ARGUMENT` を返す。
@@ -47,11 +47,11 @@ yosegi registry build --source <glob> --tsconfig <path> [options]
 | `--source <glob>` | glob | — | ホストのコンポーネントのソース。繰り返し・カンマ区切り可。`*.stories.*` / `*.test.*` は自動で除外 |
 | `--tsconfig <path>` | path | — | ホストの tsconfig。`--source` と併用時は必須。`paths` を含む型解決設定をそのまま使う |
 | `--project-root <dir>` | path | `--tsconfig` のあるディレクトリ | `--source` の glob とコンポーネント id のモジュールパスの基準。cwd は基準にしない |
-| `--index <path\|url>` | path または URL | — | Storybook の `index.json`。Story 由来のカテゴリ・`curation.recommended`・Story タイトルが付く |
+| `--index <path\|url>` | path または URL | `--source` も無いときは cwd 直下の `storybook-static/index.json` | Storybook の `index.json`。Story 由来のカテゴリ・`curation.recommended`・Story タイトルが付く |
 | `--storybook-url <url>` | URL | — | `--index` の取得元 Storybook のベース URL。ディープリンクを付ける。`--index` 併用時のみ効く |
 | `--metadata <file>` | path | — | 型から読めなかったコンポーネントの props を手で補う。`--source` / `--index` どちらの経路でも効く |
 | `--import-map <from=to,...>` | string | tsconfig の `paths` | Registry に保存する import specifier を上書きする。ホストの alias が tsconfig に無い場合のみ必要 |
-| `--report <path>` | path | — | `{ stats, missed, undocumented }` を書き出す。抽出できなかった export と、JSDoc を書く価値のある props を優先順に並べたもの |
+| `--report <path>` | path | — | `{ stats, missed, undocumented, outsideSources }` を書き出す。抽出できなかった export、JSDoc を書く価値のある props（優先順）、`--source` の glob の外から props が参照するホストのファイル。`--source` 経路のみで、`--index` 単独のビルドでは警告なく無視される |
 | `--out <path>` | path | `--data-dir` 直下の `registry.json` | Registry の書き出し先。中間ディレクトリは自動作成 |
 | `--version <ref>` | string | 内容ハッシュ | Registry の `version` 文字列。Screen JSON が `componentRegistryVersion` へ写す値 |
 | `--json` | boolean | `false` | テキスト出力の代わりに `{ out, version, count, stats, warnings, hints }` を単一オブジェクトで返す（`--index` 単独の経路では `stats` は `null`） |
@@ -119,7 +119,7 @@ yosegi registry status [options]
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--json` | boolean | `false` | テキスト要約ではなく Manifest そのものを返す |
+| `--json` | boolean | `false` | テキスト要約ではなくステータスオブジェクト（`version`、`generatedAt`、`builtWith`、`builtWithCliPath`、`inputs`、`runningVersion`、`sourceCheck`、`indexCheck`）を返す |
 
 ```sh
 yosegi registry status --data-dir .yosegi
@@ -127,7 +127,10 @@ yosegi registry status --data-dir .yosegi
 
 記録済みの inputs から Registry の内容ハッシュを再計算し、`source: current` または `source: stale`
 （作り直しコマンド付き）を返す。inputs が記録されていない Registry や `--version` で固定した
-Registry は `source: unknown` を返す。再計算する元が無いため。
+Registry は `source: unknown` を返す。再計算する元が無いため。2 行目の `index:` 行は Storybook
+由来の層を同じ形式で報告する。ビルド後に recommended フラグや Story リンクが変わっていれば
+`stale`、記録した index を読み直せなければ理由付きの `unknown` になる（dev サーバに届かない場合
+など）。
 
 ## `component list`
 
@@ -140,8 +143,9 @@ yosegi component list [options]
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
 | `--category <name>` | string | — | カテゴリで絞り込む |
-| `--query <text>` | string | — | id・名前・description への部分一致 |
+| `--query <text>` | string | — | id・名前・description への部分一致。繰り返し・カンマ区切り可で、複数語はいずれかに一致すればよい |
 | `--json` | boolean | `false` | テキスト要約ではなく Manifest そのものを返す |
+| `--quiet` | boolean | `false` | Registry の来歴ヘッダを省く |
 
 ```sh
 yosegi component list --query card --data-dir .yosegi
@@ -149,8 +153,9 @@ yosegi component list --query card --data-dir .yosegi
 
 見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出る。この行は結果を左
 右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープリン
-クを再現できる。`--json` では `version` / `generatedAt` / `builtWith`（生成した Yosegi）/ `inputs`
-が返る。記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの
+クを再現できる。`--json` が返すフィールドは 8 つ。`version`、`generatedAt`、`builtWith`（生成した
+Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
+記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの
 Yosegi が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出す。Registry が実際に古く
 なっているかどうかは、この見出しを目で判断せず `registry status`（上記）で確認する。
 
@@ -160,12 +165,16 @@ Yosegi が作った Registry は両方の版と作り直しコマンドを示す
 返す。登録されていない id には最も近い候補が返る。
 
 ```sh
-yosegi component inspect <componentId> [--json]
+yosegi component inspect <componentId> [<componentId> ...] [--json]
 ```
+
+複数の id を 1 回で渡せる。来歴ヘッダは全体の上に 1 度だけ出て、`--json` は単一オブジェクトでは
+なく配列を返す。複数のうち未知の id があれば、残りを出力した上で exit 1 になる。
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--json` | boolean | `false` | テキスト要約ではなく Manifest そのものを返す |
+| `--json` | boolean | `false` | テキスト要約ではなく Manifest そのものを返す（id が 2 つ以上なら配列） |
+| `--quiet` | boolean | `false` | Registry の来歴ヘッダを省く |
 
 ```sh
 yosegi component inspect "app/components/ui/button#Button" --data-dir .yosegi
