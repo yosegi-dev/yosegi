@@ -186,7 +186,7 @@ warning is absent from the Screen JSON**, so read the original Story for those p
 
 | code | Meaning |
 | --- | --- |
-| `STORY_NOT_FOUND` | No export with a `render` function — what a `component` + `args` Story produces. Exit 1, nothing imported |
+| `STORY_NOT_FOUND` | No export with a `render` function — what a `component` + `args` Story produces — or `--story-name` named no export (the message lists the candidates). Exit 1, nothing imported |
 | `RENDER_NOT_STATIC` | The selected export's `render` cannot be read statically, or `--story-name` picked an `args`-only export. Exit 1, nothing imported |
 | `TITLE_NOT_STATIC` | The meta's `title` is not a static string; the screen name falls back and the import continues |
 | `OPAQUE_EXPRESSION` | An expression that cannot be read statically, such as `{items.map(...)}` or a conditional. That node is dropped |

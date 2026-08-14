@@ -137,12 +137,11 @@ A `bindings` entry on its own is not validated against the prop's type — the v
 concrete at implementation time. A mock value written into `props` is validated as usual, binding
 or no binding; the binding does not exempt it.
 
-A value can never be written into a function-kind prop (`FUNCTION_PROP_VALUE`): a handler name
-written as a string reaches the Story as a string. Declare handlers in `events`. Other props whose
-kind no literal can express (`json`, `reactNode`) accept a value, but nothing checks its shape, so
-writing
-one warns (`NOT_EDITABLE_PROP_VALUE`) — a source-built registry marks exactly those props
-not-editable. A `--metadata`-declared prop of those kinds without the marking is accepted
+A value can never be written into a function-kind prop — `FUNCTION_PROP_VALUE` is an error and
+generation stops, because a handler name written as a string would reach the Story as a string.
+Declare handlers in `events`. A `json` / `reactNode` prop accepts a value, but nothing checks its
+shape, so writing one warns (`NOT_EDITABLE_PROP_VALUE`) — a source-built registry marks those
+kinds not-editable. A `--metadata`-declared prop of those kinds without the marking is accepted
 silently.
 
 All declarations survive in the generated Story as hand-off comments carrying the intent as JSON,

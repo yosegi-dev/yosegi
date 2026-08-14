@@ -173,13 +173,15 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 
 解析はソースの AST だけで行うため、形が実行時にしか決まらない構文は読めない。ツリーを 1 つも復元
 できないときは下記のコードのいずれかを出して exit 1 で終わる。それ以外では読めないノードに印を
-付けて先へ進む。**警告が出た箇所は Screen JSON に入っていない**ので、その
-部分は元の Story を直接読む。`warnings` が空であること自体は何の証明にもならない。Story と突き合わせ
-てノード数を数えること。
+付けて先へ進む。**ノード・prop・intent を名指しする警告は、その内容が Screen JSON に入って
+いないことを意味する**ので、その部分は元の Story を直接読む。`TITLE_NOT_STATIC`、
+`MULTIPLE_ROOTS`、`MULTIPLE_STORIES` のような情報通知は内容を保ったまま、何が変わったかだけを
+伝える。`warnings` が空であること自体は何の証明にもならない。Story と突き合わせてノード数を
+数えること。
 
 | code | 意味 |
 | --- | --- |
-| `STORY_NOT_FOUND` | `render` 関数を持つ export が無い。`component` + `args` 形式の Story がここに落ちる。exit 1 で何も取り込まれない |
+| `STORY_NOT_FOUND` | `render` 関数を持つ export が無い（`component` + `args` 形式の Story がここに落ちる）か、`--story-name` がどの export とも一致しない（メッセージに候補が並ぶ）。exit 1 で何も取り込まれない |
 | `RENDER_NOT_STATIC` | 選ばれた export の `render` が静的に読めない。`--story-name` が `args` のみの export を指したときもここ。exit 1 で何も取り込まれない |
 | `TITLE_NOT_STATIC` | meta の `title` が静的な文字列でない。画面名がフォールバックするだけで取り込みは続く |
 | `OPAQUE_EXPRESSION` | `{items.map(...)}` や条件分岐など、静的に読めない式。そのノードは落ちる |

@@ -118,10 +118,10 @@ an error — ignore the warning when the primitive is what you meant. Putting co
 Confirm every prop with `component inspect` first; `registry.md` covers how to read it. Two points
 are specific to this route:
 
-- A `json` / `reactNode` / `function`-kind prop reaches the Story unchecked — the registry marks
-  those `not-editable`, and writing a value into one warns (`NOT_EDITABLE_PROP_VALUE`); a
-  `function`-kind prop rejects a value outright (`FUNCTION_PROP_VALUE`). Express data through
-  `bindings` and handlers through `events` instead.
+- A `function`-kind prop rejects a value outright — `FUNCTION_PROP_VALUE` is an **error** and
+  generation stops. Declare handlers through `events` (or `bindings`). A `json` / `reactNode`-kind
+  prop accepts a value but it reaches the Story unchecked — a **warning** only
+  (`NOT_EDITABLE_PROP_VALUE`); express data through `bindings` when it comes from data.
 - If `inspect` prints `Note: props could not be read from the types.`, the registry is not that
   component's real API, and every real prop you write will stop with `UNKNOWN_PROP`. Reading the
   host's source is not enough — supplement the registry with `registry build --metadata` first

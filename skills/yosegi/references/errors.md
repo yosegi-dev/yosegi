@@ -133,15 +133,15 @@ Fix the shape, then enter the validation loop above.
 `story import` fails outright (exit 1, no Screen JSON) whenever no tree can be restored. Two codes
 end the run: `STORY_NOT_FOUND` when no export has a `render` function — what a `component` + `args`
 Story produces, and that is the most common hand-written shape — and `RENDER_NOT_STATIC` when the
-selected export has a `render` (or was selected by `--story-name`) but its body cannot be read
-statically. When a tree does come back, it is the part that could be read, with the rest reported.
+selected export exists but its body cannot be read statically. A `--story-name` that matches no
+export lands on `STORY_NOT_FOUND` with the candidates listed. When a tree does come back, it is the part that could be read, with the rest reported.
 Analysis works purely on the source AST and the Story is never executed, so **any syntax whose
 shape is only decided at runtime cannot be read**.
 
 | code | Meaning |
 | --- | --- |
-| `STORY_NOT_FOUND` | No export with a `render` function. A `component` + `args` Story lands here when no `--story-name` is given; so does a `--target component` file. There is nothing to import — read the Story as text |
-| `RENDER_NOT_STATIC` | The selected export's `render` cannot be read statically — or `--story-name` picked an `args`-only export. The run ends with no tree, same as `STORY_NOT_FOUND` |
+| `STORY_NOT_FOUND` | No export with a `render` function (what a `component` + `args` Story produces without `--story-name`, and any `--target component` file) — or `--story-name` named no export at all; the message lists the candidates. There is nothing to import — read the Story as text |
+| `RENDER_NOT_STATIC` | The selected export exists but its `render` cannot be read statically — including `--story-name` picking an `args`-only export. The run ends with no tree, same as `STORY_NOT_FOUND` |
 | `TITLE_NOT_STATIC` | The meta's `title` is not a static string, so the screen name falls back. The import itself continues |
 | `OPAQUE_EXPRESSION` | An expression that cannot be read statically, such as `{items.map(...)}` or a conditional. That node is dropped |
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
