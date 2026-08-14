@@ -30,8 +30,8 @@ For React + TypeScript projects. The registry is built from TypeScript types, an
 5. **Implementation** — the approved Story becomes a real page. For a Yosegi-generated Story it also
    emits implementation context: imports to paste, props in use, slot structure, and wiring to do.
 
-Measured on a production design system: 265 components from 120 files in 4.2 seconds, 98.9% with
-props read from types, deterministic output. See [`docs/registry.md`](./docs/registry.md).
+Measured on a production design system: 278 components from 120 files in about 4 seconds, 98.9%
+with props read from types, deterministic output. See [`docs/registry.md`](./docs/registry.md).
 
 ## What you use it for
 

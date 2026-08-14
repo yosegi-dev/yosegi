@@ -33,7 +33,7 @@ features:
 
 ## Measured on a production design system
 
-265 components from 120 files in 4.2 seconds, 98.9% with props read from types, deterministic
+278 components from 120 files in about 4 seconds, 98.9% with props read from types, deterministic
 output. How types become a catalog, and what the numbers mean:
 [Component Registry](./registry.md). What the registry changes in an agent's output, measured
 across four UI libraries: [Benchmark](./benchmark.md).

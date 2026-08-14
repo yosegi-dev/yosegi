@@ -30,7 +30,7 @@ React + TypeScript のプロジェクト向け。Component Registry は TypeScri
 5. **実装** — 承認された Story を実ページにする。Yosegi が生成した Story であれば実装コンテキスト
    （貼れる import 文・使用 props・slot 構造・残っている結線）も出せる。
 
-実運用の React デザインシステムでの実測: 120 ファイルから 265 コンポーネントを 4.2 秒、98.9% は
+実運用の React デザインシステムでの実測: 120 ファイルから 278 コンポーネントを約 4 秒、98.9% は
 props まで型から取得、出力は決定的。詳細は [`docs/ja/registry.md`](./docs/ja/registry.md)。
 
 ## 使いどころ
