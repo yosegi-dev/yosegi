@@ -18,15 +18,11 @@ renamed variants, invented its own prop vocabulary, modeled state through a runt
 domain-specific enums gains the most, because none of that is guessable from general React
 knowledge.
 
-On synthetic hosts built to diverge this way — one product layer implemented identically on four
-UI libraries, measured 2026-08-13/14 — an agent given only the screen spec produced 24–36 type
-errors per screen, and two of the four screens crash at render. Supplying the API through any
-carrier — the source, the compiled package's `.d.ts`, or the registry — took the same agent to
-zero type errors on every run; the registry is not more correct than the alternatives, it is
-the smallest read at design-system scale (a third of the declarations a package ships, at 240
-components). The shared blind spot of every type-level carrier, registry included, is rendering
-conventions the types cannot express. Tables, method, corrections, and what the design does not
-show: [Benchmark](./benchmark.md).
+This is measured on synthetic hosts built to diverge exactly this way. The shape of the result:
+an agent given only a screen spec invents the API and fails; given any carrier of the API — the
+source, a compiled package's `.d.ts`, or the registry — it produces the same clean screen, and
+the registry is the smallest of the three reads at design-system scale. Numbers, method, and
+limits: [Benchmark](./benchmark.md).
 
 ## Three sources, three roles
 
