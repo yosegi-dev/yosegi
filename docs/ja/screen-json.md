@@ -3,9 +3,10 @@
 [English](../screen-json.md) | 日本語
 
 Yosegi が Story へ変換する画面ツリー。`screen generate` は何かを書き出す前にこれを Component
-Registry と突き合わせて検証するので、このページは書き手（多くはエージェント）向けの仕様書になる。
+Registry と突き合わせて検証するので、このページは書き手（多くはエージェント）向けの仕様書になり
+ます。
 
-Screen JSON は中間表現。一時ファイルとして扱ってよく、成果物ではない。
+Screen JSON は中間表現。一時ファイルとして扱ってよく、成果物ではありません。
 
 ## 形
 
@@ -63,31 +64,31 @@ Screen JSON は中間表現。一時ファイルとして扱ってよく、成�
 | `fixtures` | いいえ | モックデータ: `{ "<名前>": <任意の JSON 値> }`。[fixtures](#fixtures) を参照 |
 | `variants` | いいえ | `root` への名前付き差分で表す画面状態。[variants](#variants) を参照 |
 
-必須フィールドの欠落は検証の警告ではなく `INVALID_REQUEST` になる。
+必須フィールドの欠落は検証の警告ではなく `INVALID_REQUEST` になります。
 
 ScreenNode は `{ id, component, props, slots }` で、`props` と `slots` は空（`{}`）でも必須。ノード
 の `id` は画面全体で一意であること。`slots.children` は JSX の children になり、それ以外の slot 名は
-prop として渡される。
+prop として渡されます。
 
 ## コンポーネント id
 
-型から作られた Registry の id は `<projectRoot からのモジュールパス>#<exportName>` の形を取る。
+型から作られた Registry の id は `<projectRoot からのモジュールパス>#<exportName>` の形を取ります。
 
 ```
 app/components/ui/button#Button
 app/components/ui/card#CardHeader
 ```
 
-この id をそのまま `component` に書く。1 ファイルが複数のコンポーネントを export する場合（`Card` /
-`CardHeader` / `CardBody`）でも一意に定まるのはこの形だけで、export 名だけでは区別できない。
-`CardHeader` とだけ書くと `COMPONENT_NOT_FOUND` になり、候補として完全な id が返る。
+この id をそのまま `component` に書きます。1 ファイルが複数のコンポーネントを export する場合
+（`Card` / `CardHeader` / `CardBody`）でも一意に定まるのはこの形だけで、export 名だけでは区別でき
+ません。`CardHeader` とだけ書くと `COMPONENT_NOT_FOUND` になり、候補として完全な id が返ります。
 
-`--index` 単独モードは互換のため短い id（`Button`）のまま。[Component Registry](./registry.md)
-を参照。
+`--index` 単独モードは互換のため短い id（`Button`）のままです。[Component Registry](./registry.md)
+を参照してください。
 
 ## 合成プリミティブ
 
-Registry に無くても使える構造用のコンポーネント。import を必要としない。
+Registry に無くても使える構造用のコンポーネント。import を必要としません。
 
 | id | props | 出力 |
 | --- | --- | --- |
@@ -95,20 +96,20 @@ Registry に無くても使える構造用のコンポーネント。import を�
 | `Box` | `className` | `<div className=...>`（`slots.children` を持てる） |
 | `Heading` | `text` | `<h1 className="font-bold text-2xl tracking-tight">` |
 
-実コンポーネントのラベルは、その `children` slot に `Text` を置いて表現する。
+実コンポーネントのラベルは、その `children` slot に `Text` を置いて表現します。
 
-合成プリミティブは id の長さで見分ける。短い id（`"Text"`）はプリミティブを指し、ホストの
-コンポーネントは完全な id（`"app/components/typography#Text"`）を使う。唯一の例外は `--index`
-単独の Registry で、ホストの id も短いため、名前が衝突するとホストのコンポーネント側に解決される。
-ソースから作った Registry に同名のコンポーネントがある場合、検証は完全な id を候補に添えて
-`SYNTHETIC_NAME_SHADOWED` 警告を出す（ノードごとではなく名前ごとに 1 回）。プリミティブを使う
-こと自体は正当なのでエラーではない。`Heading` も同様に、見出しコンポーネントを持たないホスト
-向けの既定にすぎない。見た目は Yosegi の既定であって、ホストのタイポグラフィ定義には従わない。
+合成プリミティブは id の長さで見分けます。短い id（`"Text"`）はプリミティブを指し、ホストの
+コンポーネントは完全な id（`"app/components/typography#Text"`）を使います。唯一の例外は `--index`
+単独の Registry で、ホストの id も短いため、名前が衝突するとホストのコンポーネント側に解決され
+ます。ソースから作った Registry に同名のコンポーネントがある場合、検証は完全な id を候補に添えて
+`SYNTHETIC_NAME_SHADOWED` 警告を出します（ノードごとではなく名前ごとに 1 回）。プリミティブを使う
+こと自体は正当なのでエラーではありません。`Heading` も同様に、見出しコンポーネントを持たないホスト
+向けの既定にすぎません。見た目は Yosegi の既定であって、ホストのタイポグラフィ定義には従いません。
 
 ## bindings / events
 
-データ由来の値とイベントは `props` ではなく `bindings` / `events` に宣言する。どちらも `props` の中
-ではなく ScreenNode の直下に置くが、**形が異なる**。
+データ由来の値とイベントは `props` ではなく `bindings` / `events` に宣言します。どちらも `props` の
+中ではなく ScreenNode の直下に置きますが、**形が異なります**。
 
 | フィールド | 形 | 例 |
 | --- | --- | --- |
@@ -116,31 +117,31 @@ Registry に無くても使える構造用のコンポーネント。import を�
 | `events` | `{ "<イベント名>": { "action": "<action 名>", "arguments": { ... } } }` | `"events": { "onClick": { "action": "navigate", "arguments": { "to": "/x" } } }` |
 
 `bindings` の値は文字列そのもの。`{ "expression": "..." }` のようにオブジェクトで包むとスキーマ違反
-（`INVALID_REQUEST`。正しい形は `hints` に出る）。`events` の `arguments` は省略できる。
+です（`INVALID_REQUEST`。正しい形は `hints` に出ます）。`events` の `arguments` は省略できます。
 
-どちらのキーも Manifest と突き合わせて検証される。存在しない prop を指す `bindings` のキーは
-エラー（`UNKNOWN_BINDING_TARGET`）。存在しない prop に値を書くのと同じ間違いだからである。`events`
+どちらのキーも Manifest と突き合わせて検証されます。存在しない prop を指す `bindings` のキーは
+エラー（`UNKNOWN_BINDING_TARGET`）。存在しない prop に値を書くのと同じ間違いだからです。`events`
 のキーは警告どまり（`UNKNOWN_EVENT_TARGET`）で、これは Manifest がイベントの一覧を持たず、ハンドラ
-が関数型の prop としてしか現れないため。
+が関数型の prop としてしか現れないためです。
 
-binding の宛先は prop でなければならない。型から作られた Registry では `ReactNode` の prop は prop
-ではなく **slot** になる。`children` も同様である。ノードのテキストをデータ由来にしたい場合は、その
-コンポーネントが実際に宣言している文字列の prop へ binding するか、テキストは `slots.children` へ置
-いたまま実装時に結線する。
+binding の宛先は prop でなければなりません。型から作られた Registry では `ReactNode` の prop は
+prop ではなく **slot** になります。`children` も同様です。ノードのテキストをデータ由来にしたい場合
+は、そのコンポーネントが実際に宣言している文字列の prop へ binding するか、テキストは
+`slots.children` へ置いたまま実装時に結線します。
 
-`bindings` の記述そのものは prop の型と突き合わされない。値が具体化するのは実装時だからである。
-一方、`props` に書いたモック値は binding の有無にかかわらず通常どおり検証される。binding が検証を
-免除することはない。
+`bindings` の記述そのものは prop の型と突き合わされません。値が具体化するのは実装時だからです。
+一方、`props` に書いたモック値は binding の有無にかかわらず通常どおり検証されます。binding が検証を
+免除することはありません。
 
-関数型の prop に値は書けない。`FUNCTION_PROP_VALUE` はエラーで、生成は止まる。ハンドラ名を
-文字列で書くと Story に文字列がそのまま出るためである。ハンドラは `events` に宣言する。リテラル
-では表現できない kind（`json`、`reactNode`）の prop には値を書けるが、形は検証されないので警告に
-とどまる（`NOT_EDITABLE_PROP_VALUE`）。ソースから作った Registry はその種類の prop を
-not-editable にする。`--metadata` で宣言した同種の prop にその印が無い場合、
-値は警告なく受理される。
+関数型の prop に値は書けません。`FUNCTION_PROP_VALUE` はエラーで、生成は止まります。ハンドラ名を
+文字列で書くと Story に文字列がそのまま出るためです。ハンドラは `events` に宣言します。リテラル
+では表現できない kind（`json`、`reactNode`）の prop には値を書けますが、形は検証されないので警告に
+とどまります（`NOT_EDITABLE_PROP_VALUE`）。ソースから作った Registry はその種類の prop を
+not-editable にします。`--metadata` で宣言した同種の prop にその印が無い場合、
+値は警告なく受理されます。
 
 いずれの宣言も、意図を JSON で載せた申し送りコメントとして生成物の Story に残り、`story import` が
-読み戻す。
+読み戻します。
 
 ```tsx
 {/* TODO(yosegi): {"bindings":{"title":"segment.name"}} */}
@@ -149,20 +150,20 @@ not-editable にする。`--metadata` で宣言した同種の prop にその印
 
 ### binding はモックの値ではない
 
-binding は「実装時にどこから値が来るか」の宣言であって、モックが表示できる値は持たない。同名の
-[fixture](#fixtures) が値を供給する場合だけが例外になる。fixture が無ければ、optional な prop は
-prop が出力されないだけでモックは描画できる。**required** な prop の場合、エミッタは prop を落とさ
-ずに式そのものを JSX へ書き（`rows={customers}`）、検証は `BOUND_REQUIRED_PROP` を警告する。その名
-前は Story に存在しないので、ホストの型検査はそこで止まる。binding の先頭と同じ名前の fixture を宣
-言するか、`props` にモック値を与え、binding は意図として残す。例外は required なハンドラで、何もし
-ない `() => {}` が埋められるため `events` への宣言だけでよい。
+binding は「実装時にどこから値が来るか」の宣言であって、モックが表示できる値は持ちません。同名の
+[fixture](#fixtures) が値を供給する場合だけが例外になります。fixture が無ければ、optional な prop は
+prop が出力されないだけでモックは描画できます。**required** な prop の場合、エミッタは prop を落とさ
+ずに式そのものを JSX へ書き（`rows={customers}`）、検証は `BOUND_REQUIRED_PROP` を警告します。その名
+前は Story に存在しないので、ホストの型検査はそこで止まります。binding の先頭と同じ名前の fixture を
+宣言するか、`props` にモック値を与え、binding は意図として残します。例外は required なハンドラで、何
+もしない `() => {}` が埋められるため `events` への宣言だけでかまいません。
 
 ## fixtures
 
 `fixtures` は画面のモックデータ層。名前付きの JSON 値で、生成される Story では import と meta の
-間に、書いた順で、トップレベルの `const <名前> = <値>;` 宣言になる。式が fixture 名から始まる
-binding は、実在する値への参照になる。モックが表示する値と実装が置き換える結線先を、1 つの宣言が
-両方運ぶ。
+間に、書いた順で、トップレベルの `const <名前> = <値>;` 宣言になります。式が fixture 名から始まる
+binding は、実在する値への参照になります。モックが表示する値と実装が置き換える結線先を、1 つの宣言が
+両方運びます。
 
 ```json
 {
@@ -174,27 +175,27 @@ binding は、実在する値への参照になる。モックが表示する値
 }
 ```
 
-これは `const customers = [...]` と `rows={customers}` を出力する。値が実在するため、binding は
-optional な prop でも JSX へ書かれる。required な prop で `BOUND_REQUIRED_PROP` 警告が消えるのも
-同じ理由である。`story import` は const を `fixtures` へ復元するので、往復は無損失。参照元の
-binding を持たない fixture は、出力こそされるが `UNUSED_FIXTURE` 警告が付く。
+これは `const customers = [...]` と `rows={customers}` を出力します。値が実在するため、binding は
+optional な prop でも JSX へ書かれます。required な prop で `BOUND_REQUIRED_PROP` 警告が消えるのも
+同じ理由です。`story import` は const を `fixtures` へ復元するので、往復は無損失です。参照元の
+binding を持たない fixture は、出力こそされますが `UNUSED_FIXTURE` 警告が付きます。
 
-fixture 名は JavaScript の識別子であること。また `meta` / `Meta` / `StoryObj` は使えない
+fixture 名は JavaScript の識別子であること。また `meta` / `Meta` / `StoryObj` は使えません
 （スキーマ違反、`INVALID_REQUEST`）。これらは生成される Story が自ら宣言する名前で、binding が
-書かれたとおりに参照する以上、fixture の const はリネームできないからである。Story の export 名
-（`Default`、または `--story-name`）と同じ名前は生成時に弾かれる。fixture 名と衝突する
-コンポーネント import はサフィックス付きの別名へ退避する。
+書かれたとおりに参照する以上、fixture の const はリネームできないからです。Story の export 名
+（`Default`、または `--story-name`）と同じ名前は生成時に弾かれます。fixture 名と衝突する
+コンポーネント import はサフィックス付きの別名へ退避します。
 
 fixtures が持てるのは JSON だけ。JSON の形を持たない値（テーブルインスタンス、コンポーネント参照、
-関数）は依然として表現できない。そうした画面は Story を直接書く。
+関数）は依然として表現できません。そうした画面は Story を直接書きます。
 
 ## variants
 
-`variants` は画面のほかの状態（ローディング、エラー、空）を、`root` への名前付き差分として表現す
-る。生成時に各エントリの `operations` がベースの木へ適用され、その結果が同じファイル内の追加の
-`export const <name>: Story` になる。1 つの Story モジュールが全状態を運び、レビュアーは Storybook
-でそれらを並べて見られる。import・fixtures・meta は共有され、`description` はその variant の
-export 直上の JSDoc になる。
+`variants` は画面のほかの状態（ローディング、エラー、空）を、`root` への名前付き差分として表現し
+ます。生成時に各エントリの `operations` がベースの木へ適用され、その結果が同じファイル内の追加の
+`export const <name>: Story` になります。1 つの Story モジュールが全状態を運び、レビュアーは
+Storybook でそれらを並べて見られます。import・fixtures・meta は共有され、`description` はその
+variant の export 直上の JSDoc になります。
 
 ```json
 {
@@ -216,12 +217,13 @@ export 直上の JSDoc になる。
 }
 ```
 
-この例は [fixtures](#fixtures) の画面の続きで、その画面ではルートが `table` ノード自身になる。
+この例は [fixtures](#fixtures) の画面の続きで、その画面ではルートが `table` ノード自身になります。
 `removeNode` はルートを対象にできない（`VARIANT_OPERATION_FAILED`）ため、空状態は代わりに
-`rows: []` を設定する（`props` の値は binding より優先される）。ルートがレイアウトコンテナの画面
-なら、子ノードの削除でも空状態を表現できる。
+`rows: []` を設定します（`props` の値は binding より優先されます）。ルートがレイアウトコンテナの
+画面なら、子ノードの削除でも空状態を表現できます。
 
-operation は `screen apply` と MCP ツール `apply_screen_operations` が受け取るのと同じ形をしている。
+operation は `screen apply` と MCP ツール `apply_screen_operations` が受け取るのと同じ形をして
+います。
 
 | `type` | フィールド | 効果 |
 | --- | --- | --- |
@@ -232,40 +234,40 @@ operation は `screen apply` と MCP ツール `apply_screen_operations` が受�
 | `setProps` / `setBinding` / `setEvent` | `nodeId`, `props` / `bindings` / `events`, `merge?` | 既存のレコードへマージする。`merge: false` は置き換える |
 | `duplicateNode` | `nodeId`, `newId?` | id を振り直した複製をノードの直後へ挿入する |
 
-`name` は export の識別子になるため、fixture 名と同じ規則に従う。JavaScript の識別子であること、
+`name` は export の識別子になるため、fixture 名と同じ規則に従います。JavaScript の識別子であること、
 `meta` / `Meta` / `StoryObj` でないこと、variant 同士で一意であること、fixture 名と同じでないこと
 （いずれも `INVALID_REQUEST`）。ベースの Story の export 名（`Default`、または `--story-name`）と
-同じ名前は生成時に弾かれる。
+同じ名前は生成時に弾かれます。
 
-検証はすべての variant に及ぶ。適用後の木がベースと同じように検証され、その issue は variant 名を
-持つ `variant` フィールドを運ぶ。`path` は operations 適用**後**の木を指す。適用できない operation
-（ベースの木に無い `nodeId` など）は `VARIANT_OPERATION_FAILED` になる。ベースから受け継いだだけの
-issue はベース側で 1 回だけ報告される。
+検証はすべての variant に及びます。適用後の木がベースと同じように検証され、その issue は variant 名
+を持つ `variant` フィールドを運びます。`path` は operations 適用**後**の木を指します。適用できない
+operation（ベースの木に無い `nodeId` など）は `VARIANT_OPERATION_FAILED` になります。ベースから受け
+継いだだけの issue はベース側で 1 回だけ報告されます。
 
-`repeat` と同じく、variants は往復で生き残らない。`story import` は 1 回の実行で 1 つの export を
-読む（どれを読むかは `--story-name` で選ぶ）。残りの export は `MULTIPLE_STORIES` 警告で名指しされ、
-差分が `variants` へ再構成されることはない。
+`repeat` と同じく、variants は往復で生き残りません。`story import` は 1 回の実行で 1 つの export を
+読みます（どれを読むかは `--story-name` で選ぶ）。残りの export は `MULTIPLE_STORIES` 警告で名指し
+され、差分が `variants` へ再構成されることはありません。
 
 ## when / each / repeat
 
-ノードは `when`（条件表示）と `each`（繰り返し）も持てる。どちらも文法の無い自由記述の文字列で、
-検証もされない。どちらも JSX は生成しない。宣言自体は `bindings` / `events` と同じ申し送り
-コメントに載る。
+ノードは `when`（条件表示）と `each`（繰り返し）も持てます。どちらも文法の無い自由記述の文字列で、
+検証もされません。どちらも JSX は生成しません。宣言自体は `bindings` / `events` と同じ申し送り
+コメントに載ります。
 
 ```tsx
 {/* TODO(yosegi): {"when":"customers.length > 0","each":"customer in customers"} */}
 ```
 
 `repeat`（2〜20 の整数）は `each` の構造版で、生成時にサブツリーがその数の複製へ展開されるため、
-手でノードを複製しなくてもモックは一覧に見える。両者は独立していて、たいてい併用する。`each` は
-実装時に**何が**繰り返されるかを、`repeat` はモックが複製を何個見せるかを言う。Screen JSON 上は
-1 ノードのまま。複製の id には `-1`〜`-N` サフィックスが付き、サフィックス後の id が既存ノードの
-id と衝突すると `DUPLICATE_NODE_ID` エラーになる。ルートの `repeat` は弾かれ（`REPEAT_ON_ROOT`）、
-値域外は `REPEAT_OUT_OF_RANGE` になる。
+手でノードを複製しなくてもモックは一覧に見えます。両者は独立していて、たいてい併用します。`each` は
+実装時に**何が**繰り返されるかを、`repeat` はモックが複製を何個見せるかを言います。Screen JSON 上は
+1 ノードのままです。複製の id には `-1`〜`-N` サフィックスが付き、サフィックス後の id が既存ノードの
+id と衝突すると `DUPLICATE_NODE_ID` エラーになります。ルートの `repeat` は弾かれ
+（`REPEAT_ON_ROOT`）、値域外は `REPEAT_OUT_OF_RANGE` になります。
 
-fixtures と違い、`repeat` は往復で生き残らない。生成された Story は展開済みの複製を素の JSX として
-持ち、`story import` はそれを `repeat` フィールドの無い個別ノードとして読み戻す。取り込んだ Story
-から JSON の経路に入り直す場合は自分で畳み直すこと。
+fixtures と違い、`repeat` は往復で生き残りません。生成された Story は展開済みの複製を素の JSX として
+持ち、`story import` はそれを `repeat` フィールドの無い個別ノードとして読み戻します。取り込んだ
+Story から JSON の経路に入り直す場合は自分で畳み直してください。
 
 ## 次に読む
 

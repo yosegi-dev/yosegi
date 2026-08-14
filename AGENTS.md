@@ -100,7 +100,8 @@ Each page owns one subject: `README.md` is the face, `docs/cli.md` is a flag ref
 else, `docs/screen-json.md` is the format spec, and a concept is explained only where it is owned.
 Prose is a command block plus one line of purpose — cut anything that does not change what the reader
 does next. Stack package managers npm / pnpm / yarn / bun, and quote globs. Every `docs/x.md` has a
-`docs/ja/x.md` twin with the same headings, code blocks, and tables, changed in the same commit. No host
+`docs/ja/x.md` twin with the same headings, code blocks, and tables, changed in the same commit, and
+the Japanese prose is written in the polite です / ます register. No host
 project names, host-specific component names, or absolute local paths, and `skills/yosegi/` stays
 self-contained. Full version, terminology list, and the checks to run before committing:
 [`docs/conventions.md`](./docs/conventions.md).

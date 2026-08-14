@@ -2,7 +2,7 @@
 
 [English](../cli.md) | 日本語
 
-全コマンドとフラグ。引数なしで `yosegi` を実行すると同じ一覧が短い形で出る。
+全コマンドとフラグ。引数なしで `yosegi` を実行すると同じ一覧が短い形で出ます。
 
 ## CLI の呼び出し方
 
@@ -17,8 +17,9 @@ yarn add -D @yosegi/yosegi
 bun add -d @yosegi/yosegi
 ```
 
-以下の `yosegi` は `npx yosegi`（`pnpm yosegi`、`yarn yosegi`、`bunx yosegi`）を指す。動作要件は
-Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情が異なる（[開発](./development.md)）。
+以下の `yosegi` は `npx yosegi`（`pnpm yosegi`、`yarn yosegi`、`bunx yosegi`）を指します。動作要件
+は Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情が異なります
+（[開発](./development.md)）。
 
 ## 全コマンド共通のオプション
 
@@ -26,17 +27,17 @@ Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情�
 | --- | --- | --- | --- |
 | `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ作成する。全コマンドへ同じ値を渡す |
 
-繰り返し指定できるフラグ（`--source`、`--query`）はカンマ区切りも受け付ける。glob は必ず
-クォートする（しないと CLI へ届く前にシェルが展開する）。
+繰り返し指定できるフラグ（`--source`、`--query`）はカンマ区切りも受け付けます。glob は必ず
+クォートします（しないと CLI へ届く前にシェルが展開します）。
 
 エラーは `error.code` を持つ JSON で返り、終了コードは 1。未知のコマンド・フラグは近い候補付きで
-拒否され（`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`）、必須引数の不足は `MISSING_ARGUMENT` を返す。
+拒否され（`UNKNOWN_COMMAND` / `UNKNOWN_FLAG`）、必須引数の不足は `MISSING_ARGUMENT` を返します。
 `--help`（`-h`）は usage を表示して終了コード 0、`--version` は `{ "version", "cliPath" }` を返して
 終了コード 0。
 
 ## `registry build`
 
-ホストの TypeScript の型から Component Registry を作る。
+ホストの TypeScript の型から Component Registry を作ります。
 
 ```sh
 yosegi registry build --source <glob> --tsconfig <path> [options]
@@ -64,32 +65,33 @@ yosegi registry build \
   --data-dir .yosegi
 ```
 
-実行の最後に統計が出る。`files: 0` は glob が 1 件も拾えなかったということ（警告も出るが、合成プリミ
-ティブ 3 件入りの Registry はそのまま書き出される）。`componentCandidates` は React コンポーネントと
-判定した export の件数。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆っていない（警告も
-出る。`.tsx` を含んでいるか確認する）。`withNodeSlots: 0` かつ `anyShapedProps` が高い場合、
-`--tsconfig` から `@types/react` が解決できていない。ReactNode の props は `json` / `shape: any` に
-劣化し、slot は 1 つも検出されない（警告が直し方を示す）。`propsUnreadable` が高い場合、渡した
-tsconfig がホストのものではない可能性が高い。`props` に対する `documentedProps` は JSDoc の付いてい
-る props の割合。`undocumentedRequiredOpaqueProps` は「必須で、リテラルでは値を書けず、どこにも説明
-が無い」props の件数。
+実行の最後に統計が出ます。`files: 0` は glob が 1 件も拾えなかったということ（警告も出ますが、合成プ
+リミティブ 3 件入りの Registry はそのまま書き出されます）。`componentCandidates` は React コンポー
+ネントと判定した export の件数。`files` が正なのに 0 なら glob がコンポーネントを 1 つも覆っていま
+せん（警告も出ます。`.tsx` を含んでいるか確認してください）。`withNodeSlots: 0` かつ
+`anyShapedProps` が高い場合、`--tsconfig` から `@types/react` が解決できていません。ReactNode の
+props は `json` / `shape: any` に劣化し、slot は 1 つも検出されません（警告が直し方を示します）。
+`propsUnreadable` が高い場合、渡した tsconfig がホストのものではない可能性が高いです。`props` に
+対する `documentedProps` は JSDoc の付いている props の割合。
+`undocumentedRequiredOpaqueProps` は「必須で、リテラルでは値を書けず、どこにも説明が無い」props の
+件数。
 
-`--report` の `undocumented` セクションがその props を列挙する。1 件は
+`--report` の `undocumented` セクションがその props を列挙します。1 件は
 `{ component, prop, kind, priority, recommended, shape? }` の形。並びは `required-opaque` /
 `optional-opaque` / `required-literal` / `optional-literal` の順で、上限 100 件、残りは `omitted`
-に件数だけ残る。上から潰していけばよい。
+に件数だけ残ります。上から潰していけば十分です。
 [Component Registry](./registry.md#ホスト側が-inspect-を有用にするためにできること) を参照。
 
 import specifier はホストの tsconfig の `paths` から解決するので、Registry は projectRoot 相対
-パスではなくホストが書く 1 行（`~/components/button`）を報告する。alias が tsconfig の外に
-ある場合だけ `--import-map "./app=~"` を渡す。
+パスではなくホストが書く 1 行（`~/components/button`）を報告します。alias が tsconfig の外に
+ある場合だけ `--import-map "./app=~"` を渡します。
 
-`--source` を省くと `--index` 単独で作る。id は短いまま（`Button`）になり、props は `--metadata`
-頼りになる。[Component Registry](./registry.md) を参照。
+`--source` を省くと `--index` 単独で作ります。id は短いまま（`Button`）になり、props は
+`--metadata` 頼りになります。[Component Registry](./registry.md) を参照。
 
 ## `registry metadata`
 
-ホストの cva（class-variance-authority）の variants から `--metadata` ファイルの雛形を作る。
+ホストの cva（class-variance-authority）の variants から `--metadata` ファイルの雛形を作ります。
 
 ```sh
 yosegi registry metadata <componentId> [<componentId> ...] --tsconfig <path> [options]
@@ -107,12 +109,12 @@ yosegi registry metadata "app/components/ui/badge#Badge" \
   --tsconfig ./tsconfig.json --out tmp/metadata.json
 ```
 
-`<module path>#<name>` 形式の id はそのパスから解決するので `--source` は省ける。雛形に入るのは cva
-の variants だけで、variants でない props は入らない。実行のたびに `Note:` がそう告げる。
+`<module path>#<name>` 形式の id はそのパスから解決するので `--source` は省けます。雛形に入るのは
+cva の variants だけで、variants でない props は入りません。実行のたびに `Note:` がそう告げます。
 
 ## `registry status`
 
-Registry がホストのソースに対して今も最新かどうかを、作り直さずに報告する。
+Registry がホストのソースに対して今も最新かどうかを、作り直さずに報告します。
 
 ```sh
 yosegi registry status [options]
@@ -127,15 +129,15 @@ yosegi registry status --data-dir .yosegi
 ```
 
 記録済みの inputs から Registry の内容ハッシュを再計算し、`source: current` または `source: stale`
-（作り直しコマンド付き）を返す。inputs が記録されていない Registry や `--version` で固定した
-Registry は `source: unknown` を返す。再計算する元が無いため。2 行目の `index:` 行は Storybook
-由来の層を同じ形式で報告する。ビルド後に recommended フラグや Story リンクが変わっていれば
-`stale`、記録した index を読み直せなければ理由付きの `unknown` になる（dev サーバに届かない場合
-など）。
+（作り直しコマンド付き）を返します。inputs が記録されていない Registry や `--version` で固定した
+Registry は `source: unknown` を返します。再計算する元が無いためです。2 行目の `index:` 行は
+Storybook 由来の層を同じ形式で報告します。ビルド後に recommended フラグや Story リンクが変わって
+いれば `stale`、記録した index を読み直せなければ理由付きの `unknown` になります（dev サーバに
+届かない場合など）。
 
 ## `component list`
 
-登録されているコンポーネントを一覧する。
+登録されているコンポーネントを一覧します。
 
 ```sh
 yosegi component list [options]
@@ -152,25 +154,25 @@ yosegi component list [options]
 yosegi component list --query card --data-dir .yosegi
 ```
 
-見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出る。この行は結果を左
-右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープリン
-クを再現できる。`--json` が返すフィールドは 8 つ。`version`、`generatedAt`、`builtWith`（生成した
-Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
+見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出ます。この行は結果を
+左右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープリ
+ンクを再現できます。`--json` が返すフィールドは 8 つです。`version`、`generatedAt`、`builtWith`
+（生成した Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
 記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの
-Yosegi が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出す。Registry が実際に古く
-なっているかどうかは、この見出しを目で判断せず `registry status`（上記）で確認する。
+Yosegi が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出します。Registry が実際に
+古くなっているかどうかは、この見出しを目で判断せず `registry status`（上記）で確認します。
 
 ## `component inspect`
 
 1 コンポーネントの import 文・props（type・required・default・enum の選択肢・description）・slots を
-返す。登録されていない id には最も近い候補が返る。
+返します。登録されていない id には最も近い候補が返ります。
 
 ```sh
 yosegi component inspect <componentId> [<componentId> ...] [--json]
 ```
 
-複数の id を 1 回で渡せる。来歴ヘッダは全体の上に 1 度だけ出て、`--json` は単一オブジェクトでは
-なく配列を返す。複数のうち未知の id があれば、残りを出力した上で exit 1 になる。
+複数の id を 1 回で渡せます。来歴ヘッダは全体の上に 1 度だけ出て、`--json` は単一オブジェクトでは
+なく配列を返します。複数のうち未知の id があれば、残りを出力した上で exit 1 になります。
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
@@ -183,8 +185,8 @@ yosegi component inspect "app/components/ui/button#Button" --data-dir .yosegi
 
 ## `screen generate`
 
-Screen JSON を Registry と突き合わせて検証し、Story（CSF）を書き出す。`--target component` を渡す
-と、素の React コンポーネントファイルを書き出す。
+Screen JSON を Registry と突き合わせて検証し、Story（CSF）を書き出します。`--target component` を
+渡すと、素の React コンポーネントファイルを書き出します。
 
 ```sh
 yosegi screen generate <screen.json> --out <file.stories.tsx> [options]
@@ -210,18 +212,18 @@ yosegi screen generate tmp/screen.json \
   --data-dir .yosegi
 ```
 
-検証エラーがあれば何も書かず、エラーの配列と終了コード 1 が返る。警告は `Wrote <path>` の後に出て、
-生成は止めない。code の一覧は[ワークフロー](./workflows.md#検証エラーの-code)にある。
+検証エラーがあれば何も書かず、エラーの配列と終了コード 1 が返ります。警告は `Wrote <path>` の後に
+出て、生成は止めません。code の一覧は[ワークフロー](./workflows.md#検証エラーの-code)にあります。
 
 `--target component` は、import 群・fixture の const・画面の状態ごと（ベースと各 variant）の
-export された関数 1 つずつを書き出す。このとき `--out` は `.tsx` で終わる必要がある
+export された関数 1 つずつを書き出します。このとき `--out` は `.tsx` で終わる必要があります
 （`.stories.tsx` を除く）。CSF 専用のフラグ（`--title`・`--framework`・
-`--meta-template`）は無視されず、`INVALID_ARGUMENT` で拒否される。`story import` が読める
-のは Story だけなので、コンポーネントファイルは読み戻せない。
+`--meta-template`）は無視されず、`INVALID_ARGUMENT` で拒否されます。`story import` が読める
+のは Story だけなので、コンポーネントファイルは読み戻せません。
 
 ## `screen context`
 
-画面を実装へ転換するためのコンテキストを JSON で出す。
+画面を実装へ転換するためのコンテキストを JSON で出します。
 
 ```sh
 yosegi screen context <screen.json> [options]
@@ -240,11 +242,11 @@ yosegi screen context tmp/screen.json \
   --import-map "./app=~" --route /customers --data-dir .yosegi
 ```
 
-出力の読み方は[ワークフロー](./workflows.md#下流-story-を実装へ転換する)にある。
+出力の読み方は[ワークフロー](./workflows.md#下流-story-を実装へ転換する)にあります。
 
 ## `story import`
 
-Story を Screen JSON へ読み戻す。解釈できなかった箇所は `warnings` に載る。
+Story を Screen JSON へ読み戻します。解釈できなかった箇所は `warnings` に載ります。
 
 ```sh
 yosegi story import <file.stories.tsx> [options]
@@ -264,13 +266,13 @@ yosegi story import app/components/screens/customer-list.stories.tsx \
   --import-map "./app=~" --out tmp/screen.json --data-dir .yosegi
 ```
 
-警告の code は[ワークフロー](./workflows.md#story-import-の警告)にある。
+警告の code は[ワークフロー](./workflows.md#story-import-の警告)にあります。
 
 ## 画面ストアのコマンド
 
-`--data-dir` に保存された画面を、ファイルパスではなく id で扱う。`screen generate` と
-`screen context` はファイルを直接読むので、ストアなしでも使える。ファイルパスを持たない MCP ツールの
-ために存在する。
+`--data-dir` に保存された画面を、ファイルパスではなく id で扱います。`screen generate` と
+`screen context` はファイルを直接読むので、ストアなしでも使えます。ファイルパスを持たない MCP
+ツールのために存在します。
 
 ```sh
 yosegi screen push <file.json>              # 保存: 新規作成、または revision による更新
@@ -281,12 +283,12 @@ yosegi screen apply <screenId> <operations.json>
 ```
 
 `screen validate` の対象は保存済みの画面だけ。Screen JSON ファイルは `screen generate` が実行の
-一部として検証する。
+一部として検証します。
 
 ## `mcp`
 
-MCP ツールを stdio で提供し、クライアントが切断するまで動き続ける。他のコマンドと同様
-`--data-dir` を取る。
+MCP ツールを stdio で提供し、クライアントが切断するまで動き続けます。他のコマンドと同様
+`--data-dir` を取ります。
 
 ```sh
 claude mcp add yosegi -- npx yosegi mcp
@@ -306,13 +308,13 @@ claude mcp add yosegi -- npx yosegi mcp
 | `apply_screen_operations` | `screenId`, `baseRevision`, `operations` | `screen apply` |
 | `duplicate_screen` | `screenId`, `newId`, `newName` | — |
 
-`generate_story` が取る `root` は ScreenNode 単体であって Screen JSON 全体ではない。`importMap` は
-CLI と同じ文字列で、オブジェクトではない。`target: "component"` は CSF の代わりに素のコンポーネント
-ファイルを返す。`title`（story ターゲットでは必須）と `framework` はこのターゲットには適用されず、
-拒否される。`search_components` は `limit`（既定 50、上限 200）で打ち
-切った要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返す。
-`registry build`・`registry metadata`・`story import` は CLI にしか無く、`--meta-template` に相当す
-る MCP の口も無い。
+`generate_story` が取る `root` は ScreenNode 単体であって Screen JSON 全体ではありません。
+`importMap` は CLI と同じ文字列で、オブジェクトではありません。`target: "component"` は CSF の
+代わりに素のコンポーネントファイルを返します。`title`（story ターゲットでは必須）と `framework` は
+このターゲットには適用されず、拒否されます。`search_components` は `limit`（既定 50、上限 200）で
+打ち切った要約を `total` / `truncated` とともに返し、`detail: "full"` で完全な Manifest を返し
+ます。`registry build`・`registry metadata`・`story import` は CLI にしかなく、`--meta-template`
+に相当する MCP の口もありません。
 
 ## 次に読む
 
