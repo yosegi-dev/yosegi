@@ -1,8 +1,12 @@
 # Reading the registry
 
-The registry is the only thing that knows what the host's components are actually called and what
-they actually take. Read it before you write a component, whichever route you take. Everything here
-applies equally to a hand-written Story and to a Screen JSON.
+The registry is where you confirm what the host's components are actually called and what they
+actually take, without reading the host's source. Read it before you write a component, whichever
+route you take. Everything here applies equally to a hand-written Story and to a Screen JSON.
+
+One limit to know: the registry carries what the types carry. What a component *does* with a value
+at render time — prepend a `@` to a handle, format a date, pluralize a count — is invisible to it;
+a Story or the source is where that shows.
 
 ## Narrowing down
 

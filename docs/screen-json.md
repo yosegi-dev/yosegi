@@ -100,11 +100,13 @@ Structural components usable without being in the registry. They need no import.
 
 Express the label of a real component by placing a `Text` in its `children` slot.
 
-Synthetic primitives are told apart by id length: the short id (`"Text"`) always means the
+Synthetic primitives are told apart by id length: the short id (`"Text"`) means the
 primitive, and the host's own components use the full id
-(`"app/components/typography#Text"`). When the registry also holds a component of that name,
-validation emits a `SYNTHETIC_NAME_SHADOWED` warning carrying the full id as a candidate — using a
-primitive is legitimate, so it is not an error. `Heading` is likewise only a default for hosts that
+(`"app/components/typography#Text"`). The one exception is an `--index`-only registry, whose host
+ids are short too — there a colliding name resolves to the host's component. When a source-built
+registry also holds a component of that name, validation emits a `SYNTHETIC_NAME_SHADOWED` warning
+(once per name, not per node) carrying the full id as a candidate — using a primitive is
+legitimate, so it is not an error. `Heading` is likewise only a default for hosts that
 have none of their own; its appearance is a Yosegi default and ignores the host's typography.
 
 ## bindings / events
@@ -131,13 +133,16 @@ rather than a prop — including `children`. To make a node's text come from dat
 the component actually declares, or leave the text in `slots.children` and wire it up during
 implementation.
 
-A prop that carries a `bindings` entry is exempt from type validation, since its value only becomes
-concrete at implementation time.
+A `bindings` entry on its own is not validated against the prop's type — the value only becomes
+concrete at implementation time. A mock value written into `props` is validated as usual, binding
+or no binding; the binding does not exempt it.
 
-A value can never be written into a function-kind prop (`FUNCTION_PROP_VALUE`): a handler name
-written as a string reaches the Story as a string. Declare handlers in `events`. Other props the
-registry marks not-editable accept a value, but nothing checks its shape, so writing one warns
-(`NOT_EDITABLE_PROP_VALUE`).
+A value can never be written into a function-kind prop — `FUNCTION_PROP_VALUE` is an error and
+generation stops, because a handler name written as a string would reach the Story as a string.
+Declare handlers in `events`. A `json` / `reactNode` prop accepts a value, but nothing checks its
+shape, so writing one warns (`NOT_EDITABLE_PROP_VALUE`) — a source-built registry marks those
+kinds not-editable. A `--metadata`-declared prop of those kinds without the marking is accepted
+silently.
 
 All declarations survive in the generated Story as hand-off comments carrying the intent as JSON,
 and `story import` reads them back.

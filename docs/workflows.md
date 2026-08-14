@@ -117,7 +117,7 @@ Every error carries a machine-readable `code` and enough `suggestion` to decide 
 | code | Meaning | How to fix |
 | --- | --- | --- |
 | `COMPONENT_NOT_FOUND` | The id is not in the registry | Swap in the candidate from `suggestion`. With no candidate, search again with `component list --query` |
-| `UNKNOWN_PROP` | The component has no such prop | Correct it to the name in `suggestion`, or list the real props with `component inspect`. A node-level field (`bindings` / `events` / `when` / `each`) written inside `props` also lands here, with a `suggestion` to move it onto the node |
+| `UNKNOWN_PROP` | The component has no such prop | Correct it to the name in `suggestion`, or list the real props with `component inspect`. A node-level field (`bindings` / `events` / `when` / `each` / `repeat`) written inside `props` also lands here, with a `suggestion` to move it onto the node |
 | `UNKNOWN_BINDING_TARGET` | A `bindings` key names a prop the component does not have | Correct it to the name in `suggestion`. A `ReactNode` prop is a slot, not a prop, so it cannot be a binding target |
 | `INVALID_PROP_VALUE` | The value does not match the type or enum; the message echoes the received value | Pick from the options in `suggestion` |
 | `MISSING_REQUIRED_PROP` | A required prop is unset; the message names its kind | Supply a value (`suggestion` lists an enum's options). A binding only satisfies it when the expression is a plain identifier path |
@@ -179,12 +179,16 @@ The rest (`requirements` / `target` / `implementation` / `screen`) is supporting
 ## `story import` warnings
 
 Analysis works purely on the source AST, so any syntax whose shape is decided at runtime cannot be
-read. The import never fails as a whole; it marks the node and moves on. **Anything that produced a
+read. When no tree can be restored at all, the run ends with exit 1 and one of the codes below;
+otherwise the import marks the unreadable node and moves on. **Anything that produced a
 warning is absent from the Screen JSON**, so read the original Story for those parts. An empty
 `warnings` array proves nothing on its own — count the nodes against the Story.
 
 | code | Meaning |
 | --- | --- |
+| `STORY_NOT_FOUND` | No export with a `render` function — what a `component` + `args` Story produces — or `--story-name` named no export (the message lists the candidates). Exit 1, nothing imported |
+| `RENDER_NOT_STATIC` | The selected export's `render` cannot be read statically, or `--story-name` picked an `args`-only export. Exit 1, nothing imported |
+| `TITLE_NOT_STATIC` | The meta's `title` is not a static string; the screen name falls back and the import continues |
 | `OPAQUE_EXPRESSION` | An expression that cannot be read statically, such as `{items.map(...)}` or a conditional. That node is dropped |
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box` but the tag name is lost |

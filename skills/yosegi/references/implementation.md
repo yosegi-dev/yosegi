@@ -49,15 +49,17 @@ export default meta;
 ## The downstream limitation — read this before running anything
 
 `story import` and `screen context` exist to carry a Yosegi-generated Story into an implementation.
-**On a Story that Yosegi did not generate, they do not work**, and the failure is silent.
+**On a Story that Yosegi did not generate, they do not work**, and the failure takes one of two
+shapes depending on how the Story was written.
 
-`story import` reads the Story's source AST. Real Stories in real repositories almost never inline
-the component tree; the convention is a Story whose `render` returns a single wrapper component
-defined in a neighbouring file, because that wrapper is the thing being previewed. Measured against
-a production design system, every composed example Story in the repository imported to **exactly one
-node and zero warnings** — a Screen JSON containing the wrapper's own id and nothing else. Nothing
-in the output says the screen is missing. Feed that to `screen context` and you get a large,
-confident JSON describing one component.
+A `component` + `args` Story — the most common hand-written shape — fails loudly: there is no
+`render` to read, so the command exits 1 with `STORY_NOT_FOUND` and imports nothing.
+
+A Story whose `render` returns a single wrapper component defined in a neighbouring file fails
+silently. Measured against a production design system, every composed example Story in the
+repository imported to **exactly one node and zero warnings** — a Screen JSON containing the
+wrapper's own id and nothing else. Nothing in the output says the screen is missing. Feed that to
+`screen context` and you get a large, confident JSON describing one component.
 
 So:
 
@@ -68,8 +70,8 @@ So:
 - **Anything else, including every hand-written Story** — do not run either command. Read the Story
   and the files it imports. That is the whole of the input, and it is not hard to read; the
   commands' output would be twenty times its size and less accurate.
-- **A `--target component` file is not a Story at all** — `story import` fails on it outright with
-  `STORY_NOT_FOUND`. There is no read-back for the component target; the Screen JSON you generated
+- **A `--target component` file is not a Story at all** — `story import` fails on it with the same
+  `STORY_NOT_FOUND` an `args`-style Story returns. There is no read-back for the component target; the Screen JSON you generated
   it from is the only machine-readable form, which is why it is worth keeping.
 
 ## Recovering the Screen JSON (`story import`)

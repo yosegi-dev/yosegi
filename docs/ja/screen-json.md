@@ -97,12 +97,13 @@ Registry に無くても使える構造用のコンポーネント。import を�
 
 実コンポーネントのラベルは、その `children` slot に `Text` を置いて表現する。
 
-合成プリミティブは id の長さで見分ける。短い id（`"Text"`）は常にプリミティブを指し、ホストの
-コンポーネントは完全な id（`"app/components/typography#Text"`）を使う。同名のコンポーネントが
-Registry にもある場合、検証は完全
-な id を候補に添えた `SYNTHETIC_NAME_SHADOWED` 警告を出す。プリミティブを使うこと自体は正当なのでエ
-ラーではない。`Heading` も同様に、見出しコンポーネントを持たないホスト向けの既定にすぎない。見た目は
-Yosegi の既定であって、ホストのタイポグラフィ定義には従わない。
+合成プリミティブは id の長さで見分ける。短い id（`"Text"`）はプリミティブを指し、ホストの
+コンポーネントは完全な id（`"app/components/typography#Text"`）を使う。唯一の例外は `--index`
+単独の Registry で、ホストの id も短いため、名前が衝突するとホストのコンポーネント側に解決される。
+ソースから作った Registry に同名のコンポーネントがある場合、検証は完全な id を候補に添えて
+`SYNTHETIC_NAME_SHADOWED` 警告を出す（ノードごとではなく名前ごとに 1 回）。プリミティブを使う
+こと自体は正当なのでエラーではない。`Heading` も同様に、見出しコンポーネントを持たないホスト
+向けの既定にすぎない。見た目は Yosegi の既定であって、ホストのタイポグラフィ定義には従わない。
 
 ## bindings / events
 
@@ -127,11 +128,16 @@ binding の宛先は prop でなければならない。型から作られた Re
 コンポーネントが実際に宣言している文字列の prop へ binding するか、テキストは `slots.children` へ置
 いたまま実装時に結線する。
 
-`bindings` を持つ prop は型検証の対象外になる。値が具体化するのは実装時だからである。
+`bindings` の記述そのものは prop の型と突き合わされない。値が具体化するのは実装時だからである。
+一方、`props` に書いたモック値は binding の有無にかかわらず通常どおり検証される。binding が検証を
+免除することはない。
 
-関数型の prop に値は書けない（`FUNCTION_PROP_VALUE`）。ハンドラ名を文字列で書くと、Story には文字列
-がそのまま出るためである。ハンドラは `events` に宣言する。関数以外で Registry が not-editable と
-している prop には値を書けるが、形は検証されないので警告が出る（`NOT_EDITABLE_PROP_VALUE`）。
+関数型の prop に値は書けない。`FUNCTION_PROP_VALUE` はエラーで、生成は止まる。ハンドラ名を
+文字列で書くと Story に文字列がそのまま出るためである。ハンドラは `events` に宣言する。リテラル
+では表現できない kind（`json`、`reactNode`）の prop には値を書けるが、形は検証されないので警告に
+とどまる（`NOT_EDITABLE_PROP_VALUE`）。ソースから作った Registry はその種類の prop を
+not-editable にする。`--metadata` で宣言した同種の prop にその印が無い場合、
+値は警告なく受理される。
 
 いずれの宣言も、意図を JSON で載せた申し送りコメントとして生成物の Story に残り、`story import` が
 読み戻す。

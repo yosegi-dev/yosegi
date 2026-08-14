@@ -30,8 +30,8 @@ For React + TypeScript projects. The registry is built from TypeScript types, an
 5. **Implementation** — the approved Story becomes a real page. For a Yosegi-generated Story it also
    emits implementation context: imports to paste, props in use, slot structure, and wiring to do.
 
-Measured on a production design system: 265 components from 120 files in 4.2 seconds, 98.9% with
-props read from types, deterministic output. See [`docs/registry.md`](./docs/registry.md).
+Measured on a production design system: 278 components from 120 files in about 4 seconds, 98.9%
+with props read from types, deterministic output. See [`docs/registry.md`](./docs/registry.md).
 
 ## What you use it for
 
@@ -39,6 +39,9 @@ props read from types, deterministic output. See [`docs/registry.md`](./docs/reg
   your team reviews it in Storybook — drawn with the real components, with the real props.
 - **Stop guessing at your own API.** The agent asks the registry what a component takes instead of
   writing what the upstream library used to take.
+- **Keep the host out of the context window.** Benchmarked: the registry gets an agent to the same
+  screen as reading the source, off the smallest read of any carrier — a fifth of the source, a
+  third of a package's `.d.ts` at design-system scale ([`docs/benchmark.md`](./docs/benchmark.md)).
 - **Iterate without Figma in the loop.** What you review and what you implement are the same
   components. Figma still owns new visual design.
 
@@ -125,6 +128,7 @@ Then: *"build me a screen proposal from the existing components"*.
 | [Development](./docs/development.md) | Package layout, build, pre-publish verification |
 | [Roadmap](./docs/ROADMAP.md) | Planned work and open questions |
 | [Component Registry](./docs/registry.md) | How types become a catalog, and the measurements |
+| [Benchmark](./docs/benchmark.md) | What the registry changes in an agent's output, measured across four UI libraries |
 
 Working in this repository: [`AGENTS.md`](./AGENTS.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md),
 [documentation conventions](./docs/conventions.md).

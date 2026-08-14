@@ -18,18 +18,11 @@ renamed variants, invented its own prop vocabulary, modeled state through a runt
 domain-specific enums gains the most, because none of that is guessable from general React
 knowledge.
 
-This was measured on five synthetic fixtures built to span that range, from an unmodified shadcn/ui
-screen and a thin Next.js/Radix wrapper, through moderate customization, to a heavily diverged
-in-house system with renamed APIs and a custom runtime abstraction. The same screen was implemented
-twice per fixture — once from general React/library knowledge, once using `component inspect` — and
-checked with `tsc`. Every fixture reached zero type errors with the registry; without it, the
-near-vanilla fixtures were already at 0–1 errors, while the customized and diverged ones ranged from
-8 to 17. Raw error count is not itself a divergence measure: one diverged fixture came back with
-fewer errors than a moderately customized one simply because its screen used fewer components, even
-though its mistakes — an array where a single model was expected, a generic-tone enum standing in
-for a domain enum, wrong event names — were the deepest in kind. The fixtures are synthetic and
-built to span this spectrum on purpose; treat the shape (near-zero payoff at one end, large payoff
-at the other) as the takeaway, not a number to expect from any specific host.
+This is measured on synthetic hosts built to diverge exactly this way. The shape of the result:
+an agent given only a screen spec invents the API and fails; given any carrier of the API — the
+source, a compiled package's `.d.ts`, or the registry — it produces the same clean screen, and
+the registry is the smallest of the three reads at design-system scale. Numbers, method, and
+limits: [Benchmark](./benchmark.md).
 
 ## Three sources, three roles
 

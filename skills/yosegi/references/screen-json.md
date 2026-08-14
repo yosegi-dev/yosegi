@@ -97,11 +97,13 @@ its id instead — a synthetic primitive ignores the host's typography definitio
 
 It is not unusual for a host to have its own `Text` / `Box` / `Heading`. **They are told apart by id
 length: synthetic primitives use the short id (`"Text"`), the host's components use the full id
-(`"app/components/typography#Text"`).** A short id always means the synthetic primitive, so writing
-`"Text"` when you meant the host's `Text` silently loses the typography.
+(`"app/components/typography#Text"`).** On a source-built registry a short id means the synthetic
+primitive, so writing `"Text"` when you meant the host's `Text` silently loses the typography. On an
+`--index`-only registry host ids are short too, and a colliding name resolves to the host's
+component instead.
 
 When the registry holds a component of the same name, validation emits a `SYNTHETIC_NAME_SHADOWED`
-warning carrying the full id as a candidate. Using a synthetic primitive is legitimate, so it is not
+warning carrying the full id as a candidate (once per name, not per node). Using a synthetic primitive is legitimate, so it is not
 an error — ignore the warning when the primitive is what you meant. Putting copy inside the host's
 `Text` means nesting:
 
@@ -116,9 +118,10 @@ an error — ignore the warning when the primitive is what you meant. Putting co
 Confirm every prop with `component inspect` first; `registry.md` covers how to read it. Two points
 are specific to this route:
 
-- A prop marked `not-editable` reaches the Story unchecked and warns (`NOT_EDITABLE_PROP_VALUE`); a
-  `function`-kind prop rejects a value outright (`FUNCTION_PROP_VALUE`). Express data through
-  `bindings` and handlers through `events` instead.
+- A `function`-kind prop rejects a value outright — `FUNCTION_PROP_VALUE` is an **error** and
+  generation stops. Declare handlers through `events` (or `bindings`). A `json` / `reactNode`-kind
+  prop accepts a value but it reaches the Story unchecked — a **warning** only
+  (`NOT_EDITABLE_PROP_VALUE`); express data through `bindings` when it comes from data.
 - If `inspect` prints `Note: props could not be read from the types.`, the registry is not that
   component's real API, and every real prop you write will stop with `UNKNOWN_PROP`. Reading the
   host's source is not enough — supplement the registry with `registry build --metadata` first
@@ -165,8 +168,9 @@ The comment left in the generated Story carries the same declaration as JSON:
 {/* TODO(yosegi): {"events":{"onClick":{"action":"navigate","arguments":{"to":"/customers/new"}}}} */}
 ```
 
-A prop that has a `bindings` entry is exempt from type validation (it becomes concrete at
-implementation time).
+A `bindings` entry on its own is not validated against the prop's type (it becomes concrete at
+implementation time) — but a mock value written into `props` is validated as usual; the binding
+does not exempt it.
 
 ### A binding is not a mock value — unless a fixture backs it
 

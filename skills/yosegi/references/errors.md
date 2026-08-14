@@ -1,6 +1,6 @@
 # Every code Yosegi can return, and how to recover
 
-Five different things can come back, and they read differently. Identify which one you are looking
+Six different things can come back, and they read differently. Identify which one you are looking
 at before fixing anything.
 
 1. **Validation errors** — an array of `{ nodeId, path, code, message, suggestion }`. `path`
@@ -15,7 +15,10 @@ at before fixing anything.
    a lookup miss such as `COMPONENT_NOT_FOUND` / `SCREEN_NOT_FOUND`, or `INTERNAL_ERROR` for
    everything else. It is JSON with a `code`, so do not go looking for a bare `Error:` line. The
    table at the bottom of this file covers each code.
-5. **Plain-text notices** — `Warning:` or `Note:` lines printed alongside a *successful* run. They
+5. **A store rejection** — `{ "error": { "code": "VALIDATION_FAILED", ... }, "validation": {...} }`,
+   from `screen push` / `screen apply`: the command error envelope with the full validation result
+   attached. Read `validation` exactly as shape 1.
+6. **Plain-text notices** — `Warning:` or `Note:` lines printed alongside a *successful* run. They
    carry no `code` and are easy to scroll past. They are listed at the bottom of this file.
 
 ## The validation loop
@@ -97,8 +100,8 @@ was applied.
 | --- | --- | --- |
 | `REGISTRY_VERSION_MISMATCH` | The Screen JSON's `componentRegistryVersion` differs from the registry in use | Rebuild the registry, then re-check the screen against it. The props you wrote may no longer exist |
 | `MISSING_REQUIRED_SLOT` | A required slot has no children | Usually intentional in a mock. Confirm the screen still reads correctly in Storybook |
-| `SYNTHETIC_NAME_SHADOWED` | A synthetic primitive (`Text` / `Box` / `Heading`) was used while the registry holds a component of the same name | If you meant the host's component, replace the short id with the full one from the warning. If you meant the primitive, ignore it. See `screen-json.md` |
-| `BOUND_REQUIRED_PROP` | A required prop is declared only in `bindings`, and no fixture backs it | The Story is emitted as `prop={<expression>}`, and that name does not exist in it, so the host's type check will stop on it. Declare a fixture named after the binding's head (`screen-json.md`), or put a mock value in `props`, and keep the binding as the implementation intent. When the value cannot be expressed as JSON at all (a table instance, say), the component cannot be mocked standalone — use one that can, or accept a Story that only type-checks once implemented |
+| `SYNTHETIC_NAME_SHADOWED` | A synthetic primitive (`Text` / `Box` / `Heading`) was used while the registry holds a component of the same name. Reported once per name, not once per node | If you meant the host's component, replace the short id with the full one from the warning. If you meant the primitive, ignore it. See `screen-json.md` |
+| `BOUND_REQUIRED_PROP` | A required prop is declared only in `bindings`, and no fixture backs it | The Story is emitted as `prop={<expression>}`, and that name does not exist in it, so the host's type check will stop on it. Declare a fixture named after the binding's head (`screen-json.md`), or put a mock value in `props` (it is validated like any other value — a binding does not exempt it) and keep the binding as the implementation intent. When the value cannot be expressed as JSON at all (a table instance, say), the component cannot be mocked standalone — use one that can, or accept a Story that only type-checks once implemented |
 | `UNUSED_FIXTURE` | A fixture no binding references | It is still emitted into the Story. Reference it from a binding, or remove it — usually a binding was renamed or dropped |
 | `NOT_EDITABLE_PROP_VALUE` | A value was written into a not-editable prop | Its shape cannot be checked, so it reaches the Story as-is and often will not match the component's type. Confirm against the host's source, move it to `bindings` if it comes from data, or drop it |
 | `UNKNOWN_EVENT_TARGET` | An `events` key names a prop that is not in the manifest | Only a warning, because a manifest has no event surface to check against — handlers appear only as function-typed props. Take the `suggestion` if there is one; otherwise confirm the handler name against the host's source |
@@ -127,12 +130,19 @@ Fix the shape, then enter the validation loop above.
 
 ## `story import` warnings (downstream)
 
-`story import` never fails outright — it returns the part of the tree it could read and reports the
-rest. Analysis works purely on the source AST and the Story is never executed, so **any syntax whose
+`story import` fails outright (exit 1, no Screen JSON) whenever no tree can be restored. Two codes
+end the run: `STORY_NOT_FOUND` when no export has a `render` function — what a `component` + `args`
+Story produces, and that is the most common hand-written shape — and `RENDER_NOT_STATIC` when the
+selected export exists but its body cannot be read statically. A `--story-name` that matches no
+export lands on `STORY_NOT_FOUND` with the candidates listed. When a tree does come back, it is the part that could be read, with the rest reported.
+Analysis works purely on the source AST and the Story is never executed, so **any syntax whose
 shape is only decided at runtime cannot be read**.
 
 | code | Meaning |
 | --- | --- |
+| `STORY_NOT_FOUND` | No export with a `render` function (what a `component` + `args` Story produces without `--story-name`, and any `--target component` file) — or `--story-name` named no export at all; the message lists the candidates. There is nothing to import — read the Story as text |
+| `RENDER_NOT_STATIC` | The selected export exists but its `render` cannot be read statically — including `--story-name` picking an `args`-only export. The run ends with no tree, same as `STORY_NOT_FOUND` |
+| `TITLE_NOT_STATIC` | The meta's `title` is not a static string, so the screen name falls back. The import itself continues |
 | `OPAQUE_EXPRESSION` | An expression that cannot be read statically, such as `{items.map(...)}` or a conditional. That node is dropped |
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
 | `OPAQUE_ELEMENT` | A DOM tag with no corresponding synthetic primitive. It survives as `Box`, but the tag name is lost |
@@ -150,7 +160,7 @@ screen goes missing from the implementation entirely. Read the original Story di
 place a warning points at.
 
 **An empty `warnings` array is not proof the import worked.** A Story whose `render` returns one
-wrapper component — the normal shape of a hand-written Story — imports cleanly to a single node,
+wrapper component — the other common hand-written shape — imports cleanly to a single node,
 with nothing to warn about. Count the nodes against the Story you can see. `implementation.md`
 covers when to use this command at all.
 
@@ -169,13 +179,19 @@ reached the screen. Every code is self-correcting from the payload alone:
 | `INVALID_JSON` | The file you passed is not valid JSON | Fix the file. The message says "Input file", not "Request body", on the CLI |
 | `COMPONENT_NOT_FOUND` | The id you passed to `component inspect` (or wrote in a screen operation) is not in the registry | Take the `suggestion` (did-you-mean over the registry). A short id (`Button`) may need the full `<module path>#<export>` form from `component list` |
 | `SCREEN_NOT_FOUND` | No saved screen has that id | List the saved screens (`yosegi screen list`) and use an id from there |
+| `SCREEN_ALREADY_EXISTS` | `screen push` with an id the store already has, without an update intent | Pull the stored screen, or pick a new id |
+| `INVALID_SCREEN_ID` | The id cannot become a file name | Letters, digits, `-` and `_` only |
+| `REVISION_CONFLICT` | The pushed screen's `revision` does not follow the stored one | Pull the stored screen, reapply your change on top, push again. Note the store sets `revision: 1` on create while a hand-written file starts at `0`, so pushing the same file twice conflicts by design |
+| `VALIDATION_FAILED` | `screen push` / `screen apply` rejected the screen; the envelope carries `validation` with the full issue list | Fix the issues exactly as in the validation loop above |
+| An operation code (`OPERATION_TARGET_NOT_FOUND`, ...) | A `screen apply` operation could not be applied; the code names why | Fix the operation against the stored screen's current tree and re-apply |
 | `INTERNAL_ERROR` | Everything else, with the underlying message attached | Read the message; the table below lists the frequent ones |
 
 The frequent `INTERNAL_ERROR` messages:
 
 | `message` | Meaning | What to do |
 | --- | --- | --- |
-| `Story name "<name>" is not a valid JavaScript identifier.` | `--story-name` becomes an `export const`, so it has to be an identifier | Use letters, digits, `_` or `$`, and do not start with a digit. `Customer list` → `CustomerList` |
+| `Story name "<name>" is not a valid JavaScript identifier.` | `--story-name` becomes an `export const`, so it has to be an identifier. Under `--target component` the same check says `Component name` | Use letters, digits, `_` or `$`, and do not start with a digit. `Customer list` → `CustomerList` |
+| `Fixture "<name>" collides with the export name.` | A fixture or variant const would shadow the Story/component export | Rename the fixture or the story/component name; the same message exists for variant names |
 | `Component "<id>" has export name "<name>", which is not a valid JavaScript identifier.` | The registry entry itself cannot be emitted as JSX | Pick a different component, or fix the export in the host |
 | `ENOENT` / `no such file` | A path you passed does not exist | Check `--tsconfig`, the Screen JSON path, and `--metadata` |
 
@@ -197,3 +213,4 @@ These carry no `code`, and every one of them appears alongside a *successful* ex
 | `Warning: this registry was built by ...` naming two Yosegi versions | The registry was written by a different Yosegi than the CLI now reading it | Rebuild with the printed command. An older Yosegi omits fields a newer one emits, and no other signal (version hash, `built` time) shows the gap |
 | `Warning:` naming a URL inherited from `--meta-template` | A Figma or Notion link came along from the Story you built the template from | Check it and either remove or replace it. **Never leave a URL you have not verified** |
 | `Warning: Ignored "title" from the meta template ...` | `title` and `component` are not carried over; the screen decides them | Harmless. Remove them from the template if you want the warning to stop |
+| `Warning: Dropped the meta template import "<names>" ...` | The template imported something its carried-over meta never references | Harmless. Remove the unused import from the template to silence it |

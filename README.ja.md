@@ -30,7 +30,7 @@ React + TypeScript のプロジェクト向け。Component Registry は TypeScri
 5. **実装** — 承認された Story を実ページにする。Yosegi が生成した Story であれば実装コンテキスト
    （貼れる import 文・使用 props・slot 構造・残っている結線）も出せる。
 
-実運用の React デザインシステムでの実測: 120 ファイルから 265 コンポーネントを 4.2 秒、98.9% は
+実運用の React デザインシステムでの実測: 120 ファイルから 278 コンポーネントを約 4 秒、98.9% は
 props まで型から取得、出力は決定的。詳細は [`docs/ja/registry.md`](./docs/ja/registry.md)。
 
 ## 使いどころ
@@ -39,6 +39,9 @@ props まで型から取得、出力は決定的。詳細は [`docs/ja/registry.
   が Storybook でレビューする。描かれるのは実物のコンポーネントで、props も実物。
 - **自社 API の当て推量をやめる。** エージェントは、上流ライブラリが受け取っていた props を書く
   のではなく、そのコンポーネントが何を受け取るかを Registry に訊く。
+- **ホストをコンテキストに載せない。** ベンチマーク済み: デザインシステム規模では、Registry は
+  ソースを読んだ場合と同じ画面を、どの運び手よりも少ない読解量で出す。ソースの 5 分の 1、
+  パッケージ同梱の `.d.ts` の 3 分の 1（[`docs/ja/benchmark.md`](./docs/ja/benchmark.md)）。
 - **Figma を介さずイテレーションする。** レビューで見るものと実装で使うものが同じになる。新しい
   ビジュアル表現を決めるのは引き続き Figma の仕事。
 
@@ -125,6 +128,7 @@ cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 | [開発](./docs/ja/development.md) | パッケージ構成、ビルド、公開前検証 |
 | [ロードマップ](./docs/ja/ROADMAP.md) | 予定している作業と未決の論点 |
 | [Component Registry](./docs/ja/registry.md) | 型がカタログになる仕組みと実測 |
+| [ベンチマーク](./docs/ja/benchmark.md) | Registry がエージェントの出力をどう変えるかを 4 つの UI ライブラリで実測 |
 
 このリポジトリでの作業: [`AGENTS.md`](./AGENTS.md)、[`CONTRIBUTING.md`](./CONTRIBUTING.md)（英語）、
 [ドキュメント規約](./docs/ja/conventions.md)。

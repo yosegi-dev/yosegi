@@ -47,9 +47,10 @@ registry. Today an agent follows `curation.storyFile` and reads the Story by han
 The pieces to shorten that already exist: the manifest records `storyFile` / `storyNames`, and
 `story import` already parses Story source through the TypeScript AST. A command that extracts a
 Story's `args` and `render` for a named component and returns them as a usage example is the
-planned next step. The honest limit: hand-written Stories are exactly what the importer reads
-best-effort, so the output is an excerpt to read, not a tree to build on — which is all a usage
-example needs to be.
+planned next step. The honest limit: today the importer reads only `render`-style Stories — a
+`component` + `args` Story, the dominant hand-written shape, comes back as `STORY_NOT_FOUND` — so
+the extractor has to read `args` itself, and its output is an excerpt to read, not a tree to
+build on — which is all a usage example needs to be.
 
 ## Registry operations
 
