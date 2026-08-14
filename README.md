@@ -125,6 +125,7 @@ Then: *"build me a screen proposal from the existing components"*.
 | [Development](./docs/development.md) | Package layout, build, pre-publish verification |
 | [Roadmap](./docs/ROADMAP.md) | Planned work and open questions |
 | [Component Registry](./docs/registry.md) | How types become a catalog, and the measurements |
+| [Benchmark](./docs/benchmark.md) | What the registry changes in an agent's output, measured across four UI libraries |
 
 Working in this repository: [`AGENTS.md`](./AGENTS.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md),
 [documentation conventions](./docs/conventions.md).

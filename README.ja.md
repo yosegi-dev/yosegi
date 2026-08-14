@@ -125,6 +125,7 @@ cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 | [開発](./docs/ja/development.md) | パッケージ構成、ビルド、公開前検証 |
 | [ロードマップ](./docs/ja/ROADMAP.md) | 予定している作業と未決の論点 |
 | [Component Registry](./docs/ja/registry.md) | 型がカタログになる仕組みと実測 |
+| [ベンチマーク](./docs/ja/benchmark.md) | Registry がエージェントの出力をどう変えるかを 4 つの UI ライブラリで実測 |
 
 このリポジトリでの作業: [`AGENTS.md`](./AGENTS.md)、[`CONTRIBUTING.md`](./CONTRIBUTING.md)（英語）、
 [ドキュメント規約](./docs/ja/conventions.md)。

@@ -18,18 +18,15 @@ renamed variants, invented its own prop vocabulary, modeled state through a runt
 domain-specific enums gains the most, because none of that is guessable from general React
 knowledge.
 
-This was measured on five synthetic fixtures built to span that range, from an unmodified shadcn/ui
-screen and a thin Next.js/Radix wrapper, through moderate customization, to a heavily diverged
-in-house system with renamed APIs and a custom runtime abstraction. The same screen was implemented
-twice per fixture — once from general React/library knowledge, once using `component inspect` — and
-checked with `tsc`. Every fixture reached zero type errors with the registry; without it, the
-near-vanilla fixtures were already at 0–1 errors, while the customized and diverged ones ranged from
-8 to 17. Raw error count is not itself a divergence measure: one diverged fixture came back with
-fewer errors than a moderately customized one simply because its screen used fewer components, even
-though its mistakes — an array where a single model was expected, a generic-tone enum standing in
-for a domain enum, wrong event names — were the deepest in kind. The fixtures are synthetic and
-built to span this spectrum on purpose; treat the shape (near-zero payoff at one end, large payoff
-at the other) as the takeaway, not a number to expect from any specific host.
+On synthetic hosts built to diverge this way — one product layer implemented identically on four
+UI libraries, measured 2026-08-13/14 — an agent with no source access and no registry produced
+24–36 type errors per screen, and two of the four screens crash at render; the same condition
+with the registry produced zero type errors across twelve runs at three host sizes, off
+12.5–49KB of registry output. Its one blind spot was a rendering convention the types cannot
+carry (2 of 12 runs). When the agent can read the host's source, registry or not, everything
+ties — the registry's payoff is the condition where reading the source is not an option, and
+part of the reading everywhere else. Tables, method, corrections, and what the design does not
+show: [Benchmark](./benchmark.md).
 
 ## Three sources, three roles
 

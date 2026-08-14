@@ -40,6 +40,7 @@ const en = [
 			{ text: "Screen JSON", link: "/screen-json" },
 			{ text: "CLI reference", link: "/cli" },
 			{ text: "Component registry", link: "/registry" },
+			{ text: "Benchmark", link: "/benchmark" },
 		],
 	},
 	{
@@ -67,6 +68,7 @@ const ja = [
 			{ text: "Screen JSON", link: "/ja/screen-json" },
 			{ text: "CLI リファレンス", link: "/ja/cli" },
 			{ text: "Component Registry", link: "/ja/registry" },
+			{ text: "ベンチマーク", link: "/ja/benchmark" },
 		],
 	},
 	{

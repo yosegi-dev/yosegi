@@ -34,7 +34,8 @@ features:
 ## 実運用のデザインシステムでの実測
 
 120 ファイルから 265 コンポーネントを 4.2 秒、98.9% は props まで型から取得、出力は決定的。
-型がカタログになる仕組みと数値の詳細は [Component Registry](./registry.md)。
+型がカタログになる仕組みと数値の詳細は [Component Registry](./registry.md)。Registry が
+エージェントの出力をどう変えるかの実測は[ベンチマーク](./benchmark.md)。
 
 ## インストール
 
