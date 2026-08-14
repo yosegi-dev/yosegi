@@ -224,6 +224,29 @@ describe("checkDocs", () => {
 		expect(errors).toEqual([]);
 	});
 
+	// A diagram carries `%%` comments and blank lines for the same reason a code
+	// block carries `#` ones, and a translation re-wraps them.
+	it("mermaid フェンスの %% コメントと空行は内容差に数えない", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/page.md",
+					text: en(
+						'```mermaid\n%% the upstream half\nflowchart TD\n\n  a["x"] --> b["y"]\n```',
+					),
+				},
+				{
+					path: "docs/ja/page.md",
+					text: en(
+						'```mermaid\nflowchart TD\n  %% 上流の半分\n  %% 2 行に折り返す\n  a["x"] --> b["y"]\n\n```',
+					),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([]);
+	});
+
 	it("mermaid フェンスの構造の食い違いは報告する", () => {
 		const { errors } = checkDocs(
 			[

@@ -41,8 +41,8 @@ flowchart TD
   review --> impl["Implementation"]
 ```
 
-Only the dotted edge needs Storybook. The registry is built from types, and the output can be a
-plain component file instead of a Story.
+The dotted edge is optional — the registry is built from types. Reviewing a Story does happen in
+Storybook; a host without one emits a plain component file instead and reviews it its own way.
 
 Measured on a production design system: 278 components from 120 files in about 4 seconds, 98.9%
 with props read from types, deterministic output. See [`docs/registry.md`](./docs/registry.md).

@@ -13,7 +13,8 @@ flowchart TD
   hand --> file["*.stories.tsx、または *.tsx"]
   gen --> file
   file --> check["ホストの型検査、そして人の目"]
-  check --> page["story import と screen context を経て実装"]
+  check -->|"生成された Story: story import、screen context"| page["実装"]
+  check -->|"それ以外: ファイルを読む"| page
 ```
 
 必須なのは `registry build` と `component list` / `inspect` で、図の「経路」から先はこのページが順に

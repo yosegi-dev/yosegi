@@ -13,7 +13,8 @@ flowchart TD
   hand --> file["*.stories.tsx, or *.tsx"]
   gen --> file
   file --> check["Host type check, then a human"]
-  check --> page["Implementation, through story import and screen context"]
+  check -->|"a generated Story: story import, screen context"| page["Implementation"]
+  check -->|"anything else: read the file"| page
 ```
 
 `registry build` and `component list` / `inspect` are the mandatory part; everything after `Route`

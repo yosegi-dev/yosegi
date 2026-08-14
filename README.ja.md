@@ -41,8 +41,8 @@ flowchart TD
   review --> impl["実装"]
 ```
 
-Storybook が要るのは破線の 1 本だけ。Registry は型から作られ、出力も Story ではなく素のコンポーネン
-トファイルにできる。
+破線は任意。Registry は型から作られる。Story のレビューは Storybook で行うが、Storybook を持たない
+ホストは代わりに素のコンポーネントファイルを書き出し、そのホストなりの方法でレビューする。
 
 実運用の React デザインシステムでの実測: 120 ファイルから 278 コンポーネントを約 4 秒、98.9% は
 props まで型から取得、出力は決定的。詳細は [`docs/ja/registry.md`](./docs/ja/registry.md)。
