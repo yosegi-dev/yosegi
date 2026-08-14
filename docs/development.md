@@ -81,6 +81,12 @@ package sees only what it declares. Under a hoisted layout an undeclared depende
 as long as something else pulled it in, and the mistake only surfaces once a consumer installs the
 published tarball into a tree that has no such neighbour.
 
+That linker is also why the root declares five packages nothing here imports —
+`@braintree/sanitize-url`, `cytoscape`, `cytoscape-cose-bilkent`, `dayjs`, `debug`. They are
+mermaid's, and `vitepress-plugin-mermaid` puts them in Vite's `optimizeDeps.include`, which resolves
+from the root. Without them `docs:dev` starts but every diagram stays blank; `docs:build` is
+unaffected, so the check is to open a page with a diagram.
+
 ## Running the CLI against a host, from inside this repository
 
 ```sh

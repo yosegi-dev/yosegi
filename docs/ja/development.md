@@ -79,6 +79,12 @@ CI（`.github/workflows/ci.yml`）は push・Pull Request・週次で lint / tes
 宣言の依存も解決してしまい、その間違いは、利用者が公開された tarball を当の依存を持たないツリーへイ
 ンストールした時点で初めて表面化する。
 
+この linker は、ここでは import していない 5 つのパッケージをルートが宣言している理由でもある。
+`@braintree/sanitize-url`・`cytoscape`・`cytoscape-cose-bilkent`・`dayjs`・`debug` の 5 つである。
+いずれも mermaid の依存で、`vitepress-plugin-mermaid` がこれらを Vite の `optimizeDeps.include`
+に入れる。その解決はルートから行われる。これらが無いと `docs:dev` は起動するが図がすべて空になる。
+`docs:build` は影響を受けないので、確認は図のあるページを開いて行う。
+
 ## このリポジトリからホストに対して CLI を動かす
 
 ```sh

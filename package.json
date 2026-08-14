@@ -29,13 +29,20 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.7",
+		"@braintree/sanitize-url": "7.1.2",
 		"@types/bun": "1.3.14",
+		"cytoscape": "3.34.1",
+		"cytoscape-cose-bilkent": "4.1.0",
+		"dayjs": "1.11.21",
+		"debug": "4.4.3",
+		"mermaid": "11.16.1",
 		"textlint": "15.8.0",
 		"textlint-rule-preset-ja-spacing": "3.0.3",
 		"textlint-rule-preset-ja-technical-writing": "12.0.2",
 		"textlint-rule-prh": "6.1.0",
 		"typescript": "6.0.3",
-		"vitepress": "1.6.4"
+		"vitepress": "1.6.4",
+		"vitepress-plugin-mermaid": "2.0.17"
 	},
 	"engines": {
 		"bun": ">=1.3.0",

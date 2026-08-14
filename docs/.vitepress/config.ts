@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress";
+import { withMermaid } from "vitepress-plugin-mermaid";
 
 const REPO = "https://github.com/yosegi-dev/yosegi";
 const BLOB = `${REPO}/blob/main`;
@@ -81,147 +82,161 @@ const ja = [
 	},
 ];
 
-export default defineConfig({
-	title: "Yosegi",
-	description:
-		"Assemble screen UIs from the components already in your Storybook, emit them as Stories, and turn those Stories into implementations.",
-	base: BASE,
-	cleanUrls: true,
-	lastUpdated: true,
-	head: [
-		[
-			"link",
-			// head links are emitted verbatim, so this one carries the base itself.
-			{ rel: "icon", href: `${BASE}brand/favicon.svg`, type: "image/svg+xml" },
+// GitHub renders a ```mermaid fence on its own; VitePress does not, so the diagrams the pages carry
+// would ship as code blocks without this wrapper. `neutral` is the one built-in theme that does not
+// fight the site's warm palette; the plugin swaps in mermaid's own `dark` when the site is dark.
+export default withMermaid({
+	mermaid: { theme: "neutral" },
+	...defineConfig({
+		title: "Yosegi",
+		description:
+			"Assemble screen UIs from the components already in your Storybook, emit them as Stories, and turn those Stories into implementations.",
+		base: BASE,
+		cleanUrls: true,
+		lastUpdated: true,
+		head: [
+			[
+				"link",
+				// head links are emitted verbatim, so this one carries the base itself.
+				{
+					rel: "icon",
+					href: `${BASE}brand/favicon.svg`,
+					type: "image/svg+xml",
+				},
+			],
+			["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
+			[
+				"link",
+				{
+					rel: "preconnect",
+					href: "https://fonts.gstatic.com",
+					crossorigin: "",
+				},
+			],
+			[
+				"link",
+				{
+					rel: "stylesheet",
+					href: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&display=swap",
+				},
+			],
 		],
-		["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
-		[
-			"link",
-			{ rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" },
-		],
-		[
-			"link",
-			{
-				rel: "stylesheet",
-				href: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&display=swap",
-			},
-		],
-	],
-	markdown: {
-		config(md) {
-			const fallback =
-				md.renderer.rules.link_open ??
-				((tokens, idx, options, _env, self) =>
-					self.renderToken(tokens, idx, options));
-			md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
-				const token = tokens[idx];
-				const href = token.attrGet("href");
-				const relativePath: unknown = env?.relativePath;
-				if (href && typeof relativePath === "string") {
-					const external = repoUrl(relativePath, href);
-					if (external) {
-						token.attrSet("href", external);
-						token.attrSet("target", "_blank");
-						token.attrSet("rel", "noreferrer");
+		markdown: {
+			config(md) {
+				const fallback =
+					md.renderer.rules.link_open ??
+					((tokens, idx, options, _env, self) =>
+						self.renderToken(tokens, idx, options));
+				md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+					const token = tokens[idx];
+					const href = token.attrGet("href");
+					const relativePath: unknown = env?.relativePath;
+					if (href && typeof relativePath === "string") {
+						const external = repoUrl(relativePath, href);
+						if (external) {
+							token.attrSet("href", external);
+							token.attrSet("target", "_blank");
+							token.attrSet("rel", "noreferrer");
+						}
 					}
-				}
-				return fallback(tokens, idx, options, env, self);
-			};
+					return fallback(tokens, idx, options, env, self);
+				};
+			},
 		},
-	},
-	locales: {
-		root: {
-			label: "English",
-			lang: "en-US",
-			themeConfig: {
-				nav: [
-					{
-						text: "Guide",
-						link: "/getting-started",
-						activeMatch: "/(getting-started|workflows|storybook-mcp)",
+		locales: {
+			root: {
+				label: "English",
+				lang: "en-US",
+				themeConfig: {
+					nav: [
+						{
+							text: "Guide",
+							link: "/getting-started",
+							activeMatch: "/(getting-started|workflows|storybook-mcp)",
+						},
+						{
+							text: "Reference",
+							link: "/cli",
+							activeMatch: "/(cli|screen-json|registry)",
+						},
+						{ text: "Roadmap", link: "/ROADMAP" },
+					],
+					sidebar: en,
+					editLink: {
+						pattern: `${BLOB}/docs/:path`,
+						text: "Edit this page on GitHub",
 					},
-					{
-						text: "Reference",
-						link: "/cli",
-						activeMatch: "/(cli|screen-json|registry)",
+					footer: {
+						message: "Released under the MIT License.",
+						copyright: "Yosegi",
 					},
-					{ text: "Roadmap", link: "/ROADMAP" },
-				],
-				sidebar: en,
-				editLink: {
-					pattern: `${BLOB}/docs/:path`,
-					text: "Edit this page on GitHub",
 				},
-				footer: {
-					message: "Released under the MIT License.",
-					copyright: "Yosegi",
+			},
+			ja: {
+				label: "日本語",
+				lang: "ja",
+				link: "/ja/",
+				themeConfig: {
+					nav: [
+						{
+							text: "ガイド",
+							link: "/ja/getting-started",
+							activeMatch: "/ja/(getting-started|workflows|storybook-mcp)",
+						},
+						{
+							text: "リファレンス",
+							link: "/ja/cli",
+							activeMatch: "/ja/(cli|screen-json|registry)",
+						},
+						{ text: "ロードマップ", link: "/ja/ROADMAP" },
+					],
+					sidebar: ja,
+					editLink: {
+						pattern: `${BLOB}/docs/:path`,
+						text: "GitHub でこのページを編集する",
+					},
+					footer: {
+						message: "MIT License のもとで公開されています。",
+						copyright: "Yosegi",
+					},
+					docFooter: { prev: "前のページ", next: "次のページ" },
+					outline: { label: "このページの内容" },
+					darkModeSwitchLabel: "外観",
+					returnToTopLabel: "トップへ戻る",
+					langMenuLabel: "言語",
 				},
 			},
 		},
-		ja: {
-			label: "日本語",
-			lang: "ja",
-			link: "/ja/",
-			themeConfig: {
-				nav: [
-					{
-						text: "ガイド",
-						link: "/ja/getting-started",
-						activeMatch: "/ja/(getting-started|workflows|storybook-mcp)",
-					},
-					{
-						text: "リファレンス",
-						link: "/ja/cli",
-						activeMatch: "/ja/(cli|screen-json|registry)",
-					},
-					{ text: "ロードマップ", link: "/ja/ROADMAP" },
-				],
-				sidebar: ja,
-				editLink: {
-					pattern: `${BLOB}/docs/:path`,
-					text: "GitHub でこのページを編集する",
-				},
-				footer: {
-					message: "MIT License のもとで公開されています。",
-					copyright: "Yosegi",
-				},
-				docFooter: { prev: "前のページ", next: "次のページ" },
-				outline: { label: "このページの内容" },
-				darkModeSwitchLabel: "外観",
-				returnToTopLabel: "トップへ戻る",
-				langMenuLabel: "言語",
+		themeConfig: {
+			logo: {
+				light: "/brand/yosegi-symbol.svg",
+				dark: "/brand/yosegi-symbol-light.svg",
 			},
-		},
-	},
-	themeConfig: {
-		logo: {
-			light: "/brand/yosegi-symbol.svg",
-			dark: "/brand/yosegi-symbol-light.svg",
-		},
-		siteTitle: "Yosegi",
-		search: {
-			provider: "local",
-			options: {
-				locales: {
-					ja: {
-						translations: {
-							button: { buttonText: "検索", buttonAriaLabel: "検索" },
-							modal: {
-								displayDetails: "詳細を表示",
-								resetButtonTitle: "条件をリセット",
-								backButtonTitle: "閉じる",
-								noResultsText: "見つかりません",
-								footer: {
-									selectText: "選択",
-									navigateText: "移動",
-									closeText: "閉じる",
+			siteTitle: "Yosegi",
+			search: {
+				provider: "local",
+				options: {
+					locales: {
+						ja: {
+							translations: {
+								button: { buttonText: "検索", buttonAriaLabel: "検索" },
+								modal: {
+									displayDetails: "詳細を表示",
+									resetButtonTitle: "条件をリセット",
+									backButtonTitle: "閉じる",
+									noResultsText: "見つかりません",
+									footer: {
+										selectText: "選択",
+										navigateText: "移動",
+										closeText: "閉じる",
+									},
 								},
 							},
 						},
 					},
 				},
 			},
+			socialLinks: [{ icon: "github", link: REPO }],
 		},
-		socialLinks: [{ icon: "github", link: REPO }],
-	},
+	}),
 });
