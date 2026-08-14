@@ -30,6 +30,20 @@ For React + TypeScript projects. The registry is built from TypeScript types, an
 5. **Implementation** — the approved Story becomes a real page. For a Yosegi-generated Story it also
    emits implementation context: imports to paste, props in use, slot structure, and wiring to do.
 
+```mermaid
+flowchart TD
+  src["Host source + tsconfig"] -->|"TypeScript types"| build["registry build"]
+  idx["Storybook index.json"] -.->|"curation, optional"| build
+  build --> look["component list / inspect"]
+  look --> asm["Screen JSON, or JSX written directly"]
+  asm --> out["*.stories.tsx, or *.tsx"]
+  out --> review["Host type check, then a human"]
+  review --> impl["Implementation"]
+```
+
+Only the dotted edge needs Storybook. The registry is built from types, and the output can be a
+plain component file instead of a Story.
+
 Measured on a production design system: 278 components from 120 files in about 4 seconds, 98.9%
 with props read from types, deterministic output. See [`docs/registry.md`](./docs/registry.md).
 

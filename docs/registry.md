@@ -33,6 +33,16 @@ limits: [Benchmark](./benchmark.md).
   to use, and how they get composed.
 - **Storybook is the rendering environment.** It is where you look at what you assembled.
 
+```mermaid
+flowchart TD
+  src["--source + --tsconfig"] -->|"required"| build["registry build"]
+  idx["--index"] -.->|"optional"| build
+  meta["--metadata"] -.->|"optional"| build
+  build --> reg["registry.json"]
+  reg --> a["From types: props, slots, enums, import specifier"]
+  reg --> b["From Stories: categories, recommended, deep links"]
+```
+
 Reading props from types is what makes validation possible: an enum such as `variant` has a known
 set of values, so a wrong one comes back as `INVALID_PROP_VALUE` with the options listed instead of
 escaping to human review. Every exported component is visible whether or not it has a Story, and the

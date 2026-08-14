@@ -5,6 +5,20 @@
 Yosegi は 2 方向に走る。上流は登録済みのコンポーネントから Story を組み立てる向き、下流はその Story
 を実ページへ転換する向き。
 
+```mermaid
+flowchart TD
+  reg["registry build, then component list / inspect"] --> route{"Route"}
+  route -->|"directly"| hand["Write the file by hand"]
+  route -->|"Screen JSON"| gen["screen generate"]
+  hand --> file["*.stories.tsx, or *.tsx"]
+  gen --> file
+  file --> check["Host type check, then a human"]
+  check --> page["Implementation, through story import and screen context"]
+```
+
+必須なのは `registry build` と `component list` / `inspect` で、`Route` から先はこのページが順に
+説明する選択になる。
+
 ## ユースケース
 
 想定する読み手は、既に Storybook 上のデザインシステムを持つプロダクトチーム。Yosegi を叩くのは人では
@@ -61,6 +75,19 @@ Story か Screen JSON を直して出し直すだけ。
 どちらの経路でも結果を確定させるのはホストの型検査。JSX を実物の型と突き合わせるので、Registry に
 対する検証より多くを見る。
 
+```mermaid
+flowchart TD
+  q{"A value with no JSON form?"}
+  q -->|"yes, even one"| direct["Write the file directly"]
+  q -->|"no"| sj["Screen JSON"]
+  direct --> tc["Host type check is the only net"]
+  sj --> gen["screen generate"]
+  gen -->|"errors[], no file written"| fix["Apply the whole array"]
+  fix --> sj
+  gen -->|"valid"| out["File written, warnings listed after"]
+  out --> tc
+```
+
 `screen generate` は書き出す前に検証する。エラーがあれば何も書かず、エラーの配列とともに終了コード 1
 で終わる。1 件ずつ直すのではなく、配列全体を反映してから再実行する。
 
@@ -104,6 +131,21 @@ Yosegi は規定しない。レビューはホストの型検査に加えて、�
 ルートにコンポーネントを描画する）で行うものなので、エージェントは推測せずに確認する。知っておく
 べき非対称が 1 つある。`story import` が読めるのは Story だけなので、コンポーネントファイルは
 Screen JSON へ読み戻せない。画面をあとで直す可能性があるなら Screen JSON を残しておく。
+
+```mermaid
+flowchart TD
+  tree["One screen tree"] --> t{"Storybook on the host?"}
+  t -->|"yes"| story["--target story, the default"]
+  t -->|"no"| comp["--target component"]
+  story --> csf["*.stories.tsx"]
+  comp --> tsx["*.tsx"]
+  csf --> rv1["Reviewed in the host's Storybook"]
+  tsx --> rv2["Host type check, plus the surface the user names"]
+  csf -.->|"story import"| back["Read back into Screen JSON"]
+  tsx -.->|"no importer"| keep["Keep the Screen JSON"]
+```
+
+どちらのターゲットも同じレンダラと同じ import プランを通るので、JSX は同一になる。
 
 ## 検証エラーの code
 
@@ -156,6 +198,16 @@ Story は 1 ノードに、しかも読めない構文が無い以上は警告 0
 
 `screen generate` が書いた Story は、ノード id を除いてそのまま読み戻る。形が実行時にしか決まらない
 構文は `warnings` に載り、読めた範囲のツリーは返る。
+
+```mermaid
+flowchart TD
+  gen["Story written by screen generate"] -->|"story import"| sj["Screen JSON"]
+  sj --> ctx["screen context"]
+  ctx --> keys["imports, structure.outline, components[], tasks[]"]
+  keys --> impl["Implementation"]
+  hand["Hand-written Story"] -.->|"one node, no warnings — read the Story"| impl
+  comp["File from --target component"] -.->|"no importer — read the file"| impl
+```
 
 `screen context` は Screen JSON を実装コンテキストへ展開する。実装中に効くのは主に 4 つ。
 
