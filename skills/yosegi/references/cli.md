@@ -17,7 +17,7 @@ bun add -d @yosegi/yosegi
 
 `yosegi <command>` means `npx yosegi <command>` (or `pnpm yosegi`, `yarn yosegi`, `bunx yosegi`).
 
-The CLI runs on Node.js 20 or newer. The host has to be a React + TypeScript project. Running with
+The CLI runs on Node.js 22 or newer. The host has to be a React + TypeScript project. Running with
 no arguments prints every command.
 
 From the checkout's own root, `bun --filter '@yosegi/yosegi' cli <command>` also works and needs no

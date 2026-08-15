@@ -44,7 +44,7 @@ is the smallest of those reads at design-system scale: a fifth of the source, a 
 
 ## Install
 
-Requires Node.js 20+. Any package manager.
+Requires Node.js 22+. Any package manager.
 
 ```sh
 # npm

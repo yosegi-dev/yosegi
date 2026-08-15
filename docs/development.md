@@ -101,7 +101,7 @@ published `yosegi` command actually runs.
 `exports`, because the public API also re-exports the HTTP adapter and the MCP server — going
 through it would pull in hono and the MCP SDK on every CLI invocation.
 
-The shebang is `node`, and consumers need nothing but Node.js 20 or newer. What makes that work is
+The shebang is `node`, and consumers need nothing but Node.js 22 or newer. What makes that work is
 that relative imports in `src/` carry an explicit `.ts` extension and the build tsconfigs set
 `rewriteRelativeImportExtensions`, so `dist` ends up with the `.js` extensions Node's ESM resolver
 requires. Dropping either half only Bun can load the result, which is what the `node-consumer` CI

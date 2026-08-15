@@ -9,7 +9,7 @@
 - Storybook を持つ React + TypeScript のプロジェクト。Yosegi は TypeScript の型を読んで CSF を
   出力するので、どちらの工程にも他スタック向けの代替経路はありません。
 - ホストのコンポーネントを解決できる `tsconfig.json`（`paths` を含む）。
-- Node.js 20 以上。Bun が要るのは Yosegi 自体を開発する場合のみです。
+- Node.js 22 以上。Bun が要るのは Yosegi 自体を開発する場合のみです。
 
 ## インストール
 

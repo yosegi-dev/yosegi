@@ -99,7 +99,7 @@ cwd が `packages/server` になるので相対パスはその分ずれます。
 ます。公開 API は HTTP アダプタと MCP サーバも再 export しているので、経由すると CLI を 1 回叩く
 たびに hono と MCP SDK まで読み込まれるためです。
 
-shebang は `node` で、利用者に必要なのは Node.js 20 以上だけです。これが成り立つのは、`src/` の相対
+shebang は `node` で、利用者に必要なのは Node.js 22 以上だけです。これが成り立つのは、`src/` の相対
 import が明示的に `.ts` 拡張子を持ち、ビルド用 tsconfig が `rewriteRelativeImportExtensions` を設定
 しているからです。`dist` は Node の ESM リゾルバが要求する `.js` 拡張子を持つ形になります。どちらか
 片方でも欠けると Bun でしか読めない成果物になり、それを捕まえるのが `node-consumer` の CI ジョブ

@@ -23,7 +23,7 @@ yarn add -D @yosegi/yosegi
 bun add -d @yosegi/yosegi
 ```
 
-For React + TypeScript projects, on Node.js 20 or newer. A TypeScript compiler (5.4 or newer) is
+For React + TypeScript projects, on Node.js 22 or newer. A TypeScript compiler (5.4 or newer) is
 used at runtime to read the host's types; if the host project already has one, it is reused.
 
 ## Use
