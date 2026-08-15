@@ -665,9 +665,11 @@ function validateTree(
 // every base issue the operations didn't fix. Those repeats say nothing new —
 // fixing the base clears them everywhere — so a variant only reports what the
 // base didn't. The key deliberately omits `path`: an operation that inserts
-// nodes shifts sibling indices without changing what's wrong.
+// nodes shifts sibling indices without changing what's wrong. The separator is
+// written as an escape rather than a literal control character, because a raw
+// one makes every grep treat this file as binary and skip it silently.
 function issueKey(issue: ValidationIssue): string {
-	return `${issue.code} ${issue.nodeId ?? ""} ${issue.message}`;
+	return `${issue.code}\u001F${issue.nodeId ?? ""}\u001F${issue.message}`;
 }
 
 // Validates a Screen Definition against a Registry. Call this before saving,
