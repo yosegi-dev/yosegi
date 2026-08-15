@@ -8,7 +8,8 @@
 			"!**/data",
 			"!**/seeds",
 			"!**/node_modules",
-			"!**/yosegi-registry.json"
+			"!**/yosegi-registry.json",
+			"!**/.claude"
 		]
 	},
 	"formatter": {
