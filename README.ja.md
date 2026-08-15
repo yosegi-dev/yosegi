@@ -68,8 +68,9 @@ Storybook 10.3 以降は公式の MCP サーバと Component Manifest を同梱�
 ## インストール
 
 Node.js 20 以上。パッケージマネージャは何でもかまいません。Registry は TypeScript 6.x のコンパイラ
-API を通して型を読みますが、TypeScript 7 はその API を同梱しません。7 のホストは 1 パッケージの
-エイリアスが要ります。[TypeScript 7 のホスト](./docs/ja/registry.md#typescript-7-のホスト)を参照。
+API を通して型を読みますが、TypeScript 7 はその API を同梱しません。7 のホストは 6 と 7 を
+side-by-side で入れます。
+[TypeScript 7 のホスト](./docs/ja/registry.md#typescript-7-のホスト)を参照。
 
 ```sh
 # npm

@@ -59,22 +59,26 @@ props を型で表現できない少数のコンポーネントについては `
 ### TypeScript 7 のホスト
 
 TypeScript 7.0 はコンパイラ API を同梱しておらず、型抽出は 6.x の API の上に成り立っています。
-そのため 7 を入れているホストは、TypeScript チームが公開している互換パッケージへ `typescript` を
-エイリアスする必要があります。`tsc` は 7 のまま、ツールには 6.x の API が渡ります。
+そのため 7 を入れているホストは、TypeScript チームが推奨する
+[side-by-side の構成](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)を取り
+ます。`devDependencies` を 1 つではなく 2 つ入れます。
 
-```sh
-# npm
-npm install -D typescript@npm:@typescript/typescript6
-# pnpm
-pnpm add -D typescript@npm:@typescript/typescript6
-# yarn
-yarn add -D typescript@npm:@typescript/typescript6
-# bun
-bun add -d typescript@npm:@typescript/typescript6
+```json
+{
+	"devDependencies": {
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"typescript": "npm:@typescript/typescript6@^6.0.2"
+	}
+}
 ```
 
+`tsc` は `@typescript/native` から 7 のまま動きます。互換パッケージは `tsc6` を追加します。
+`typescript` を解決するツールは、Yosegi も含めて 6.x の API を読みます。`typescript` だけを
+エイリアスすると `tsc` も一緒に失われます。互換パッケージが同梱するのは `tsc6` であって `tsc`
+ではないためです。
+
 これでツリー上の `typescript` は 1 つになり、Yosegi と共有されます。エイリアスが無い場合、
-`registry build` は解決した version と上記コマンドを添えて失敗します。Yosegi 側にコピーが入るだけ
+`registry build` は解決した version と上記のエントリを添えて失敗します。Yosegi 側にコピーが入るだけ
 では解決しません。パッケージマネージャが react-docgen-typescript をホストのツリー最上位へ巻き上げる
 ため、`@yosegi/yosegi` 配下のコピーではなくホストの 7 を見てしまいます。
 
