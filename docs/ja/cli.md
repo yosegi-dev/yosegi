@@ -18,7 +18,7 @@ bun add -d @yosegi/yosegi
 ```
 
 以下の `yosegi` は `npx yosegi`（`pnpm yosegi`、`yarn yosegi`、`bunx yosegi`）を指します。動作要件
-は Node.js 20 以上。Yosegi のリポジトリ内で作業する場合は事情が異なります
+は Node.js 22 以上。Yosegi のリポジトリ内で作業する場合は事情が異なります
 （[開発](./development.md)）。
 
 ## 全コマンド共通のオプション

@@ -18,7 +18,7 @@ bun add -d @yosegi/yosegi
 ```
 
 `yosegi` below means `npx yosegi` (`pnpm yosegi`, `yarn yosegi`, `bunx yosegi`). It runs on Node.js
-20 or newer. Working inside the Yosegi repository itself is different — see
+22 or newer. Working inside the Yosegi repository itself is different — see
 [Development](./development.md).
 
 ## Options every command takes

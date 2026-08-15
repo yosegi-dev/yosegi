@@ -74,7 +74,7 @@ jobs:
           bun-version: "1.3.14"
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: "20"
+          node-version: "22"
       - run: bun install --frozen-lockfile
       # Built with the same script release.yml uses to publish. If the tarball
       # verified here differed from what actually gets published, this job
@@ -214,7 +214,7 @@ jobs:
           bun-version: "1.3.14"
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: "20"
+          node-version: "22"
       - run: bun install --frozen-lockfile
       - name: Pack exactly what release publishes
         run: bun run scripts/pack.ts /tmp/yosegi-tarballs
@@ -318,7 +318,7 @@ jobs:
           bun-version: "1.3.14"
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: "20"
+          node-version: "22"
       - run: bun install --frozen-lockfile
       - name: Pack exactly what release publishes
         run: bun run scripts/pack.ts /tmp/yosegi-tarballs

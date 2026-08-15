@@ -67,6 +67,6 @@
 		"@types/react": "19.2.18"
 	},
 	"engines": {
-		"node": ">=20"
+		"node": ">=22"
 	}
 }

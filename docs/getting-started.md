@@ -9,7 +9,7 @@ From an empty setup to a Story in your Storybook, and on to an implementation.
 - A React + TypeScript project with Storybook. Yosegi reads TypeScript types and emits CSF; neither
   step has a fallback for other stacks.
 - A `tsconfig.json` that resolves the host's components, including its `paths`.
-- Node.js 20 or newer. Bun is only needed to develop Yosegi itself.
+- Node.js 22 or newer. Bun is only needed to develop Yosegi itself.
 
 ## Install
 

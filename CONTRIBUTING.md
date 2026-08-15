@@ -20,7 +20,7 @@ through. For what Yosegi is, read [`README.md`](./README.md) first.
 
 ## Development
 
-Bun is only needed to develop this repository. Using Yosegi needs nothing but Node.js 20 or newer.
+Bun is only needed to develop this repository. Using Yosegi needs nothing but Node.js 22 or newer.
 
 ```sh
 bun install
