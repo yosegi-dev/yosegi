@@ -232,7 +232,8 @@ The rest (`requirements` / `target` / `implementation` / `screen`) is supporting
 ## `story import` warnings
 
 Analysis works purely on the source AST, so any syntax whose shape is decided at runtime cannot be
-read. When no tree can be restored at all, the run ends with exit 1 and one of the codes below;
+read. When no tree can be restored at all, the run ends with exit 1 and the standard error envelope,
+carrying one of the two codes below as `error.code` and the whole warning list as `error.warnings`;
 otherwise the import marks the unreadable node and moves on. **Anything that produced a
 warning is absent from the Screen JSON**, so read the original Story for those parts. An empty
 `warnings` array proves nothing on its own — count the nodes against the Story.

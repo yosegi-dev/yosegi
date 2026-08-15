@@ -1244,12 +1244,15 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 	const stories = findStories(sourceFile);
 	const story = selectStory(stories, options.storyName);
 	if (!story) {
+		// The message has to carry the way out, because this is the shape of the failure a
+		// hand-written Story hits: only a `render` function holds a tree, so a
+		// `component` + `args` Story has nothing to import and never will.
 		warn(
 			context,
 			"STORY_NOT_FOUND",
 			options.storyName
 				? `Story "${options.storyName}" was not found (candidates: ${stories.map((s) => s.name).join(", ") || "none"})`
-				: "No Story with a render function was found",
+				: "No Story with a render function was found. Import only reads a Story whose export has a render function; a `component` + `args` Story carries no structure, so read the Story file directly instead of importing it.",
 			null,
 		);
 		return {

@@ -40,7 +40,10 @@ import {
 	yosegiVersion,
 } from "../../config.ts";
 import { parseMetaTemplate } from "../../emit/meta-template.ts";
-import { importStory } from "../../importer/story-importer.ts";
+import {
+	importStory,
+	type StoryImportWarning,
+} from "../../importer/story-importer.ts";
 import { buildCvaMetadata } from "../../registry/cva-metadata.ts";
 import { collectUndocumentedProps } from "../../registry/doc-coverage.ts";
 import { buildRegistryFromSource } from "../../registry/source-registry.ts";
@@ -612,6 +615,37 @@ function defaultScreenId(file: string): string {
 	return basename(file).replace(STORY_FILE_PATTERN, "");
 }
 
+// The two codes that end an import. Every other warning code describes a part that could
+// not be read while the rest of the tree still came back.
+const STORY_IMPORT_FAILURE_CODES: ReadonlySet<string> = new Set([
+	"STORY_NOT_FOUND",
+	"RENDER_NOT_STATIC",
+]);
+
+// Report an import that produced no tree. The terminal warning becomes the envelope's
+// code/message so the code an agent branches on is the specific reason, not a generic
+// wrapper; the full warning list rides along because the other entries name what else the
+// file could not offer.
+function storyImportFailed(
+	file: string,
+	warnings: readonly StoryImportWarning[],
+): number {
+	const failure = warnings.findLast((warning) =>
+		STORY_IMPORT_FAILURE_CODES.has(warning.code),
+	);
+	print({
+		error: {
+			code: failure?.code ?? "INTERNAL_ERROR",
+			message:
+				failure?.message ??
+				"story import could not reconstruct a tree from this file.",
+			file,
+			warnings,
+		},
+	});
+	return 1;
+}
+
 // Read a Story (.stories.tsx) back into a Screen Definition. The entry point for the
 // downstream flow (converting to an implementation). Anything that couldn't be interpreted
 // is recorded in warnings, and the tree is returned as far as it could be read.
@@ -637,9 +671,10 @@ async function importStoryFile(
 	});
 
 	if (!imported.root) {
-		// If the tree can't be restored, there's no Screen JSON to produce; the reason is in warnings.
-		print({ warnings: imported.warnings });
-		return 1;
+		// No tree means no Screen JSON, so this is a command failure and goes out through the
+		// same { error: { code, message } } envelope every other command uses — an agent
+		// branching on error.code must not have to special-case this one command.
+		return storyImportFailed(storyFile, imported.warnings);
 	}
 
 	const screenId = flagString(flags, "screen-id") ?? defaultScreenId(storyFile);
