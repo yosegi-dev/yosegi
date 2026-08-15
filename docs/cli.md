@@ -271,6 +271,10 @@ yosegi story import app/components/screens/customer-list.stories.tsx \
   --import-map "./app=~" --out tmp/screen.json --data-dir .yosegi
 ```
 
+When no tree can be restored the run exits 1 with the same error envelope as every other command,
+`{ "error": { "code", "message", "file", "warnings" } }`. `code` is the reason that ended the run
+(`STORY_NOT_FOUND` or `RENDER_NOT_STATIC`) and `error.warnings` carries the whole warning list.
+
 Warning codes are in [Workflows](./workflows.md#story-import-warnings).
 
 ## Screen store commands

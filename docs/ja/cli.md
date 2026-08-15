@@ -267,6 +267,11 @@ yosegi story import app/components/screens/customer-list.stories.tsx \
   --import-map "./app=~" --out tmp/screen.json --data-dir .yosegi
 ```
 
+ツリーを復元できなかった場合は、他のコマンドと同じエラーエンベロープ
+`{ "error": { "code", "message", "file", "warnings" } }` を返して終了コード 1 になります。`code`
+は実行を止めた理由（`STORY_NOT_FOUND` か `RENDER_NOT_STATIC`）で、警告は `error.warnings` に
+すべて入ります。
+
 警告の code は[ワークフロー](./workflows.md#story-import-の警告)にあります。
 
 ## 画面ストアのコマンド

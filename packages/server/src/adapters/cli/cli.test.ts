@@ -751,7 +751,8 @@ describe("runCli", () => {
 			dataDir,
 		]);
 		expect(code).toBe(1);
-		expect(output()).toContain("STORY_NOT_FOUND");
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("STORY_NOT_FOUND");
 	});
 
 	it("component inspect は id 無しで MISSING_ARGUMENT を返す", async () => {
@@ -1107,7 +1108,9 @@ describe("runCli", () => {
 		]);
 	});
 
-	it("story import はツリーを復元できなければ exit 1", async () => {
+	// The failure goes out through the same envelope as every other command's, so an agent
+	// branching on error.code reaches this one too. The warnings stay attached inside it.
+	it("story import はツリーを復元できなければ error エンベロープで exit 1", async () => {
 		const storyFile = join(dataDir, "no-render.stories.tsx");
 		await writeFile(
 			storyFile,
@@ -1126,8 +1129,52 @@ describe("runCli", () => {
 			dataDir,
 		]);
 		expect(code).toBe(1);
-		expect(output()).toContain("STORY_NOT_FOUND");
-		expect(output()).toContain("No Story with a render function was found");
+		const parsed = JSON.parse(output()) as {
+			error: {
+				code: string;
+				message: string;
+				file: string;
+				warnings: { code: string }[];
+			};
+			warnings?: unknown;
+		};
+		expect(parsed.warnings).toBeUndefined();
+		expect(parsed.error.code).toBe("STORY_NOT_FOUND");
+		expect(parsed.error.file).toBe(storyFile);
+		expect(parsed.error.warnings.map((warning) => warning.code)).toEqual([
+			"STORY_NOT_FOUND",
+		]);
+		// The message has to say why importing can never work here, not just that it failed.
+		expect(parsed.error.message).toContain("render function");
+		expect(parsed.error.message).toContain("`component` + `args`");
+		expect(parsed.error.message).toContain("read the Story file directly");
+	});
+
+	// A --story-name that lands on an args-only export ends the run just as STORY_NOT_FOUND
+	// does, and takes the same envelope with its own code.
+	it("story import は RENDER_NOT_STATIC も error エンベロープで返す", async () => {
+		const storyFile = join(dataDir, "args-only.stories.tsx");
+		await writeFile(
+			storyFile,
+			[
+				'const meta: Meta = { title: "Examples/なし" };',
+				"export default meta;",
+				'export const Default: StoryObj = { args: { label: "ボタン" } };',
+			].join("\n"),
+		);
+
+		const code = await runCli([
+			"story",
+			"import",
+			storyFile,
+			"--story-name",
+			"Default",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("RENDER_NOT_STATIC");
 	});
 
 	it("registry build は --index に URL を指定できる", async () => {
