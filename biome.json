@@ -9,7 +9,7 @@
 			"!**/seeds",
 			"!**/node_modules",
 			"!**/yosegi-registry.json",
-			"!**/.claude"
+			"!!**/.claude"
 		]
 	},
 	"formatter": {
