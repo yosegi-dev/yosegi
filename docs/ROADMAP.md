@@ -6,9 +6,83 @@ What is planned, and what is still undecided. For what Yosegi does today, start 
 [`README.md`](../README.md); for how the Component Registry works, see
 [Component Registry](./registry.md).
 
-## Registry extraction
+## Planned work
 
-### Put type extraction behind a replaceable interface
+In priority order. Where an item waits on another, its own paragraph says so.
+
+### 1. Scope `each`'s iteration variable
+
+`each` declares an iteration variable that nothing resolves. Written the natural way —
+`each: "customer in customers"` on a node binding `customer.name` — a correct list comes back with
+two warnings it cannot act on: `BOUND_REQUIRED_PROP`, because `customer.name` is read as coming from
+nowhere, and `UNUSED_FIXTURE`, because nothing is seen referencing `customers`. Noise on correct
+input is the worst thing that can happen to the signal an agent self-corrects from, which puts this
+first. Scoping the variable over the node's subtree clears both.
+
+### 2. Check fixture values against the prop's kind
+
+Fixtures are not checked against the props they are bound to: a string fixture bound to a
+number-kind prop validates clean and fails only in the host's type check. Matching the fixture value
+against the manifest's prop kind would catch it where every other shape error is caught.
+
+### 3. Extract usage examples from Stories
+
+The registry answers "what props exist" and deliberately nothing else:
+[`workflows.md`](./workflows.md) states that the screen's skeleton and composition idiom —
+wrappers, hook calls, host-specific meta — come from the host's own Stories and templates, not the
+registry. Today an agent follows `curation.storyFile` and reads the Story by hand.
+
+The pieces to shorten that already exist: the manifest records `storyFile` / `storyNames`, and
+`story import` already parses Story source through the TypeScript AST. A command that extracts a
+Story's `args` and `render` for a named component and returns them as a usage example is the
+planned next step. The honest limit: today the importer reads only `render`-style Stories, so a
+`component` + `args` Story — the dominant hand-written shape — comes back as `STORY_NOT_FOUND`
+without `--story-name` and as `RENDER_NOT_STATIC` with it. The extractor therefore has to read
+`args` itself, and its output is an excerpt to read, not a tree to build on — which is all a usage
+example needs to be.
+
+### 4. Read Storybook's component manifest as a third input
+
+Storybook 10.5's `storybook build` writes a component manifest (`/manifests/components.json`) that
+carries, per component, the `import` statement, `jsDocTags`, `subcomponents`, and for each Story an
+id, a name, and a `snippet` of its source. Taking it as a third `registry build` input beside
+`--index` and `--source` would hand the registry usage examples without Yosegi parsing a Story
+itself, and would back the claim that Yosegi complements Storybook with an implementation rather
+than a paragraph.
+
+How it is wired in is the design, not what it yields. Storybook states plainly that the manifest
+schema is not a public API while it is in preview, so adopting it means an opt-in flag, an explicit
+check of the manifest's version, and a fallback to what `index.json` alone gives (curation and
+nothing else) when the shape is not the expected one. Without that layer, a Storybook release moves
+Yosegi's registry output.
+
+It stands beside item 3 rather than replacing it: where the manifest is available most of 3 becomes
+unnecessary, and where it is not — an older Storybook, or manifests turned off — 3's own extraction
+is what remains.
+
+### 5. Let CI gate on `registry status`
+
+`registry status` reports `source: current` / `stale` / `unknown`, but only as text — a pipeline
+cannot fail on it without parsing. An `--exit-code` flag (non-zero on `stale`) would make staleness
+a CI gate: the registry gets committed, and the check stops a source change from drifting past it.
+
+Committing the registry is also what exposes the provenance problem: `builtWithCliPath` is an
+absolute path captured from the running process, and the recorded `inputs` keep flags exactly as
+typed, absolute paths included. Shared across machines, both turn into noise. Separating
+machine-local fields from shareable ones — or recording paths relative to the project root — is a
+precondition for treating a committed registry as canonical.
+
+### 6. Apply curation to the default ordering
+
+`curation.recommended` looks at nothing but "does a Story exist". The registry also lists plenty of
+components that have no Story, so we need a policy on how far agents may go in using them. Using it
+for the default ordering and filtering of `component list` is the obvious line.
+
+The constraint to design around: only a `--source` registry decides `recommended` per component. A
+registry built from `index.json` alone sets it to `true` on everything, since every entry in the
+index has a Story by construction — on that path the field is a constant and orders nothing.
+
+### 7. Put type extraction behind a replaceable interface
 
 Two kinds of component come back with only `className` / `children`: a value cast to an overloaded
 call signature type, and re-exports of third-party components. Reading the first parameter of the
@@ -22,74 +96,23 @@ react-docgen-typescript as the default implementation and the TypeChecker direct
 alternative one. One implementation owns the answer at a time, so the disagreement problem
 dissolves structurally instead of needing a "fill in gaps only" rule.
 
-The interface is also a hedge on the ecosystem. react-docgen-typescript has gone quiet — at the
-time of writing its last release dates from mid-2025 — while TypeScript 7.1's replacement compiler
-API is still published as `typescript/unstable/*`, and Storybook appears to be building a Volar /
-language-server replacement for its docgen (React Component Meta, experimental as of
-Storybook 10.4). Which of those settles first is not something Yosegi controls; a swappable
-extractor is what keeps each of them adoptable without another rewrite. The workaround in the
-meantime is unchanged: `--metadata`, which `component inspect` points you at.
+Making `required` usable on union props types belongs to the same work. `required` is dropped across
+the board when a component's props type is a union, because react-docgen-typescript's determination
+is unreliable there and a false positive rejects a correct screen. Resolving the union and marking a
+prop required only when every branch requires it needs the same TypeChecker read and touches the
+same functions, so it is not a separate decision.
 
-### Make `required` usable on union props types
+The interface is also a hedge on the ecosystem, and that is what makes this the most urgent item
+here despite sitting mid-list by value. react-docgen-typescript has gone quiet: its last release is
+2.4.0 from June 2025, its default branch has had no commit since, and the report that it crashes on
+TypeScript 7 (issue #538) is still open. Storybook is building a replacement — React Component Meta,
+wired into manifest generation as `experimentalDocgenServer` in Storybook 10.5, which Storybook says
+it will standardize on for both MCP and Docs once it stabilizes — but it ships no standalone npm
+package, so today it is not something to depend on. A swappable extractor is what keeps each of them
+adoptable without another rewrite. The workaround in the meantime is unchanged: `--metadata`, which
+`component inspect` points you at.
 
-`required` is currently dropped across the board when a component's props type is a union, because
-react-docgen-typescript's determination is unreliable there and a false positive rejects a correct
-screen. Resolving the union through the TypeChecker and marking a prop required only when every
-branch requires it would recover the missed cases without reintroducing false positives.
-
-### Extract usage examples from Stories
-
-The registry answers "what props exist" and deliberately nothing else:
-[`workflows.md`](./workflows.md) states that the screen's skeleton and composition idiom —
-wrappers, hook calls, host-specific meta — come from the host's own Stories and templates, not the
-registry. Today an agent follows `curation.storyFile` and reads the Story by hand.
-
-The pieces to shorten that already exist: the manifest records `storyFile` / `storyNames`, and
-`story import` already parses Story source through the TypeScript AST. A command that extracts a
-Story's `args` and `render` for a named component and returns them as a usage example is the
-planned next step. The honest limit: today the importer reads only `render`-style Stories — a
-`component` + `args` Story, the dominant hand-written shape, comes back as `STORY_NOT_FOUND` — so
-the extractor has to read `args` itself, and its output is an excerpt to read, not a tree to
-build on — which is all a usage example needs to be.
-
-## Registry operations
-
-### Let CI gate on `registry status`
-
-`registry status` reports `source: current` / `stale` / `unknown`, but only as text — a pipeline
-cannot fail on it without parsing. An `--exit-code` flag (non-zero on `stale`) would make staleness
-a CI gate: the registry gets committed, and the check stops a source change from drifting past it.
-
-Committing the registry is also what exposes the provenance problem: `builtWithCliPath` is an
-absolute path captured from the running process, and the recorded `inputs` keep flags exactly as
-typed, absolute paths included. Shared across machines, both turn into noise. Separating
-machine-local fields from shareable ones — or recording paths relative to the project root — is a
-precondition for treating a committed registry as canonical.
-
-## Runtime and packaging
-
-### Make `@yosegi/core` free of the filesystem
-
-`FileScreenRepository` in `packages/core` is the one thing tying core to `node:fs`. Splitting it out
-into a `@yosegi/core/node` subpath would leave core usable in browser and Workers environments.
-
-### Stay on TypeScript 6.x until 7.1 ships an API
-
-`typescript` is capped at `<7` on purpose. TypeScript 7.0 ships no compiler API —
-`require("typescript")` returns `{ version, versionMajorMinor }` and nothing else — and both
-`source-registry.ts` and `react-docgen-typescript` are built on the 6.x API. A host on 7 keeps that
-API through the compatibility package, which is what [`registry.md`](./registry.md) tells them to
-install.
-
-7.1 is expected to introduce a new and different API, published today as `typescript/unstable/*`
-(`unstable/sync` for `Program` / `Checker`, `unstable/ast` for the node helpers). Migrating to it
-needs two things that are not true yet: the API leaving `unstable`, and `react-docgen-typescript`
-supporting 7 — or being swapped out behind the extraction interface above. Until then the cap
-stays, and widening it is a regression rather than an upgrade.
-
-## The Story round trip
-
-### Read the component target back
+### 8. Read the component target back
 
 `story import` reads Stories only, so a file `screen generate --target component` wrote cannot be
 read back into Screen JSON — [`workflows.md`](./workflows.md) documents the asymmetry and the
@@ -99,33 +122,31 @@ conversion, so closing the gap is a component-file variant of the first half: lo
 functions, feed the JSX they return to the same conversion. Until then the asymmetry stays
 documented rather than fixed.
 
-### Smaller follow-ups on fixtures, variants, and `each`
+### 9. What a screen diff would compare
 
-Three extensions were deliberately left out of the first versions.
+An approved mock and the implementation built from it drift apart silently. A structural diff —
+the approved Screen JSON on one side, the current tree on the other — would name what changed
+(a removed node, a changed prop) rather than leaving it to review. The open half is the right-hand
+side: the implementation is not a Story, so what to read it back through (the component-target
+importer above, once it exists?) decides whether the diff is possible at all.
 
-- Fixtures are not checked against the props they are bound to: a string fixture bound to a
-  number-kind prop validates clean and fails only in the host's type check. Matching the fixture
-  value against the manifest's prop kind would catch it where every other shape error is caught.
-- A variant shares the base Story's meta wholesale. Per-variant `parameters` / `tags` would let a
-  loading state opt out of an a11y check, or tag an empty state for a test runner, without leaving
-  Screen JSON.
-- `each` declares an iteration variable that nothing resolves: with `each: "customer in customers"`
-  a binding on `customer.name` is not recognized as backed by the `customers` fixture, so it warns
-  as if the name came from nowhere. Scoping the variable over the node's subtree would make the
-  natural way of writing a list validate clean.
+### 10. A migration strategy for saved screens
 
-## Reach of the adapters
+A screen saved under `<data-dir>/screens/` is pinned to two things that can move under it, and both
+need an answer before saved screens hold anything worth keeping.
 
-The read side has mostly converged: `list_categories` and `get_registry_status` are MCP tools now,
-though `get_registry_status` reports provenance only — recomputing source drift stays a CLI
-concern. What remains CLI-only is `registry build --source` and `story import`, so an agent working
-through MCP still drops down to the CLI to build the registry or read a Story back. Either those
-two come to MCP / HTTP, or CLI-only becomes the stated contract; today the Skill says so
-explicitly, which works but leaves the adapters uneven.
+Component ids are the first. Registries built from `--source` use `<module path>#<exportName>`,
+while `--index` on its own produces short ids (`Button`). The two are not interchangeable, so a
+screen saved against one cannot be revalidated against the other, and nothing migrates or aliases
+them today.
 
-## Open design questions
+`schemaVersion` is the second. The parser takes it as a hard literal (`z.literal("1.0")`) with no
+branch that accepts an older document and promotes it, so raising the version would reject every
+saved screen and every hand-written Screen JSON with `INVALID_REQUEST`. Pre-1.0 versioning permits
+that breaking change, which is exactly why the release taking it needs a path across both axes
+rather than one.
 
-### How far to widen the shape of the output
+### 11. How far to widen the shape of the output
 
 The file shape is settled: one module carrying one export per screen state — Story exports on the
 CSF target, exported functions on the component target (`screen generate --target component`, which
@@ -143,43 +164,88 @@ value internal and no props lifted out.
   into the host's file layout conventions.
 - A single file with no lifted props stays the default until Screen JSON can express boundaries.
 
-### How curation should be used
-
-`curation.recommended` looks at nothing but "does a Story exist". The registry also lists plenty of
-components that have no Story, so we need a policy on how far agents may go in using them. Using it
-for the default ordering and filtering of `component list` is the obvious line.
-
-### Migrating component ids in saved screens
-
-A screen saved under `<data-dir>/screens/` stores the component ids that were current when it was
-written. Registries built from `--source` use `<module path>#<exportName>`, while `--index` on its
-own produces short ids (`Button`). The two are not interchangeable, so a screen saved against one
-cannot be revalidated against the other. Nothing migrates or aliases them today. Before saved
-screens carry anything worth keeping, this needs either a migration step or id aliasing.
-
-### Whether Yosegi should confirm the Story actually renders
+### 12. Confirm the Story appears in a rebuilt index
 
 `screen generate` ends at a file. Whether the Story then shows up in the host's Storybook — the
 title resolves, the imports build, nothing throws on render — is confirmed today by the host's type
-check and by a human looking. A machine check has an obvious first rung, the Story appearing in a
-rebuilt `index.json`, and a much steeper second one: brokering screenshot or a11y checks through
-the host's own Storybook (its test runner, its addons). The second rung strains the founding line
-that Yosegi has no rendering environment of its own — brokering is not owning one, but the boundary
-needs drawing before any of it is built.
+check and by a human looking. The first rung of a machine check is cheap, because the pieces are
+already here: the CLI reads an `index.json` from a path or from a running dev server's URL, and
+`registry status` already reasons about how fresh that index is. Checking that a generated Story
+appears in a rebuilt index reuses both. The rung above that one is a non-goal; see below.
 
-### What a screen diff would compare
+## Runtime and packaging
 
-An approved mock and the implementation built from it drift apart silently. A structural diff —
-the approved Screen JSON on one side, the current tree on the other — would name what changed
-(a removed node, a changed prop) rather than leaving it to review. The open half is the right-hand
-side: the implementation is not a Story, so what to read it back through (the component-target
-importer above, once it exists?) decides whether the diff is possible at all.
+### Stay on TypeScript 6.x while the compiler API is out of reach
 
-### Whether design tokens belong in the registry
+`typescript` is capped at `<7` on purpose. TypeScript 7.0 went GA on 2026-07-08 and is npm's
+`latest`, so a new host lands on it by default — and it ships no compiler API:
+`require("typescript")` returns `{ version, versionMajorMinor }` and nothing else, while both
+`source-registry.ts` and `react-docgen-typescript` are built on the 6.x API. A host on 7 keeps that
+API through the compatibility package, which is what [`registry.md`](./registry.md) tells them to
+install.
 
-`className` is free-form today: any string passes validation, and a token the host's CSS does not
-define fails silently in review. Extracting the host's tokens into the registry would make
-`className` checkable the way an enum prop already is. The sticking point is that tokens have no
-single source — a Tailwind config, CSS variables, a CSS-in-JS theme — so the registry would be
-taking a dependency on the host's CSS dialect, which is a bigger commitment than reading its
-TypeScript.
+The replacement API is published as `typescript/unstable/*` (`unstable/sync` for `Program` /
+`Checker`, `unstable/ast` for the node helpers). The 7.1 iteration plan
+(microsoft/TypeScript#63703; beta 2026-09-09, RC 2026-10-20, stable 2026-11-10) names three APIs to
+stabilize — Content Mapper, Emit, and Language Service — and `Program` / `Checker`, which is what
+Yosegi and react-docgen-typescript actually need, is not among them. 7.1 is therefore a date to
+re-evaluate on, not a date the cap comes off.
+
+That the Language Service stabilizes first is itself an argument for the extraction interface above:
+an implementation built on it is reachable sooner than one built on the Checker.
+
+### Reconsider how `typescript` is depended on
+
+`packages/server` declares `typescript` as a `dependency` at `>=5.4.0 <7`. A range rather than an
+exact pin was the deliberate choice, so that the host's own copy and Yosegi's unify instead of
+nesting a second 23MB compiler. Now that 7.0 is npm's `latest`, that reasoning stops working for the
+hosts it was written for: a host on 7 cannot satisfy `<7`, so it nests a 6.x copy under Yosegi in
+every install — the outcome the range existed to prevent.
+
+The direction is a peer dependency. It asks nothing new of the host, which already installs the
+aliased `typescript@npm:@typescript/typescript6` for docgen, and it moves resolution into the host's
+own tree, where the alias lives.
+
+One premise is unverified and decides the question: whether a `typescript` name provided by that
+alias unifies with the declared range depends on how each package manager resolves aliases, so this
+waits on a real install rather than on reading specs. The other thing to weigh is that a peer
+dependency hands the host the compiler version, and with it the reproducibility of registry output.
+
+### `@yosegi/core` and the filesystem
+
+`FileScreenRepository` is the one thing tying core to `node:fs`, and splitting it into a
+`@yosegi/core/node` subpath would leave core usable in browser and Workers environments. No consumer
+is waiting on that, so it is packaging to revisit when embedding the HTTP app becomes a supported
+use case, not work to schedule now.
+
+## Open questions
+
+### What the HTTP adapter is for
+
+The adapters are nested rather than uneven: CLI ⊃ MCP ⊃ HTTP. What MCP lacks is settled — building
+the registry, scaffolding metadata, reading a Story back, and the source-drift half of
+`registry status` are CLI-only by contract, and the skill's CLI reference says so. HTTP is the wider
+gap: it exposes health, registry, components, screens, operations, duplicate, validate, and
+implementation context, and no generation endpoint at all.
+
+The question is not how to close that gap but whether to. The HTTP adapter has no documented
+consumer, while `hono` is a required dependency every user installs. Either it earns a use case
+worth that dependency, or it stops being part of the published surface.
+
+## Not goals
+
+### Design tokens in the registry
+
+`className` stays free-form: any string passes validation, and a token the host's CSS does not
+define fails silently in review. Extracting the host's tokens into the registry would make it
+checkable the way an enum prop already is, but tokens have no single source — a Tailwind config, CSS
+variables, a CSS-in-JS theme — so the registry would take on a dependency on the host's CSS dialect.
+That is a far larger commitment than reading its TypeScript, and it settles the question rather than
+leaving it open.
+
+### Brokering screenshot and a11y checks
+
+Driving a generated Story through the host's own Storybook — its test runner, its addons — to get a
+screenshot or an a11y result back is not something Yosegi will do. Brokering is not owning a
+rendering environment, but it puts the host's browser stack on Yosegi's critical path, which is the
+founding line it was drawn to protect. Machine confirmation stops at the index check in item 12.
