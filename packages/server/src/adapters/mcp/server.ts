@@ -47,11 +47,26 @@ function fail(error: unknown) {
 	};
 }
 
+// What a client sees before it calls anything. The tool list already says what each tool
+// does, so this covers only what it cannot: these tools read a registry the CLI builds, and
+// the steps that need the TypeScript compiler or the host's files have no MCP equivalent.
+// Without it, an agent connected over MCP alone discovers that by getting an empty registry.
+const INSTRUCTIONS = [
+	"Yosegi assembles a screen out of the components already registered in the host project, and returns it as a Storybook Story (CSF) or as a plain React component.",
+	'These tools read a Component Registry; they cannot build one. If it is missing or empty, run `yosegi registry build --source "<glob>" --tsconfig <path>` in the host first.',
+	"Building the registry, scaffolding metadata for components whose props could not be read, importing an existing Story back into Screen JSON, and recomputing drift against the host's sources are CLI-only. `get_registry_status` reports provenance alone; `yosegi registry status` is what compares the registry against the sources.",
+].join("\n\n");
+
 // Exposes the Composer as an MCP server. It has no MCP-specific logic of its own — it's
 // strictly an Adapter that calls the Application Service (Composer). Updates run under
 // agent permissions (Draft only).
 export function createMcpServer(composer: Composer): McpServer {
-	const server = new McpServer({ name: "yosegi", version: "0.1.0" });
+	// The version is the package's own, so a client reports the Yosegi it is actually
+	// talking to and there is no second place to bump on release.
+	const server = new McpServer(
+		{ name: "yosegi", version: yosegiVersion() },
+		{ instructions: INSTRUCTIONS },
+	);
 
 	// Full manifests for a whole registry run to hundreds of kilobytes — far past what a
 	// tool result should put into a context window — so the default is a capped list of

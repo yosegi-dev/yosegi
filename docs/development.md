@@ -195,9 +195,19 @@ None of this can be done from the repository; it needs an npm account with right
 
 ### Each release
 
-1. Bump `version` in both `package.json` files and the `@yosegi/core` dependency in
-   `packages/server/package.json`, then run `bun install` so `bun.lock` records the new versions.
-   The workflow refuses to publish if these disagree with the tag.
+1. Bump the version everywhere it is recorded, in one commit:
+
+   | What | Where |
+   | --- | --- |
+   | Each package's own version | `version` in both `package.json` files |
+   | The pin between them | the `@yosegi/core` dependency in `packages/server/package.json` |
+   | What `bun pm pack` substitutes from | `bun.lock`, via `bun install` |
+
+   The workflow refuses to publish if these disagree with the tag. No source file repeats the
+   version: `yosegiVersion()` (`packages/server/src/config.ts`) reads `package.json`, and the CLI's
+   `--version`, the registry's `builtWith`, and the MCP server's `initialize` response all go
+   through it. A new literal is the thing to catch in review. `skills/yosegi/SKILL.md` is dated
+   rather than versioned — that date tracks the skill's last content change, not the release.
 2. Commit, then tag and push:
 
    ```sh
