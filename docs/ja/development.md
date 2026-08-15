@@ -193,9 +193,19 @@ npm のトークンは一切無く、今後も置いてはいけません。publ
 
 ### 各リリース
 
-1. 両方の `package.json` の `version` と、`packages/server/package.json` の `@yosegi/core` 依存を
-   上げます。続けて `bun install` を回し、`bun.lock` に新しいバージョンを記録させます。これらがタグ
-   と食い違っているとワークフローは公開を拒否します。
+1. バージョンが記録されている箇所をまとめて上げ、1 つのコミットにします。
+
+   | 対象 | 場所 |
+   | --- | --- |
+   | 各パッケージ自身のバージョン | 両方の `package.json` の `version` |
+   | 両者のあいだの固定 | `packages/server/package.json` の `@yosegi/core` 依存 |
+   | `bun pm pack` が置換に使う値 | `bun install` 経由で `bun.lock` |
+
+   これらがタグと食い違っているとワークフローは公開を拒否します。ソースにバージョンを書いた箇所は
+   ありません。`yosegiVersion()`（`packages/server/src/config.ts`）が `package.json` を読み、CLI の
+   `--version`、Registry の `builtWith`、MCP サーバの `initialize` の応答はすべてこれを通ります。
+   新しいリテラルが増えていないかがレビューで見る点です。`skills/yosegi/SKILL.md` はバージョンでは
+   なく日付を持ちますが、これはリリースではなく Skill の内容を最後に変えた時点を指します。
 2. コミットし、タグを打って push します:
 
    ```sh

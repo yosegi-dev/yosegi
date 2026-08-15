@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Composer, InMemoryScreenRepository } from "@yosegi/core/app";
@@ -33,7 +36,38 @@ function textOf(result: {
 	return result.content.map((c) => c.text ?? "").join("");
 }
 
+// Read straight from package.json rather than through config.ts, so the assertion is about
+// the shipped version rather than about the two call sites agreeing.
+function packageVersion(): string {
+	const path = resolve(
+		dirname(fileURLToPath(import.meta.url)),
+		"../../../package.json",
+	);
+	return (JSON.parse(readFileSync(path, "utf8")) as { version: string })
+		.version;
+}
+
 describe("MCP server", () => {
+	// A hardcoded version silently drifts from the package on every release, and a client
+	// has no way to tell it is being lied to.
+	it("初期化で package.json のバージョンを返す", async () => {
+		const client = await connect();
+		expect(client.getServerVersion()).toEqual({
+			name: "yosegi",
+			version: packageVersion(),
+		});
+	});
+
+	// The registry these tools read is built by the CLI, so a client that only has MCP has
+	// to be told that much before its first call.
+	it("initialize で CLI 前提を伝える instructions を返す", async () => {
+		const client = await connect();
+		const instructions = client.getInstructions() ?? "";
+		expect(instructions.length).toBeGreaterThan(0);
+		expect(instructions).toContain("yosegi registry build");
+		expect(instructions).toContain("yosegi registry status");
+	});
+
 	it("tools を列挙できる", async () => {
 		const client = await connect();
 		const tools = await client.listTools();
