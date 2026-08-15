@@ -41,7 +41,26 @@ without `--story-name` and as `RENDER_NOT_STATIC` with it. The extractor therefo
 `args` itself, and its output is an excerpt to read, not a tree to build on — which is all a usage
 example needs to be.
 
-### 4. Let CI gate on `registry status`
+### 4. Read Storybook's component manifest as a third input
+
+Storybook 10.5's `storybook build` writes a component manifest (`/manifests/components.json`) that
+carries, per component, the `import` statement, `jsDocTags`, `subcomponents`, and for each Story an
+id, a name, and a `snippet` of its source. Taking it as a third `registry build` input beside
+`--index` and `--source` would hand the registry usage examples without Yosegi parsing a Story
+itself, and would back the claim that Yosegi complements Storybook with an implementation rather
+than a paragraph.
+
+How it is wired in is the design, not what it yields. Storybook states plainly that the manifest
+schema is not a public API while it is in preview, so adopting it means an opt-in flag, an explicit
+check of the manifest's version, and a fallback to what `index.json` alone gives (curation and
+nothing else) when the shape is not the expected one. Without that layer, a Storybook release moves
+Yosegi's registry output.
+
+It stands beside item 3 rather than replacing it: where the manifest is available most of 3 becomes
+unnecessary, and where it is not — an older Storybook, or manifests turned off — 3's own extraction
+is what remains.
+
+### 5. Let CI gate on `registry status`
 
 `registry status` reports `source: current` / `stale` / `unknown`, but only as text — a pipeline
 cannot fail on it without parsing. An `--exit-code` flag (non-zero on `stale`) would make staleness
@@ -53,7 +72,7 @@ typed, absolute paths included. Shared across machines, both turn into noise. Se
 machine-local fields from shareable ones — or recording paths relative to the project root — is a
 precondition for treating a committed registry as canonical.
 
-### 5. Apply curation to the default ordering
+### 6. Apply curation to the default ordering
 
 `curation.recommended` looks at nothing but "does a Story exist". The registry also lists plenty of
 components that have no Story, so we need a policy on how far agents may go in using them. Using it
@@ -63,7 +82,7 @@ The constraint to design around: only a `--source` registry decides `recommended
 registry built from `index.json` alone sets it to `true` on everything, since every entry in the
 index has a Story by construction — on that path the field is a constant and orders nothing.
 
-### 6. Put type extraction behind a replaceable interface
+### 7. Put type extraction behind a replaceable interface
 
 Two kinds of component come back with only `className` / `children`: a value cast to an overloaded
 call signature type, and re-exports of third-party components. Reading the first parameter of the
@@ -93,7 +112,7 @@ package, so today it is not something to depend on. A swappable extractor is wha
 adoptable without another rewrite. The workaround in the meantime is unchanged: `--metadata`, which
 `component inspect` points you at.
 
-### 7. Read the component target back
+### 8. Read the component target back
 
 `story import` reads Stories only, so a file `screen generate --target component` wrote cannot be
 read back into Screen JSON — [`workflows.md`](./workflows.md) documents the asymmetry and the
@@ -103,7 +122,7 @@ conversion, so closing the gap is a component-file variant of the first half: lo
 functions, feed the JSX they return to the same conversion. Until then the asymmetry stays
 documented rather than fixed.
 
-### 8. What a screen diff would compare
+### 9. What a screen diff would compare
 
 An approved mock and the implementation built from it drift apart silently. A structural diff —
 the approved Screen JSON on one side, the current tree on the other — would name what changed
@@ -111,7 +130,7 @@ the approved Screen JSON on one side, the current tree on the other — would na
 side: the implementation is not a Story, so what to read it back through (the component-target
 importer above, once it exists?) decides whether the diff is possible at all.
 
-### 9. A migration strategy for saved screens
+### 10. A migration strategy for saved screens
 
 A screen saved under `<data-dir>/screens/` is pinned to two things that can move under it, and both
 need an answer before saved screens hold anything worth keeping.
@@ -127,7 +146,7 @@ saved screen and every hand-written Screen JSON with `INVALID_REQUEST`. Pre-1.0 
 that breaking change, which is exactly why the release taking it needs a path across both axes
 rather than one.
 
-### 10. How far to widen the shape of the output
+### 11. How far to widen the shape of the output
 
 The file shape is settled: one module carrying one export per screen state — Story exports on the
 CSF target, exported functions on the component target (`screen generate --target component`, which
@@ -145,7 +164,7 @@ value internal and no props lifted out.
   into the host's file layout conventions.
 - A single file with no lifted props stays the default until Screen JSON can express boundaries.
 
-### 11. Confirm the Story appears in a rebuilt index
+### 12. Confirm the Story appears in a rebuilt index
 
 `screen generate` ends at a file. Whether the Story then shows up in the host's Storybook — the
 title resolves, the imports build, nothing throws on render — is confirmed today by the host's type
@@ -174,6 +193,23 @@ re-evaluate on, not a date the cap comes off.
 
 That the Language Service stabilizes first is itself an argument for the extraction interface above:
 an implementation built on it is reachable sooner than one built on the Checker.
+
+### Reconsider how `typescript` is depended on
+
+`packages/server` declares `typescript` as a `dependency` at `>=5.4.0 <7`. A range rather than an
+exact pin was the deliberate choice, so that the host's own copy and Yosegi's unify instead of
+nesting a second 23MB compiler. Now that 7.0 is npm's `latest`, that reasoning stops working for the
+hosts it was written for: a host on 7 cannot satisfy `<7`, so it nests a 6.x copy under Yosegi in
+every install — the outcome the range existed to prevent.
+
+The direction is a peer dependency. It asks nothing new of the host, which already installs the
+aliased `typescript@npm:@typescript/typescript6` for docgen, and it moves resolution into the host's
+own tree, where the alias lives.
+
+One premise is unverified and decides the question: whether a `typescript` name provided by that
+alias unifies with the declared range depends on how each package manager resolves aliases, so this
+waits on a real install rather than on reading specs. The other thing to weigh is that a peer
+dependency hands the host the compiler version, and with it the reproducibility of registry output.
 
 ### `@yosegi/core` and the filesystem
 
@@ -212,4 +248,4 @@ leaving it open.
 Driving a generated Story through the host's own Storybook — its test runner, its addons — to get a
 screenshot or an a11y result back is not something Yosegi will do. Brokering is not owning a
 rendering environment, but it puts the host's browser stack on Yosegi's critical path, which is the
-founding line it was drawn to protect. Machine confirmation stops at the index check in item 11.
+founding line it was drawn to protect. Machine confirmation stops at the index check in item 12.
