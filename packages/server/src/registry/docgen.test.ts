@@ -5,7 +5,9 @@ import {
 	resolveExtractorTypeScript,
 } from "./docgen.ts";
 
-const ALIAS_COMMAND = "npm install -D typescript@npm:@typescript/typescript6";
+// Both entries, in one command: `typescript` alone would leave the host without a `tsc`.
+const ALIAS_COMMAND =
+	"npm install -D @typescript/native@npm:typescript typescript@npm:@typescript/typescript6";
 
 describe("loadDocgen", () => {
 	it("読み込みに成功すると withCompilerOptions が使える", () => {

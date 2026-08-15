@@ -67,7 +67,7 @@ them rather than competing; the split is in [`docs/storybook-mcp.md`](./docs/sto
 ## Install
 
 Requires Node.js 20+. Any package manager. The registry reads your types through the TypeScript 6.x
-compiler API, which TypeScript 7 no longer ships — hosts on 7 alias one package, see
+compiler API, which TypeScript 7 no longer ships — hosts on 7 install 6 and 7 side by side, see
 [Hosts on TypeScript 7](./docs/registry.md#hosts-on-typescript-7).
 
 ```sh

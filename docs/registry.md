@@ -62,24 +62,27 @@ things look in the host's Storybook. Since `@yosegi/core` is kept zod-only, type
 ### Hosts on TypeScript 7
 
 TypeScript 7.0 ships no compiler API, and extraction is built on the 6.x one, so a host that
-installed 7 has to alias `typescript` to the compatibility package the TypeScript team publishes for
-this. It keeps `tsc` on 7 and hands tools back the 6.x API:
+installed 7 takes the
+[side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) the
+TypeScript team recommends — two `devDependencies`, not one:
 
-```sh
-# npm
-npm install -D typescript@npm:@typescript/typescript6
-# pnpm
-pnpm add -D typescript@npm:@typescript/typescript6
-# yarn
-yarn add -D typescript@npm:@typescript/typescript6
-# bun
-bun add -d typescript@npm:@typescript/typescript6
+```json
+{
+	"devDependencies": {
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"typescript": "npm:@typescript/typescript6@^6.0.2"
+	}
+}
 ```
 
-The tree then holds one `typescript`, shared with Yosegi rather than duplicated. Without the alias,
-`registry build` fails with the version it resolved and the command above — installing Yosegi's own
-copy is not enough, because a package manager hoists react-docgen-typescript to the top of the
-host's tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
+`tsc` still runs 7, from `@typescript/native`; the compatibility package adds `tsc6`; and every tool
+resolving `typescript` — Yosegi included — reads the 6.x API. Aliasing `typescript` on its own takes
+`tsc` away with it, because the compatibility package ships `tsc6` and no `tsc`.
+
+The tree then holds one `typescript`, shared with Yosegi rather than duplicated. Without the
+aliases, `registry build` fails with the version it resolved and the entries above — installing
+Yosegi's own copy is not enough, because a package manager hoists react-docgen-typescript to the top
+of the host's tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
 
 ### ids and imports
 

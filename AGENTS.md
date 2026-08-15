@@ -149,8 +149,8 @@ it is the compiler that produces `dist`.
 
 `typescript`'s range carries an upper bound, `<7`, and it is not stale. TypeScript 7.0 ships no
 compiler API, so raising it hands hosts a build that cannot read a single type. `docgen.ts` turns
-that into the alias hosts on 7 should install; the reasoning and what would let the bound move are in
-[`docs/ROADMAP.md`](./docs/ROADMAP.md).
+that into the side-by-side install hosts on 7 need; the reasoning and what would let the bound move
+are in [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 `@yosegi/core` is the deliberate exception. It reaches `packages/server`'s `.d.ts` through
 `Composer`, but stays exactly pinned because the two packages release in lockstep and `bun pm pack`
