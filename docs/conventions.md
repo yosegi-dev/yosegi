@@ -15,6 +15,7 @@ links there.
 | `README.md` | The face: value in the first lines, how it works in five steps, a minimal quickstart, links out | Flag tables, troubleshooting, anything a linked page owns |
 | `docs/getting-started.md` | The walkthrough — requirements, install, the numbered path to a Story and on to an implementation | Full flag lists, extraction internals |
 | `docs/cli.md` | Reference only. Per command: synopsis, an options table (flag / type / default / meaning), one short example | Conceptual explanation, tutorials, procedures that chain commands |
+| `docs/configuration.md` | `yosegi.config.json` — the discovery rule, the schema, path resolution, precedence | Per-flag meaning, which `docs/cli.md` owns |
 | `docs/screen-json.md` | The format spec — fields, component ids, synthetic primitives, `bindings` / `events` | Flags, and the loops that produce the file |
 | `docs/workflows.md` | Use cases, the upstream and downstream loops, the error and warning codes | Flag semantics |
 | `docs/registry.md` | How types become a catalog, the measurements, the patterns that do not extract | Command reference |

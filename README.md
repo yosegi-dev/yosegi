@@ -140,6 +140,7 @@ Then: *"build me a screen proposal from the existing components"*.
 | [Storybook MCP and Yosegi](./docs/storybook-mcp.md) | The overlap with Storybook's official MCP, and the split |
 | [Screen JSON](./docs/screen-json.md) | Component ids, synthetic primitives, bindings / events |
 | [CLI reference](./docs/cli.md) | Every command and flag, plus the MCP tools |
+| [Configuration file](./docs/configuration.md) | `yosegi.config.json` — discovery, schema, and precedence |
 | [Development](./docs/development.md) | Package layout, build, pre-publish verification |
 | [Roadmap](./docs/ROADMAP.md) | Planned work and open questions |
 | [Component Registry](./docs/registry.md) | How types become a catalog, and the measurements |

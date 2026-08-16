@@ -26,6 +26,10 @@ bun add -d @yosegi/yosegi
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `--data-dir <dir>` | path | `.yosegi` under the cwd | Where the registry and the saved screens live. Created if missing. Pass the same value to every command |
+| `--config <path>` | path | the nearest `yosegi.config.json` searching upwards from the cwd | The config file supplying defaults. `CONFIG_NOT_FOUND` if the path does not exist; finding none by search is not an error |
+
+A flag beats `yosegi.config.json`, and the file beats the built-in default. Which flags it can
+supply, and how the paths in it resolve: [Configuration file](./configuration.md).
 
 Repeatable flags (`--source`, `--query`) also accept comma-separated values. Always quote globs —
 the shell expands an unquoted one before the CLI sees it.

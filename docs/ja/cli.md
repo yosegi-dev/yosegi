@@ -26,6 +26,10 @@ bun add -d @yosegi/yosegi
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
 | `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ作成する。全コマンドへ同じ値を渡す |
+| `--config <path>` | path | cwd から上方へ探索して最初に見つかる `yosegi.config.json` | 既定値を与える設定ファイル。パスが存在しなければ `CONFIG_NOT_FOUND`。探索で見つからないことはエラーではない |
+
+フラグが `yosegi.config.json` に勝ち、このファイルが組み込みの既定値に勝ちます。
+どのフラグへ既定値を与えられるか、ファイル内のパスがどう解決されるかは[設定ファイル](./configuration.md)にあります。
 
 繰り返し指定できるフラグ（`--source`、`--query`）はカンマ区切りも受け付けます。glob は必ずクォートします（しないと CLI へ届く前にシェルが展開します）。
 
