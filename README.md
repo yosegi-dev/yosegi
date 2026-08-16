@@ -67,8 +67,9 @@ overlaps with them and where it does not is in
 
 ## Install
 
-Requires Node.js 22+. Any package manager. The registry reads your types through the TypeScript 6.x
-compiler API, which TypeScript 7 no longer ships — hosts on 7 install 6 and 7 side by side, see
+Requires Node.js 22+. Any package manager. The registry reads your types through the TypeScript
+compiler API, which 5.4 through 6.x ship and TypeScript 7 no longer does — hosts on 7 install 6
+and 7 side by side, see
 [Hosts on TypeScript 7](./docs/registry.md#hosts-on-typescript-7).
 
 ```sh

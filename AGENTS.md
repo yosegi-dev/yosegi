@@ -141,8 +141,9 @@ A dependency that reaches a published `.d.ts` takes a caret range, never an exac
 the consumer's have to unify, and a class carrying `private` members — `Hono`, `McpServer` — is typed
 nominally, so a second copy is a type error the consumer has no way to work around. That covers
 `zod`, `hono`, and `@modelcontextprotocol/sdk`. `typescript` takes a range for the same reason plus
-size: the host already has one, and an exact pin nests a second 23MB copy. A dependency the consumer
-cannot reach stays exactly pinned, because reproducibility outweighs unification —
+size: the host already has one, and an exact pin nests a second 23MB copy. A dependency the
+package's `exports` do not reach stays exactly pinned, because reproducibility outweighs
+unification —
 `react-docgen-typescript` decides what the registry extracts, so the same host source has to keep
 producing the same registry. The root's `typescript` devDependency stays exact for the same reason:
 it is the compiler that produces `dist`.

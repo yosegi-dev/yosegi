@@ -6,7 +6,10 @@
 
 ## 前提
 
-- Storybook を持つ React + TypeScript のプロジェクト。Yosegi は TypeScript の型を読んで CSF を出力するので、どちらの工程にも他スタック向けの代替経路はありません。
+- React + TypeScript のプロジェクト。Yosegi は TypeScript の型を読んで React を出力するので、どちらの工程にも他スタック向けの代替経路はありません。
+- Storybook を推奨しますが、必須ではありません。
+  Yosegi が出力する Story のレビュー面であり、以下の手順もこれを前提にします。
+  Storybook が無いホストは `screen generate` に `--target component` を渡し、素の React コンポーネントファイルを受け取ります。
 - ホストのコンポーネントを解決できる `tsconfig.json`（`paths` を含む）。
 - Node.js 22 以上。Bun が要るのは Yosegi 自体を開発する場合のみです。
 
