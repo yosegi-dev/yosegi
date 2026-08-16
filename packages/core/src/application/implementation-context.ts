@@ -2,10 +2,12 @@ import type {
 	ComponentManifest,
 	ComponentRegistry,
 } from "../domain/component-manifest.ts";
+import { applyOperationsToRoot } from "../domain/operation.ts";
 import type {
 	EventDefinition,
 	ScreenDefinition,
 	ScreenNode,
+	ScreenVariant,
 } from "../domain/screen-definition.ts";
 import {
 	isSyntheticComponentId,
@@ -39,14 +41,25 @@ export type ComponentUsage = {
 	unregistered: boolean;
 	// The import statement, ready to paste as-is. null for synthetic primitives and unregistered ones.
 	importStatement: string | null;
-	// The number of nodes using this on the screen, and their node ids.
+	// The number of nodes using this on the screen, and their node ids. "The screen"
+	// spans the base tree and every variant tree: a variant is another state of the
+	// same screen, and the implementation has to cover all of them. A node the
+	// variants keep is counted once, so a screen without variants is unaffected.
 	usageCount: number;
 	nodeIds: string[];
 	// The props actually being passed on the screen (prop name -> list of values used).
 	// The Manifest's props are "what can be passed"; this is "what is being passed."
+	// A value only a variant passes is merged in here too.
 	usedProps: Record<string, unknown[]>;
 	// The slot names that actually have children placed on the screen.
 	usedSlots: string[];
+	// The variants whose tree uses this component, in declaration order. Absent when
+	// only the base tree does — the variant keys are omitted rather than emitted
+	// empty so a screen without variants keeps exactly the output it had.
+	variants?: string[];
+	// Set when no node in the base tree uses this component: it shows up only in a
+	// variant state, so the base Story never renders it. Absent otherwise.
+	variantOnly?: true;
 	// The definition taken from the type. This is the source of truth for props / slots. null if unregistered.
 	manifest: ComponentManifest | null;
 };
@@ -62,6 +75,9 @@ export type BindingTask = {
 	prop: string;
 	// The data expression (the declaration held by the Screen Definition). Reinterpret into the host's implementation.
 	expression: string;
+	// The variant this task comes from. Absent on a base-tree task, which keeps the
+	// list byte-identical for a screen that declares no variants.
+	variant?: string;
 };
 
 export type EventTask = {
@@ -73,6 +89,8 @@ export type EventTask = {
 	event: string;
 	action: string;
 	arguments: Record<string, unknown> | null;
+	// See BindingTask.variant.
+	variant?: string;
 };
 
 export type ImplementationTask = BindingTask | EventTask;
@@ -106,18 +124,42 @@ export type ScreenStructure = {
 	outline: string[];
 };
 
+// A variant is a named diff over the base tree, so repeating its full node list
+// would mostly repeat the base's. Only what the base cannot show is carried here:
+// the resulting shape as an outline, and the components the state pulls in. The
+// diff itself stays readable in `screen.variants[].operations`, and the variant's
+// wiring lands in the shared `tasks` list tagged with its name.
+export type VariantContext = {
+	name: string;
+	description: string | null;
+	// Indented lines for the applied tree, in the same form as structure.outline.
+	outline: string[];
+	// Components this state uses that no node in the base tree uses. These are the
+	// ones a reader of the base Story alone would never see.
+	addedComponents: string[];
+};
+
 export type ImplementationContext = {
 	screenId: string;
 	screenName: string;
 	screen: ScreenDefinition;
 	// The version of the Registry referenced. A mismatch with the Screen side is a signal to rebuild.
 	registryVersion: string;
+	// The base tree only. Each variant's shape is under `variants[].outline`.
 	structure: ScreenStructure;
+	// Every component the screen needs, across the base tree and all variants.
 	components: ComponentUsage[];
-	// Import statements ready to paste at the top of the implementation file as-is (ascending by specifier / member).
+	// Import statements ready to paste at the top of the implementation file as-is
+	// (ascending by specifier / member). Planned over the base and every variant
+	// tree together, exactly as emit plans them for the Story file.
 	imports: string[];
-	// bindings / events flattened into wiring tasks.
+	// bindings / events flattened into wiring tasks. The base tree's first, then
+	// each variant's, tagged with `variant` and limited to what the base does not
+	// already state.
 	tasks: ImplementationTask[];
+	// One entry per declared variant, in declaration order. Absent when the screen
+	// declares none.
+	variants?: VariantContext[];
 	target: {
 		route: string | null;
 		preferredPath: string | null;
@@ -163,6 +205,26 @@ type VisitedNode = {
 	path: string;
 	depth: number;
 };
+
+// A variant's tree, derived once and then reused by imports, usages, tasks and the
+// outline. Kept unexpanded (no expandRepeat) for the same reason the base tree is:
+// the context reports the Screen JSON's own nodes, with `each` left as a field.
+type VariantTree = {
+	variant: ScreenVariant;
+	root: ScreenNode;
+	visited: VisitedNode[];
+};
+
+// Applying a variant's operations can fail (an operation targeting a node the base
+// no longer has). That throws here rather than being skipped, matching emit: a
+// screen whose variant will not apply cannot be generated either, and `screen
+// validate` is what reports the failure as VARIANT_OPERATION_FAILED.
+function buildVariantTrees(screen: ScreenDefinition): VariantTree[] {
+	return (screen.variants ?? []).map((variant) => {
+		const root = applyOperationsToRoot(screen.root, variant.operations);
+		return { variant, root, visited: visitNodes(root) };
+	});
+}
 
 // Starting from the root, enumerate each node depth-first, attaching a path and depth.
 function visitNodes(root: ScreenNode): VisitedNode[] {
@@ -261,49 +323,104 @@ function isSynthetic(
 		: isSyntheticComponentId(componentId);
 }
 
+// The usage under construction. `seenNodeIds` is what keeps a variant from
+// inflating the count: variants are diffs, so most of their nodes are the base's
+// same nodes under the same ids, and only the props they change are new.
+type UsageDraft = {
+	usage: ComponentUsage;
+	seenNodeIds: Set<string>;
+	usedInBase: boolean;
+	usedInVariants: string[];
+};
+
+function recordUsage(
+	draft: UsageDraft,
+	node: ScreenNode,
+	variant: string | null,
+): void {
+	if (variant === null) {
+		draft.usedInBase = true;
+	} else if (!draft.usedInVariants.includes(variant)) {
+		draft.usedInVariants.push(variant);
+	}
+	if (!draft.seenNodeIds.has(node.id)) {
+		draft.seenNodeIds.add(node.id);
+		draft.usage.usageCount += 1;
+		draft.usage.nodeIds.push(node.id);
+	}
+	for (const [propName, value] of Object.entries(node.props)) {
+		const values = draft.usage.usedProps[propName] ?? [];
+		draft.usage.usedProps[propName] = values;
+		mergePropValue(values, value);
+	}
+	for (const slotName of filledSlots(node)) {
+		if (!draft.usage.usedSlots.includes(slotName)) {
+			draft.usage.usedSlots.push(slotName);
+		}
+	}
+}
+
 function buildUsages(
 	visited: VisitedNode[],
+	variantTrees: VariantTree[],
 	registry: ComponentRegistry,
 	manifests: Map<string, ComponentManifest>,
 	importStatements: Map<string, string>,
 ): ComponentUsage[] {
-	const usages = new Map<string, ComponentUsage>();
-	for (const { node } of visited) {
-		const manifest = manifests.get(node.component) ?? null;
-		let usage = usages.get(node.component);
-		if (!usage) {
-			const synthetic = isSynthetic(node.component, manifest);
-			usage = {
-				id: node.component,
-				name: manifest?.name ?? node.component,
-				synthetic,
-				unregistered: manifest === null && !synthetic,
-				importStatement: importStatements.get(node.component) ?? null,
-				usageCount: 0,
-				nodeIds: [],
-				usedProps: {},
-				usedSlots: [],
-				manifest,
-			};
-			usages.set(node.component, usage);
-		}
-		usage.usageCount += 1;
-		usage.nodeIds.push(node.id);
-		for (const [propName, value] of Object.entries(node.props)) {
-			const values = usage.usedProps[propName] ?? [];
-			usage.usedProps[propName] = values;
-			mergePropValue(values, value);
-		}
-		for (const slotName of filledSlots(node)) {
-			if (!usage.usedSlots.includes(slotName)) {
-				usage.usedSlots.push(slotName);
+	const drafts = new Map<string, UsageDraft>();
+	// The base first, so its nodes lead nodeIds and the Registry ordering below sees
+	// the base's components before any a variant adds.
+	const trees: { nodes: VisitedNode[]; variant: string | null }[] = [
+		{ nodes: visited, variant: null },
+		...variantTrees.map((tree) => ({
+			nodes: tree.visited,
+			variant: tree.variant.name,
+		})),
+	];
+	for (const tree of trees) {
+		for (const { node } of tree.nodes) {
+			let draft = drafts.get(node.component);
+			if (!draft) {
+				const manifest = manifests.get(node.component) ?? null;
+				const synthetic = isSynthetic(node.component, manifest);
+				draft = {
+					usage: {
+						id: node.component,
+						name: manifest?.name ?? node.component,
+						synthetic,
+						unregistered: manifest === null && !synthetic,
+						importStatement: importStatements.get(node.component) ?? null,
+						usageCount: 0,
+						nodeIds: [],
+						usedProps: {},
+						usedSlots: [],
+						manifest,
+					},
+					seenNodeIds: new Set<string>(),
+					usedInBase: false,
+					usedInVariants: [],
+				};
+				drafts.set(node.component, draft);
 			}
+			recordUsage(draft, node, tree.variant);
 		}
 	}
+
+	const usages = [...drafts.values()].map(
+		({ usage, usedInBase, usedInVariants }) => {
+			if (usedInVariants.length > 0) {
+				usage.variants = usedInVariants;
+			}
+			if (!usedInBase) {
+				usage.variantOnly = true;
+			}
+			return usage;
+		},
+	);
 	// Align to the Registry's ordering (ascending by id), pushing anything not in the Registry to the end.
 	const order = new Map(registry.components.map((c, index) => [c.id, index]));
 	const fallback = registry.components.length;
-	return [...usages.values()].sort(
+	return usages.sort(
 		(a, b) => (order.get(a.id) ?? fallback) - (order.get(b.id) ?? fallback),
 	);
 }
@@ -311,12 +428,16 @@ function buildUsages(
 // Component id -> the statement that imports just that one component. Kept separate from
 // the import statements grouped by specifier so each can be pasted into the implementation
 // file one line at a time. Local names (as-aliasing) follow the shared plan.
+//
+// Planned over every tree at once — the base and each variant's — because the Story
+// emit plans them the same way: one file, one set of imports, one local name per
+// component. A component only a variant reaches still has to be imported.
 function buildPerComponentImports(
-	root: ScreenNode,
+	roots: readonly ScreenNode[],
 	registry: ComponentRegistry,
 	resolveImport?: (packageName: string) => string,
 ): { statements: string[]; byComponent: Map<string, string> } {
-	const plan = planImports(root, registry, resolveImport);
+	const plan = planImports(roots, registry, resolveImport);
 	// Local names are unique across the whole plan, so the specifier and export name can be looked back up from them.
 	const byLocalName = new Map<string, string>();
 	for (const [specifier, bindings] of plan.specifiers) {
@@ -354,7 +475,7 @@ function toEventTask(
 	};
 }
 
-function buildTasks(visited: VisitedNode[]): ImplementationTask[] {
+function treeTasks(visited: VisitedNode[]): ImplementationTask[] {
 	const tasks: ImplementationTask[] = [];
 	for (const entry of visited) {
 		for (const [prop, expression] of Object.entries(
@@ -376,6 +497,68 @@ function buildTasks(visited: VisitedNode[]): ImplementationTask[] {
 	return tasks;
 }
 
+// What identifies a task as the same piece of wiring: the node, the component
+// rendered there, the prop or event name, and the value being wired. `path` is left
+// out on purpose — a variant that only moves a node has not changed the work, so
+// re-listing the task under the variant would be noise.
+function taskKey(task: ImplementationTask): string {
+	const fields =
+		task.kind === "binding"
+			? [task.kind, task.nodeId, task.component, task.prop, task.expression]
+			: [
+					task.kind,
+					task.nodeId,
+					task.component,
+					task.event,
+					task.action,
+					JSON.stringify(task.arguments),
+				];
+	return fields.join(" ");
+}
+
+// The base's tasks, then whatever each variant adds on top of them. A variant that
+// leaves the wiring alone contributes nothing, so the list stays as short as the
+// screen actually requires.
+function buildTasks(
+	visited: VisitedNode[],
+	variantTrees: VariantTree[],
+): ImplementationTask[] {
+	const tasks = treeTasks(visited);
+	const seen = new Set(tasks.map(taskKey));
+	for (const tree of variantTrees) {
+		for (const task of treeTasks(tree.visited)) {
+			const key = taskKey(task);
+			if (seen.has(key)) {
+				continue;
+			}
+			seen.add(key);
+			tasks.push({ ...task, variant: tree.variant.name });
+		}
+	}
+	return tasks;
+}
+
+function toVariantContext(
+	tree: VariantTree,
+	baseComponents: ReadonlySet<string>,
+): VariantContext {
+	const added: string[] = [];
+	for (const { node } of tree.visited) {
+		if (
+			!baseComponents.has(node.component) &&
+			!added.includes(node.component)
+		) {
+			added.push(node.component);
+		}
+	}
+	return {
+		name: tree.variant.name,
+		description: tree.variant.description ?? null,
+		outline: tree.visited.map(toStructureNode).map(toOutlineLine),
+		addedComponents: added,
+	};
+}
+
 export function buildImplementationContext(
 	screen: ScreenDefinition,
 	components: ComponentService,
@@ -384,11 +567,13 @@ export function buildImplementationContext(
 	const registry = components.getRegistry();
 	const manifests = new Map(registry.components.map((c) => [c.id, c]));
 	const visited = visitNodes(screen.root);
+	const variantTrees = buildVariantTrees(screen);
 	const imports = buildPerComponentImports(
-		screen.root,
+		[screen.root, ...variantTrees.map((tree) => tree.root)],
 		registry,
 		options.resolveImport,
 	);
+	const baseComponents = new Set(visited.map(({ node }) => node.component));
 
 	return {
 		screenId: screen.id,
@@ -396,9 +581,24 @@ export function buildImplementationContext(
 		screen,
 		registryVersion: registry.version,
 		structure: buildStructure(visited),
-		components: buildUsages(visited, registry, manifests, imports.byComponent),
+		// Spread rather than assigned so a screen without variants keeps the key out
+		// of the JSON entirely, instead of gaining an empty array.
+		...(variantTrees.length > 0
+			? {
+					variants: variantTrees.map((tree) =>
+						toVariantContext(tree, baseComponents),
+					),
+				}
+			: {}),
+		components: buildUsages(
+			visited,
+			variantTrees,
+			registry,
+			manifests,
+			imports.byComponent,
+		),
 		imports: imports.statements,
-		tasks: buildTasks(visited),
+		tasks: buildTasks(visited, variantTrees),
 		target: {
 			route: options.target?.route ?? null,
 			preferredPath: options.target?.preferredPath ?? null,

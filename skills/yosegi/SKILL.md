@@ -5,7 +5,7 @@ description: Build a screen mock or screen proposal (画面モック) out of the
 
 # Yosegi — building screens from a host's own components
 
-> **Version: 2026-08-14.** An agent harness can load a stale copy of a skill without saying so. If
+> **Version: 2026-08-17.** An agent harness can load a stale copy of a skill without saying so. If
 > this date is older than the one in the repository's `skills/yosegi/SKILL.md`, you are reading an
 > out-of-date copy — re-install it before going further.
 
@@ -86,7 +86,7 @@ it is not a requirement.
 
 1. **Can you run the CLI?** `npx yosegi` (or `pnpm yosegi`, `yarn yosegi`, `bunx yosegi`) with no
    arguments prints every command, once `@yosegi/yosegi` is already a dependency of the host — install
-   it first if it is not (`references/cli.md`). Node.js 20 or newer, React + TypeScript host. If the
+   it first if it is not (`references/cli.md`). Node.js 22 or newer, React + TypeScript host. If the
    command fails instead, see "If the CLI won't run" in `references/cli.md`; the single most useful
    move is reading `<data-dir>/registry.json`'s `builtWithCliPath` if a registry already exists from an
    earlier session.
@@ -391,7 +391,7 @@ first two proves nothing about the third.
 
 ```sh
 # 1. the dev server knows about the Story, and 2. its module actually resolves
-node -e '
+node --input-type=module -e '
 const base = "http://localhost:6006"; // example only — use the actual port, see below
 const index = await (await fetch(base + "/index.json")).json();
 const entry = Object.values(index.entries).find((e) => e.type === "story" && e.title === "Examples/Customer list");
@@ -401,6 +401,10 @@ const res = await fetch(base + "/" + entry.importPath.replace(/^\.\//, ""));
 console.log("resolves:", res.status, res.status === 200 ? "(the real proof — presence in index.json alone is not)" : "(module 404s or entry is stale — restart Storybook)");
 '
 ```
+
+Keep `--input-type=module`. The script uses top-level `await`, which `node -e` only detects as ESM
+from Node 22.7 on; an older 22.x evaluates the argument as CommonJS and dies with a `SyntaxError`
+before the first fetch.
 
 Wrap the script in single quotes, not double. A Story title that embeds a React Router path segment
 (`Routes/Products/$productId/Edit`, a case common enough to hit often) sits inside a double-quoted

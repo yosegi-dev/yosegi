@@ -6,10 +6,12 @@
 
 ## 前提
 
-- Storybook を持つ React + TypeScript のプロジェクト。Yosegi は TypeScript の型を読んで CSF を
-  出力するので、どちらの工程にも他スタック向けの代替経路はありません。
+- React + TypeScript のプロジェクト。Yosegi は TypeScript の型を読んで React を出力するので、どちらの工程にも他スタック向けの代替経路はありません。
+- Storybook を推奨しますが、必須ではありません。
+  Yosegi が出力する Story のレビュー面であり、以下の手順もこれを前提にします。
+  Storybook が無いホストは `screen generate` に `--target component` を渡し、素の React コンポーネントファイルを受け取ります。
 - ホストのコンポーネントを解決できる `tsconfig.json`（`paths` を含む）。
-- Node.js 20 以上。Bun が要るのは Yosegi 自体を開発する場合のみです。
+- Node.js 22 以上。Bun が要るのは Yosegi 自体を開発する場合のみです。
 
 ## インストール
 
@@ -24,33 +26,33 @@ yarn add -D @yosegi/yosegi
 bun add -d @yosegi/yosegi
 ```
 
-以下の `yosegi` は `npx yosegi`（`pnpm yosegi`、`yarn yosegi`、`bunx yosegi`）を指します。引数なし
-で実行すると全コマンドが出ます。
+以下の `yosegi` は `npx yosegi`（`pnpm yosegi`、`yarn yosegi`、`bunx yosegi`）を指します。
+引数なしで実行すると全コマンドが出ます。
 
 ## Agent Skill を入れる
 
-エージェントは以下の手順をこの Skill から学びます。使っているエージェントが読む skills ディレクトリ
-へ入れます（`.claude/skills/` は Claude Code のものです）。
+エージェントは以下の手順をこの Skill から学びます。
+使っているエージェントが読む skills ディレクトリへ入れます（`.claude/skills/` は Claude Code のものです）。
 
 ```sh
 npx skills add yosegi-dev/yosegi
 ```
 
-または、インストール済みのパッケージからコピーします。こちらは Skill を手元に入っている
-バージョンに固定します。
+または、インストール済みのパッケージからコピーします。
+こちらは Skill を手元に入っているバージョンに固定します。
 
 ```sh
 mkdir -p .claude/skills
 cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 ```
 
-ディレクトリごとコピーします。`SKILL.md` は作業中に `references/` を開かせます。アップグレード後は
-コピーし直します。エージェントは古い複製を黙って読むことがあるので、挙動がこれらのページと食い違う
-ときは `SKILL.md` のタイトル直下にあるバージョンの日付をこのリポジトリの同ファイルと比べます。
+ディレクトリごとコピーします。`SKILL.md` は作業中に `references/` を開かせます。
+アップグレード後はコピーし直します。
+エージェントは古い複製を黙って読むことがあるので、挙動がこれらのページと食い違うときは `SKILL.md` のタイトル直下にあるバージョンの日付をこのリポジトリの同ファイルと比べます。
 
-使っているエージェントツールが実際に読む場所 1 箇所だけに入れます。以前使っていたツールの名残や
-手動で試した際の複製が別の場所に残っていると、まさにこのバージョン日付のチェックが検出すべき
-「古い複製」そのものになります。同じリポジトリに 2 つ残さず、片方は削除します。
+使っているエージェントツールが実際に読む場所 1 箇所だけに入れます。
+以前使っていたツールの名残や手動で試した際の複製が別の場所に残っていると、まさにこのバージョン日付のチェックが検出すべき「古い複製」そのものになります。
+同じリポジトリに 2 つ残さず、片方は削除します。
 
 ## MCP サーバを登録する（任意）
 
@@ -58,8 +60,7 @@ cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 claude mcp add yosegi -- npx yosegi mcp
 ```
 
-Skill はどちらでも動きます。CLI のほうが守備範囲は広く、Registry の生成と Story の読み戻しは CLI に
-しかありません。
+Skill はどちらでも動きます。CLI のほうが守備範囲は広く、Registry の生成と Story の読み戻しは CLI にしかありません。
 
 ## 通しの手順
 
@@ -98,23 +99,19 @@ yosegi screen context tmp/screen.json \
   --import-map "./app=~" --route /customers --data-dir .yosegi
 ```
 
-`--data-dir` は全コマンドへ同じ値を渡します。Registry と保存済み画面の置き場で、既定はカレント
-ディレクトリ直下の `.yosegi` です。
+`--data-dir` は全コマンドへ同じ値を渡します。Registry と保存済み画面の置き場で、既定はカレントディレクトリ直下の `.yosegi` です。
 
-必須なのは手順 1 と 2 です。コンポーネントの本当の props・enum の選択肢・slots・import specifier
-を、推測ではなくここで確定させます。出力はホストのリポジトリに入り、ホストのコードとしてレビュー
-されるので、手順 3 も省略できません。どちらも [Agent Skill](../../skills/yosegi/SKILL.md) が扱い
-ます。
+必須なのは手順 1 と 2 です。
+コンポーネントの本当の props・enum の選択肢・slots・import specifier を、推測ではなくここで確定させます。
+出力はホストのリポジトリに入り、ホストのコードとしてレビューされるので、手順 3 も省略できません。
+どちらも [Agent Skill](../../skills/yosegi/SKILL.md) が扱います。
 
 ## 一度だけやっておくとよいこと
 
-- `registry build` をリポジトリのスクリプトにします（`bun run yosegi:registry`）。`--source` /
-  `--tsconfig` / `--index` を毎回思い出さずに済みます。
-- Story に必要な meta の定型（`tags`、Docs ページ、デザイン参照）をテンプレートファイルに書き、
-  `screen generate --meta-template` へ渡します。
+- `registry build` をリポジトリのスクリプトにします（`bun run yosegi:registry`）。`--source` / `--tsconfig` / `--index` を毎回思い出さずに済みます。
+- Story に必要な meta の定型（`tags`、Docs ページ、デザイン参照）をテンプレートファイルに書き、`screen generate --meta-template` へ渡します。
 - ホストの Story 規約・デザイントークン・真似する価値のある複合 Story をエージェントに示します。
-- 型から props を読めないコンポーネントがあれば `registry metadata` で `--metadata` の雛形を作り、
-  上のスクリプトへ組み込みます。
+- 型から props を読めないコンポーネントがあれば `registry metadata` で `--metadata` の雛形を作り、上のスクリプトへ組み込みます。
 
 ## 次に読む
 

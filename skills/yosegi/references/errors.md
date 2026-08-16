@@ -7,14 +7,19 @@ at before fixing anything.
    (`$.children[0]...`) is the node's position in the tree, so a node is locatable even when ids
    collide. Generation stopped; no file was written; exit code 1.
 2. **Validation warnings** — the same shape, printed *after* `Wrote <path>`. Generation succeeded.
+   Two of them are about the screen rather than about a node, and carry `nodeId: null` with **no
+   `path` key at all**: `REGISTRY_VERSION_MISMATCH` and `UNUSED_FIXTURE`. Do not read a missing
+   `path` as a malformed issue, and do not go looking for the node they came from.
 3. **A schema violation** — `{ "error": { "code": "INVALID_REQUEST", "issues": [...], "hints": [...] } }`.
    Validation was never reached at all.
 4. **A command error** — `{ "error": { "code": "...", "message": "..." } }`, exit code 1. The
    command failed before or outside validation, and the code says how: `MISSING_ARGUMENT`,
    `UNKNOWN_COMMAND`, `UNKNOWN_FLAG`, `REGISTRY_NOT_FOUND`, `INVALID_ARGUMENT`, `INVALID_JSON`,
-   a lookup miss such as `COMPONENT_NOT_FOUND` / `SCREEN_NOT_FOUND`, or `INTERNAL_ERROR` for
-   everything else. It is JSON with a `code`, so do not go looking for a bare `Error:` line. The
-   table at the bottom of this file covers each code.
+   a lookup miss such as `COMPONENT_NOT_FOUND` / `SCREEN_NOT_FOUND`, `STORY_NOT_FOUND` /
+   `RENDER_NOT_STATIC` from `story import`, or `INTERNAL_ERROR` for everything else. It is JSON
+   with a `code`, so do not go looking for a bare `Error:` line. The table at the bottom of this
+   file covers each code, including the `UNKNOWN_ARGUMENT` and `EXAMPLE_*` codes the `example`
+   commands add to this class.
 5. **A store rejection** — `{ "error": { "code": "VALIDATION_FAILED", ... }, "validation": {...} }`,
    from `screen push` / `screen apply`: the command error envelope with the full validation result
    attached. Read `validation` exactly as shape 1.
@@ -128,20 +133,26 @@ The frequent causes:
 
 Fix the shape, then enter the validation loop above.
 
-## `story import` warnings (downstream)
+## `story import` failures and warnings (downstream)
 
-`story import` fails outright (exit 1, no Screen JSON) whenever no tree can be restored. Two codes
-end the run: `STORY_NOT_FOUND` when no export has a `render` function — what a `component` + `args`
-Story produces, and that is the most common hand-written shape — and `RENDER_NOT_STATIC` when the
-selected export exists but its body cannot be read statically. A `--story-name` that matches no
-export lands on `STORY_NOT_FOUND` with the candidates listed. When a tree does come back, it is the part that could be read, with the rest reported.
+`story import` fails outright (exit 1, no Screen JSON) whenever no tree can be restored, and that
+failure comes back as the command error envelope — `{ "error": { "code", "message", "file",
+"warnings" } }`, exactly shape 4 above — so `error.code` names the reason here as it does
+everywhere else. Two codes end the run: `STORY_NOT_FOUND` when no export has a `render` function —
+what a `component` + `args` Story produces, and that is the most common hand-written shape — and
+`RENDER_NOT_STATIC` when the selected export exists but its body cannot be read statically. A
+`--story-name` that matches no export lands on `STORY_NOT_FOUND` with the candidates listed. The
+whole warning list is attached as `error.warnings`; the codes below name what each entry means.
+
+When a tree does come back, exit code is 0 and the output keeps its own shape (`screen` plus a
+top-level `warnings`). It is the part that could be read, with the rest reported.
 Analysis works purely on the source AST and the Story is never executed, so **any syntax whose
 shape is only decided at runtime cannot be read**.
 
 | code | Meaning |
 | --- | --- |
-| `STORY_NOT_FOUND` | No export with a `render` function (what a `component` + `args` Story produces without `--story-name`, and any `--target component` file) — or `--story-name` named no export at all; the message lists the candidates. There is nothing to import — read the Story as text |
-| `RENDER_NOT_STATIC` | The selected export exists but its `render` cannot be read statically — including `--story-name` picking an `args`-only export. The run ends with no tree, same as `STORY_NOT_FOUND` |
+| `STORY_NOT_FOUND` | No export with a `render` function (what a `component` + `args` Story produces without `--story-name`, and any `--target component` file) — or `--story-name` named no export at all; the message lists the candidates. Arrives as `error.code`, not as a warning. There is nothing to import and never will be — read the Story as text |
+| `RENDER_NOT_STATIC` | The selected export exists but its `render` cannot be read statically — including `--story-name` picking an `args`-only export. Arrives as `error.code` too; the run ends with no tree, same as `STORY_NOT_FOUND` |
 | `TITLE_NOT_STATIC` | The meta's `title` is not a static string, so the screen name falls back. The import itself continues |
 | `OPAQUE_EXPRESSION` | An expression that cannot be read statically, such as `{items.map(...)}` or a conditional. That node is dropped |
 | `OPAQUE_PROP` | The prop's value cannot be read (a variable reference, say). Only that prop is dropped |
@@ -183,7 +194,13 @@ reached the screen. Every code is self-correcting from the payload alone:
 | `INVALID_SCREEN_ID` | The id cannot become a file name | Letters, digits, `-` and `_` only |
 | `REVISION_CONFLICT` | The pushed screen's `revision` does not follow the stored one | Pull the stored screen, reapply your change on top, push again. Note the store sets `revision: 1` on create while a hand-written file starts at `0`, so pushing the same file twice conflicts by design |
 | `VALIDATION_FAILED` | `screen push` / `screen apply` rejected the screen; the envelope carries `validation` with the full issue list | Fix the issues exactly as in the validation loop above |
-| An operation code (`OPERATION_TARGET_NOT_FOUND`, ...) | A `screen apply` operation could not be applied; the code names why | Fix the operation against the stored screen's current tree and re-apply |
+| `STORY_NOT_FOUND` / `RENDER_NOT_STATIC` | `story import` restored no tree; the envelope also carries `file` and the full `warnings` list | The Story cannot be imported at all — read it as text. The section above says which shapes land here |
+| An operation code (`NODE_NOT_FOUND`, `PARENT_NOT_FOUND`, `SLOT_INDEX_OUT_OF_RANGE`, `DUPLICATE_NODE_ID`, `CANNOT_MOVE_INTO_DESCENDANT`, `CANNOT_REMOVE_ROOT`, `UNKNOWN_OPERATION`) | A `screen apply` operation could not be applied; the code names why. The same seven appear inside a `VARIANT_OPERATION_FAILED` message, which is where a variant's operations failed instead | Fix the operation against the stored screen's current tree and re-apply |
+| `UNKNOWN_ARGUMENT` | A positional argument the command does not take. Only the `example` commands check this so far; `command` names the command and `unexpected` lists the extras | A value meant for a flag needs its `--name`. Drop the extra, or attach it to the flag it belongs to |
+| `EXAMPLE_CATALOG_NOT_FOUND` | No example catalog where the command looked; `path` names the file | Pass `--catalog <path>`, or have the host place the catalog at `<data-dir>/examples.json`. A host with no catalog has no example route — assemble the screen instead |
+| `EXAMPLE_NOT_FOUND` | No catalogued example has that key; `key`, `catalog` and `availableKeys` come with it | Take the `suggestion` (did-you-mean over the keys), or pick one from `availableKeys` |
+| `EXAMPLE_TEMPLATE_NOT_FOUND` | The catalog entry's `templatePath` leads nowhere; `key`, `templatePath`, `catalog` and `root` name what was resolved against what | The catalog and the host's tree have drifted. Report it — fixing `templatePath` (or `root`) in the catalog is the host's change, not yours |
+| `EXAMPLE_OUTPUT_EXISTS` | `--out` already exists; `out` names it. `example apply` never overwrites | Pick a different `--out`, or delete the file if you are sure it is yours to delete. Do not assume the existing file is a stale copy |
 | `INTERNAL_ERROR` | Everything else, with the underlying message attached | Read the message; the table below lists the frequent ones |
 
 The frequent `INTERNAL_ERROR` messages:
@@ -193,6 +210,8 @@ The frequent `INTERNAL_ERROR` messages:
 | `Story name "<name>" is not a valid JavaScript identifier.` | `--story-name` becomes an `export const`, so it has to be an identifier. Under `--target component` the same check says `Component name` | Use letters, digits, `_` or `$`, and do not start with a digit. `Customer list` → `CustomerList` |
 | `Fixture "<name>" collides with the export name.` | A fixture or variant const would shadow the Story/component export | Rename the fixture or the story/component name; the same message exists for variant names |
 | `Component "<id>" has export name "<name>", which is not a valid JavaScript identifier.` | The registry entry itself cannot be emitted as JSX | Pick a different component, or fix the export in the host |
+| `Failed to read the Storybook index from <location>, given as --index.` | `registry build` could not read what `--index` named. Three more lines follow: a URL says to start Storybook so it responds, a path says to build Storybook; then whether dropping `--index` is an option; then `Underlying error:` with the original failure | Do what those lines say. With `--source` also given, dropping `--index` builds from the source alone — without Storybook categories or recommendations. Without `--source` there is no other input, so the build cannot continue |
+| `Failed to read the Storybook index from <path>. No --index was given, so that is the default location.` | The same failure with no flag to blame: an `--index`-only build defaults to `storybook-static/index.json` under the cwd | Build Storybook so that file exists, or pass `--index`. Check the cwd first — the default moves with it |
 | `ENOENT` / `no such file` | A path you passed does not exist | Check `--tsconfig`, the Screen JSON path, and `--metadata` |
 
 A malformed screen `id` does **not** land here — it is an `INVALID_REQUEST` from the schema, because

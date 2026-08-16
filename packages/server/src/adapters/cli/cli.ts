@@ -33,6 +33,7 @@ import {
 import { z } from "zod";
 import {
 	DEFAULT_DATA_DIR,
+	examplesPath,
 	loadRegistry,
 	registryPath,
 	screensDir,
@@ -40,14 +41,21 @@ import {
 	yosegiVersion,
 } from "../../config.ts";
 import { parseMetaTemplate } from "../../emit/meta-template.ts";
-import { importStory } from "../../importer/story-importer.ts";
+import { applyExample } from "../../examples/apply.ts";
+import { loadExampleCatalog, requireExample } from "../../examples/catalog.ts";
+import {
+	importStory,
+	type StoryImportWarning,
+} from "../../importer/story-importer.ts";
 import { buildCvaMetadata } from "../../registry/cva-metadata.ts";
 import { collectUndocumentedProps } from "../../registry/doc-coverage.ts";
 import { buildRegistryFromSource } from "../../registry/source-registry.ts";
 import { toErrorResponse } from "../error-response.ts";
 import {
+	formatApplyResult,
 	formatComponentInspect,
 	formatComponentList,
+	formatExampleList,
 	formatRegistryHeader,
 	formatRegistryStatus,
 	formatRegistryVersionWarning,
@@ -177,6 +185,8 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
 		"screen-name",
 		"out",
 	],
+	"example list": ["catalog", "json", "quiet"],
+	"example apply": ["catalog", "name", "out", "json"],
 	mcp: [],
 };
 
@@ -194,7 +204,11 @@ const FLAG_SYNONYMS: Record<string, string> = {
 // The uniform shape of a command-level failure: JSON with a code, never bare usage text,
 // so an agent parses the same contract everywhere. Usage stays reserved for --help.
 function commandError(
-	code: "MISSING_ARGUMENT" | "UNKNOWN_COMMAND" | "UNKNOWN_FLAG",
+	code:
+		| "MISSING_ARGUMENT"
+		| "UNKNOWN_ARGUMENT"
+		| "UNKNOWN_COMMAND"
+		| "UNKNOWN_FLAG",
 	message: string,
 	extra: Record<string, unknown> = {},
 ): number {
@@ -207,6 +221,30 @@ function missingArgument(command: string, message: string): number {
 		"MISSING_ARGUMENT",
 		`${message} Run "yosegi --help" for usage.`,
 		{ command },
+	);
+}
+
+// Rejects positionals past the ones a command takes. The counterpart to checkFlags, and it
+// exists for the same reason: an argument that is silently dropped lets a mistyped command
+// run and report success, which an agent then trusts. Returns null when the count is fine.
+//
+// Only the example commands go through this so far — the older commands still ignore their
+// extras, and tightening those is a behaviour change beyond this PoC.
+function checkPositionals(
+	command: string,
+	rest: string[],
+	allowed: number,
+): number | null {
+	if (rest.length <= allowed) {
+		return null;
+	}
+	const extra = rest.slice(allowed);
+	return commandError(
+		"UNKNOWN_ARGUMENT",
+		`"${command}" takes ${allowed === 0 ? "no positional arguments" : `${allowed} positional argument${allowed > 1 ? "s" : ""}`}, but got ${extra
+			.map((value) => `"${value}"`)
+			.join(", ")} as well. A value meant for a flag needs its --name.`,
+		{ command, unexpected: extra },
 	);
 }
 
@@ -305,6 +343,38 @@ async function readJsonSource(source: string): Promise<unknown> {
 		return await response.json();
 	}
 	return JSON.parse(await readFile(source, "utf8"));
+}
+
+// The Storybook index a `registry build` reads, with the failure explained the way
+// `registry status` already explains the same condition. A dev-server URL nobody is serving
+// surfaces as a bare "fetch failed" from the runtime — a message that names neither the URL
+// tried nor the flag that chose it, which leaves an agent with nothing to act on. It stays
+// an INTERNAL_ERROR rather than earning a code of its own: unlike REGISTRY_NOT_FOUND the fix
+// is not single-valued (start Storybook, correct the URL, or drop the flag), so the caller
+// has to read the message either way.
+async function readStorybookIndex(
+	source: string,
+	options: { fromFlag: boolean; hasSource: boolean },
+): Promise<unknown> {
+	try {
+		return await readJsonSource(source);
+	} catch (error) {
+		const isUrl = source.startsWith("http://") || source.startsWith("https://");
+		throw new Error(
+			[
+				options.fromFlag
+					? `Failed to read the Storybook index from ${source}, given as --index.`
+					: `Failed to read the Storybook index from ${source}. No --index was given, so that is the default location.`,
+				isUrl
+					? "Start Storybook so that URL responds, or point --index at a built storybook-static/index.json."
+					: "Build Storybook so that file exists, or point --index at a running Storybook's index.json URL.",
+				options.hasSource
+					? "Dropping --index also works: the registry is then built from --source alone, without Storybook categories or recommendations."
+					: "Without --source there is no other input, so the build cannot continue.",
+				`Underlying error: ${errorMessage(error)}`,
+			].join("\n"),
+		);
+	}
 }
 
 // The registry used for generation: the --registry file if given, otherwise
@@ -612,6 +682,37 @@ function defaultScreenId(file: string): string {
 	return basename(file).replace(STORY_FILE_PATTERN, "");
 }
 
+// The two codes that end an import. Every other warning code describes a part that could
+// not be read while the rest of the tree still came back.
+const STORY_IMPORT_FAILURE_CODES: ReadonlySet<string> = new Set([
+	"STORY_NOT_FOUND",
+	"RENDER_NOT_STATIC",
+]);
+
+// Report an import that produced no tree. The terminal warning becomes the envelope's
+// code/message so the code an agent branches on is the specific reason, not a generic
+// wrapper; the full warning list rides along because the other entries name what else the
+// file could not offer.
+function storyImportFailed(
+	file: string,
+	warnings: readonly StoryImportWarning[],
+): number {
+	const failure = warnings.findLast((warning) =>
+		STORY_IMPORT_FAILURE_CODES.has(warning.code),
+	);
+	print({
+		error: {
+			code: failure?.code ?? "INTERNAL_ERROR",
+			message:
+				failure?.message ??
+				"story import could not reconstruct a tree from this file.",
+			file,
+			warnings,
+		},
+	});
+	return 1;
+}
+
 // Read a Story (.stories.tsx) back into a Screen Definition. The entry point for the
 // downstream flow (converting to an implementation). Anything that couldn't be interpreted
 // is recorded in warnings, and the tree is returned as far as it could be read.
@@ -637,9 +738,10 @@ async function importStoryFile(
 	});
 
 	if (!imported.root) {
-		// If the tree can't be restored, there's no Screen JSON to produce; the reason is in warnings.
-		print({ warnings: imported.warnings });
-		return 1;
+		// No tree means no Screen JSON, so this is a command failure and goes out through the
+		// same { error: { code, message } } envelope every other command uses — an agent
+		// branching on error.code must not have to special-case this one command.
+		return storyImportFailed(storyFile, imported.warnings);
 	}
 
 	const screenId = flagString(flags, "screen-id") ?? defaultScreenId(storyFile);
@@ -721,6 +823,83 @@ async function screenContext(
 	await mkdir(dirname(out), { recursive: true });
 	await writeFile(out, `${JSON.stringify(context, null, "\t")}\n`);
 	print(`Wrote ${out}`);
+	return 0;
+}
+
+// --catalog, or the host's <data-dir>/examples.json.
+function catalogPath(flags: CliFlags, dataDir: string): string {
+	return flagString(flags, "catalog") ?? examplesPath(dataDir);
+}
+
+// List the screen templates the host has catalogued. The entry point for `example apply`:
+// key is the argument it takes, so the two commands read as one flow.
+async function listExamples(
+	rest: string[],
+	flags: CliFlags,
+	dataDir: string,
+): Promise<number> {
+	// Checked before the catalog is read, so a mistyped invocation does no work at all.
+	const extra = checkPositionals("example list", rest, 0);
+	if (extra !== null) {
+		return extra;
+	}
+	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	if (flagBoolean(flags, "json")) {
+		print({
+			catalog: catalog.path,
+			root: catalog.root,
+			total: catalog.examples.length,
+			examples: catalog.examples,
+		});
+		return 0;
+	}
+	print(formatExampleList(catalog, { quiet: flagBoolean(flags, "quiet") }));
+	return 0;
+}
+
+// Copy one catalogued template into the host's tree under a new component name.
+async function applyExampleCommand(
+	rest: string[],
+	flags: CliFlags,
+	dataDir: string,
+): Promise<number> {
+	const extra = checkPositionals("example apply", rest, 1);
+	if (extra !== null) {
+		return extra;
+	}
+	const key = rest[0];
+	if (key === undefined) {
+		return missingArgument(
+			"example apply",
+			'example apply requires an <exampleKey>. Run "yosegi example list" for the keys.',
+		);
+	}
+	const componentName = flagString(flags, "name");
+	if (componentName === undefined) {
+		return missingArgument(
+			"example apply",
+			"example apply requires --name <ComponentName> (the name the copy's export takes).",
+		);
+	}
+	const out = flagString(flags, "out");
+	if (out === undefined) {
+		return missingArgument(
+			"example apply",
+			"example apply requires --out <file.tsx>.",
+		);
+	}
+	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	const result = await applyExample({
+		catalog,
+		example: requireExample(catalog, key),
+		componentName,
+		out,
+	});
+	if (flagBoolean(flags, "json")) {
+		print(result);
+		return 0;
+	}
+	print(formatApplyResult(result));
 	return 0;
 }
 
@@ -1064,7 +1243,12 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		const projectRoot =
 			resolveProjectRoot(flags) ?? dirname(resolve(tsconfigPath));
 		const index = indexFlag
-			? storybookIndexSchema.parse(await readJsonSource(indexFlag))
+			? storybookIndexSchema.parse(
+					await readStorybookIndex(indexFlag, {
+						fromFlag: true,
+						hasSource: true,
+					}),
+				)
 			: undefined;
 		// Defaults to resolving via tsconfig's paths. Hosts whose aliases live outside
 		// tsconfig can spell them out with --import-map (same format as screen generate's
@@ -1184,7 +1368,12 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 	// via --index.
 	const indexPath =
 		indexFlag ?? join(process.cwd(), "storybook-static/index.json");
-	const index = storybookIndexSchema.parse(await readJsonSource(indexPath));
+	const index = storybookIndexSchema.parse(
+		await readStorybookIndex(indexPath, {
+			fromFlag: indexFlag !== undefined,
+			hasSource: false,
+		}),
+	);
 	const registry = withBuildProvenance(
 		buildRegistryFromStorybook(index, {
 			storybookBaseUrl,
@@ -1305,6 +1494,16 @@ export async function runCli(argv: string[]): Promise<number> {
 
 		if (group === "story" && action === "import") {
 			return await importStoryFile(rest[0], flags, dataDir);
+		}
+
+		// The example commands touch neither the registry nor the screen store — a
+		// catalogued template is copied as source text — so neither is loaded here.
+		if (group === "example" && action === "list") {
+			return await listExamples(rest, flags, dataDir);
+		}
+
+		if (group === "example" && action === "apply") {
+			return await applyExampleCommand(rest, flags, dataDir);
 		}
 
 		if (group === "screen") {
@@ -1463,6 +1662,15 @@ function usage(): string {
 		"                                  [--out <screen.json>]",
 		"      Read a Story back into Screen JSON. Anything that could not be interpreted",
 		"      is reported in warnings.",
+		"",
+		"  example list [--catalog <path>] [--json] [--quiet]   # PoC",
+		"      List the host's catalogued screen templates. The catalog is a JSON file",
+		'      ({ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }),',
+		"      read from --catalog or <data-dir>/examples.json.",
+		"  example apply <exampleKey> --name <ComponentName> --out <file.tsx> [--catalog <path>] [--json]   # PoC",
+		"      Copy that template to --out, renaming its export to --name. The copy owns itself",
+		"      from then on and does not track the template. An existing --out is never",
+		"      overwritten. The output lists the copy's imports and inline data, by line.",
 		"",
 		"  mcp",
 		"      Serve the MCP tools over stdio, and keep running until the client disconnects.",

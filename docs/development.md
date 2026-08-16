@@ -101,7 +101,7 @@ published `yosegi` command actually runs.
 `exports`, because the public API also re-exports the HTTP adapter and the MCP server — going
 through it would pull in hono and the MCP SDK on every CLI invocation.
 
-The shebang is `node`, and consumers need nothing but Node.js 20 or newer. What makes that work is
+The shebang is `node`, and consumers need nothing but Node.js 22 or newer. What makes that work is
 that relative imports in `src/` carry an explicit `.ts` extension and the build tsconfigs set
 `rewriteRelativeImportExtensions`, so `dist` ends up with the `.js` extensions Node's ESM resolver
 requires. Dropping either half only Bun can load the result, which is what the `node-consumer` CI
@@ -130,13 +130,18 @@ Install with npm rather than Bun. Consumers only need Node, so Bun installing it
 nothing about whether they can. The `node-consumer` CI job covers this path on every push, so doing
 it by hand is for when you are changing packaging itself.
 
-Until the version being verified is on npm, that install fails — the server tarball asks for
-`@yosegi/core` at an exact version and the registry 404s. Point it at the local tarball for the
-duration of the check:
+Passing both tarballs is what lets that install work before the version is on npm: the server
+tarball asks for `@yosegi/core` at an exact version, and npm takes a direct argument over the npm
+registry, which has no such version yet. The server tarball alone fails with `ETARGET`, and
+`overrides` is what covers that shape:
 
 ```json
 "overrides": { "@yosegi/core": "file:<tmp>/yosegi-core-0.1.0.tgz" }
 ```
+
+Keep the override to that shape. npm accepts an override of a package it already has as a direct
+dependency only when the two specs are identical, and it rewrites a tarball argument to a path
+relative to the project — so an absolute one alongside both tarballs fails with `EOVERRIDE`.
 
 Then confirm, in the scratch project:
 
@@ -168,8 +173,12 @@ token in this repository and none should ever be added — the `id-token: write`
 publish job is the whole credential. Provenance attestations are generated as well, which is what
 lets anyone verify that a published tarball came from this repository at that commit.
 
-Releases are npm-only. The workflow does not create a GitHub Release and does not generate release
-notes; the tag and the commit history are the record.
+A separate `release` job then creates the GitHub Release from the tag, with
+`gh release create --verify-tag --generate-notes`. It is separate because creating a release needs
+`contents: write`, which the job holding `id-token: write` should not also carry, and because
+running after the publish keeps a Release from ever naming a version npm does not have.
+`.github/release.yml` maps labels to the note categories, and an unlabelled pull request falls
+through to Other Changes.
 
 ### One-time setup (owner only)
 
@@ -195,19 +204,52 @@ None of this can be done from the repository; it needs an npm account with right
 
 ### Each release
 
-1. Bump `version` in both `package.json` files and the `@yosegi/core` dependency in
-   `packages/server/package.json`, then run `bun install` so `bun.lock` records the new versions.
-   The workflow refuses to publish if these disagree with the tag.
-2. Commit, then tag and push:
+`main` is protected, so the bump lands through a pull request like any other change, and the two
+`make` targets are that flow.
+
+1. Open the release PR:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   make release-pr VERSION=0.2.0
    ```
 
-The workflow runs lint, tests, typecheck, and the build first, and only then publishes core followed
-by server. The order matters: server depends on an exact version of core, so an install landing
-between the two publishes would fail to resolve.
+   It branches from `origin/main`, bumps the version everywhere it is recorded, runs `make verify`
+   (lint, test, typecheck, and `bun run pack`), commits, and opens a Draft PR.
+
+   | What | Where |
+   | --- | --- |
+   | Each package's own version | `version` in both `package.json` files |
+   | The pin between them | the `@yosegi/core` dependency in `packages/server/package.json` |
+   | What `bun pm pack` substitutes from | `bun.lock`, via `bun install` |
+
+   The workflow refuses to publish if these disagree with the tag. No source file repeats the
+   version: `yosegiVersion()` (`packages/server/src/config.ts`) reads `package.json`, and the CLI's
+   `--version`, the registry's `builtWith`, and the MCP server's `initialize` response all go
+   through it. A new literal is the thing to catch in review. `skills/yosegi/SKILL.md` is dated
+   rather than versioned — that date tracks the skill's last content change, not the release.
+2. Merge that PR, move to the updated `main`, and tag it:
+
+   ```sh
+   git switch main && git pull
+   make release-tag VERSION=0.2.0
+   ```
+
+   The target refuses to tag unless `HEAD` is `origin/main` and the merged `packages/core` is at
+   `VERSION`, then pushes `v0.2.0`. The workflow runs lint, tests, typecheck, and the build first,
+   and only then publishes core followed by server. The order matters: server depends on an exact
+   version of core, so an install landing between the two publishes would fail to resolve.
+3. On a minor or larger release (`x.y.0`), once the publish is through, measure the released version
+   with the benchmark harness ([`yosegi-benchmark`](https://github.com/yosegi-dev/yosegi-benchmark))
+   and commit the results there. The measurement is the full
+   [68-implementation run](./benchmark.md), so a patch release skips it. Follow
+   ["Running it"](https://github.com/yosegi-dev/yosegi-benchmark#running-it) there for the commands
+   — the arms in the middle are agent-driven, so the run is a procedure rather than a command. Tag
+   that repository with the same tag name, so a set of numbers names the version it measured:
+
+   ```sh
+   git tag v0.2.0            # in the yosegi-benchmark repository
+   git push origin v0.2.0
+   ```
 
 ## Next steps
 

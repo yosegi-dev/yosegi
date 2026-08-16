@@ -59,8 +59,9 @@ What you review and what you implement are the same components.
 - You find out early when the existing components are not enough, as a request against the design
   system rather than a surprise during implementation.
 
-Figma still owns new visual design. What Yosegi covers is showing a screen that can be built from
-the components you already have.
+Figma still owns new visual design, and Figma's own MCP reaches into existing code through Code
+Connect, so this is not a choice between the two. What Yosegi covers is showing a screen that can be
+built from the components you already have, validated against the registry before any JSX exists.
 
 ## Upstream — assembling a Story
 
@@ -227,12 +228,25 @@ flowchart TD
 - `tasks[]`: `bindings` and `events` flattened into wiring tasks, each carrying `nodeId` and a
   `path` in `$.children[1]` form.
 
-The rest (`requirements` / `target` / `implementation` / `screen`) is supporting information.
+A variant is another state of the same screen, so it is part of the context. `imports` and
+`components[]` cover the base tree and every variant tree together: a component only one state
+renders still appears, carrying `variantOnly: true` and the `variants` that use it. A component the
+base renders lists the `variants` that keep it, so a state that drops it is visible by its absence.
+A variant's own wiring joins `tasks[]` tagged with `variant`, limited to what the base does not
+already state.
+
+`structure` stays the base tree alone. Each state's shape is a `variants[]` entry — its `outline` in
+the same form, plus the `addedComponents` no base node renders. A screen that declares no variants
+gets none of these keys.
+
+The rest (`screenId` / `screenName` / `registryVersion` / `target` / `implementation` /
+`requirements` / `screen`) is supporting information.
 
 ## `story import` warnings
 
 Analysis works purely on the source AST, so any syntax whose shape is decided at runtime cannot be
-read. When no tree can be restored at all, the run ends with exit 1 and one of the codes below;
+read. When no tree can be restored at all, the run ends with exit 1 and the standard error envelope,
+carrying one of the two codes below as `error.code` and the whole warning list as `error.warnings`;
 otherwise the import marks the unreadable node and moves on. **Anything that produced a
 warning is absent from the Screen JSON**, so read the original Story for those parts. An empty
 `warnings` array proves nothing on its own — count the nodes against the Story.

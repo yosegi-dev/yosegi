@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -751,7 +751,8 @@ describe("runCli", () => {
 			dataDir,
 		]);
 		expect(code).toBe(1);
-		expect(output()).toContain("STORY_NOT_FOUND");
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("STORY_NOT_FOUND");
 	});
 
 	it("component inspect は id 無しで MISSING_ARGUMENT を返す", async () => {
@@ -800,6 +801,76 @@ describe("runCli", () => {
 		);
 		expect(context.structure.outline[0]).toBe("Page #node-page");
 		expect(context.target.route).toBe("/customers");
+	});
+
+	// screen generate emits the variant's components, so screen context has to hand
+	// the implementer the same set — a component only a state uses must not vanish
+	// between the two commands.
+	it("screen context は variant でしか使わないコンポーネントも返す", async () => {
+		const screen = {
+			...sampleScreen(),
+			variants: [
+				{
+					name: "Empty",
+					description: "No customers matched.",
+					operations: [
+						{ type: "removeNode", nodeId: "node-table" },
+						{
+							type: "addNode",
+							target: { parentNodeId: "node-page", slot: "body" },
+							node: {
+								id: "node-empty-action",
+								component: "Button",
+								props: { variant: "secondary" },
+								slots: {},
+								events: {
+									onClick: {
+										action: "navigate",
+										arguments: { to: "/customers/new" },
+									},
+								},
+							},
+						},
+					],
+				},
+			],
+		};
+		const screenFile = join(dataDir, "variants-context-screen.json");
+		await writeFile(screenFile, JSON.stringify(screen));
+
+		const code = await runCli([
+			"screen",
+			"context",
+			screenFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+
+		const context = JSON.parse(output()) as {
+			imports: string[];
+			components: { id: string; variantOnly?: true; variants?: string[] }[];
+			tasks: { nodeId: string; variant?: string }[];
+			variants?: {
+				name: string;
+				outline: string[];
+				addedComponents: string[];
+			}[];
+		};
+		expect(context.imports).toContain(
+			'import { Button } from "~/components/shadcn-ui/button";',
+		);
+		const button = context.components.find((c) => c.id === "Button");
+		expect(button?.variantOnly).toBe(true);
+		expect(button?.variants).toEqual(["Empty"]);
+		expect(
+			context.tasks.find((task) => task.nodeId === "node-empty-action")
+				?.variant,
+		).toBe("Empty");
+		expect(context.variants?.[0]?.addedComponents).toEqual(["Button"]);
+		expect(context.variants?.[0]?.outline).toContain(
+			"  body: Button #node-empty-action props=variant events=onClick",
+		);
 	});
 
 	it("screen context は --import-map を反映し --out へ書き出せる", async () => {
@@ -1107,7 +1178,9 @@ describe("runCli", () => {
 		]);
 	});
 
-	it("story import はツリーを復元できなければ exit 1", async () => {
+	// The failure goes out through the same envelope as every other command's, so an agent
+	// branching on error.code reaches this one too. The warnings stay attached inside it.
+	it("story import はツリーを復元できなければ error エンベロープで exit 1", async () => {
 		const storyFile = join(dataDir, "no-render.stories.tsx");
 		await writeFile(
 			storyFile,
@@ -1126,8 +1199,52 @@ describe("runCli", () => {
 			dataDir,
 		]);
 		expect(code).toBe(1);
-		expect(output()).toContain("STORY_NOT_FOUND");
-		expect(output()).toContain("No Story with a render function was found");
+		const parsed = JSON.parse(output()) as {
+			error: {
+				code: string;
+				message: string;
+				file: string;
+				warnings: { code: string }[];
+			};
+			warnings?: unknown;
+		};
+		expect(parsed.warnings).toBeUndefined();
+		expect(parsed.error.code).toBe("STORY_NOT_FOUND");
+		expect(parsed.error.file).toBe(storyFile);
+		expect(parsed.error.warnings.map((warning) => warning.code)).toEqual([
+			"STORY_NOT_FOUND",
+		]);
+		// The message has to say why importing can never work here, not just that it failed.
+		expect(parsed.error.message).toContain("render function");
+		expect(parsed.error.message).toContain("`component` + `args`");
+		expect(parsed.error.message).toContain("read the Story file directly");
+	});
+
+	// A --story-name that lands on an args-only export ends the run just as STORY_NOT_FOUND
+	// does, and takes the same envelope with its own code.
+	it("story import は RENDER_NOT_STATIC も error エンベロープで返す", async () => {
+		const storyFile = join(dataDir, "args-only.stories.tsx");
+		await writeFile(
+			storyFile,
+			[
+				'const meta: Meta = { title: "Examples/なし" };',
+				"export default meta;",
+				'export const Default: StoryObj = { args: { label: "ボタン" } };',
+			].join("\n"),
+		);
+
+		const code = await runCli([
+			"story",
+			"import",
+			storyFile,
+			"--story-name",
+			"Default",
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("RENDER_NOT_STATIC");
 	});
 
 	it("registry build は --index に URL を指定できる", async () => {
@@ -1167,6 +1284,92 @@ describe("runCli", () => {
 		} finally {
 			await server.stop(true);
 		}
+	});
+
+	// An index URL nothing is listening on. The port is bound and released rather than
+	// picked, so the connection is refused immediately instead of timing out.
+	const unreachableIndexUrl = async (): Promise<string> => {
+		const server = Bun.serve({ port: 0, fetch: () => new Response("") });
+		const url = new URL("/index.json", server.url).href;
+		await server.stop(true);
+		return url;
+	};
+
+	// The runtime reports an unreachable URL as a bare connection error, which names neither
+	// the URL nor the flag that chose it. `registry status` already explains this condition;
+	// build has to say at least as much, or an agent is left with nothing to act on.
+	it("registry build は届かない --index の URL とフラグと対処を示す", async () => {
+		const url = await unreachableIndexUrl();
+		const code = await runCli([
+			"registry",
+			"build",
+			"--index",
+			url,
+			"--out",
+			join(dataDir, "unreachable-registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const { error } = JSON.parse(output()) as {
+			error: { code: string; message: string };
+		};
+		expect(error.message).toContain(url);
+		expect(error.message).toContain("given as --index");
+		expect(error.message).toContain("Start Storybook");
+		// Without --source there is nothing else to build from, so dropping the flag is not
+		// a way out here.
+		expect(error.message).toContain("Without --source there is no other input");
+		expect(error.message).toContain("Underlying error:");
+	});
+
+	// With --source the registry can still be built, just without the Storybook layer, so
+	// dropping the flag is a real option and the message has to offer it.
+	it("registry build --source なら --index を外す選択肢も示す", async () => {
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const url = await unreachableIndexUrl();
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--index",
+			url,
+			"--out",
+			join(dataDir, "unreachable-source-registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const { error } = JSON.parse(output()) as { error: { message: string } };
+		expect(error.message).toContain(url);
+		expect(error.message).toContain("Dropping --index also works");
+	});
+
+	// The default location is not something the caller typed, so blaming --index for it
+	// would send the reader looking for a flag that is not in the invocation.
+	it("registry build は --index 未指定なら既定の場所だと明示する", async () => {
+		const code = await runCli([
+			"registry",
+			"build",
+			"--out",
+			join(dataDir, "default-index-registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const { error } = JSON.parse(output()) as { error: { message: string } };
+		expect(error.message).toContain("storybook-static/index.json");
+		expect(error.message).toContain("No --index was given");
+		expect(error.message).not.toContain("given as --index");
 	});
 
 	it("registry build --source はソースの型から Registry を書き出す", async () => {
@@ -2194,6 +2397,588 @@ export default meta;
 		// The template's title is not used, since the screen side decides it. Don't drop it
 		// silently — warn about it.
 		expect(output()).toContain('Ignored "title" from the meta template');
+	});
+
+	// --- example list / example apply (PoC) ---
+	//
+	// The catalog and its templates are host files, so every test here writes them into the
+	// temp data dir and points --catalog at them, the same way a host would.
+
+	// A template that is real, compiling code rather than a file of placeholders — the whole
+	// premise of copy-and-own. It carries one multi-line import and one inline data literal,
+	// which are exactly what the post-copy survey has to find.
+	const SAMPLE_TEMPLATE = [
+		'import { useState } from "react";',
+		"import {",
+		"\tButton,",
+		"\tIconButton,",
+		'} from "~/components/button";',
+		"",
+		"type Row = { id: string; name: string };",
+		"",
+		"const rows: Row[] = [{ id: \"1\", name: 'Sample' }];",
+		"",
+		"export function SampleScreenExample() {",
+		"\tconst [selected, setSelected] = useState<string | null>(null);",
+		"\treturn (",
+		"\t\t<div>",
+		"\t\t\t<Button onClick={() => setSelected(rows[0].id)}>{selected}</Button>",
+		"\t\t\t<IconButton />",
+		"\t\t</div>",
+		"\t);",
+		"}",
+		"",
+	].join("\n");
+
+	// The rename's hard cases, all sharing "SampleScreenExample" as a prefix or as prose:
+	// two imported identifiers that merely start with it, the name inside a comment, and the
+	// name inside a string literal. Only the declaration and its references may change.
+	const COLLIDING_TEMPLATE = [
+		'import type { SampleScreenExampleProps } from "~/components/props";',
+		'import { SampleScreenExampleHeader } from "~/components/header";',
+		"",
+		"// SampleScreenExample is the template this file was copied from.",
+		'const label = "SampleScreenExample";',
+		"",
+		"export function SampleScreenExample(props: SampleScreenExampleProps) {",
+		"\treturn <SampleScreenExampleHeader title={label} {...props} />;",
+		"}",
+		"",
+	].join("\n");
+
+	async function writeCatalog(
+		entries: unknown[] = [
+			{
+				key: "sample-screen",
+				label: "Sample screen",
+				description: "A screen with a table and a button",
+				templatePath: "templates/sample-screen.tsx",
+				componentName: "SampleScreenExample",
+			},
+		],
+		template: string = SAMPLE_TEMPLATE,
+	): Promise<string> {
+		await mkdir(join(dataDir, "templates"), { recursive: true });
+		await writeFile(join(dataDir, "templates", "sample-screen.tsx"), template);
+		const catalog = join(dataDir, "examples.json");
+		await writeFile(catalog, JSON.stringify({ examples: entries }));
+		return catalog;
+	}
+
+	it("example list はカタログの key・label・templatePath を列挙する", async () => {
+		const catalog = await writeCatalog();
+		const code = await runCli(["example", "list", "--catalog", catalog]);
+		expect(code).toBe(0);
+		expect(output()).toContain("sample-screen");
+		expect(output()).toContain("Sample screen");
+		expect(output()).toContain("A screen with a table and a button");
+		expect(output()).toContain("templates/sample-screen.tsx");
+		// The list's job is to make the next command decidable, so it spells that command out.
+		expect(output()).toContain("yosegi example apply");
+	});
+
+	it("example list --json は機械可読なカタログを返す", async () => {
+		const catalog = await writeCatalog();
+		const code = await runCli([
+			"example",
+			"list",
+			"--catalog",
+			catalog,
+			"--json",
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			total: number;
+			examples: { key: string; componentName: string }[];
+		};
+		expect(parsed.total).toBe(1);
+		expect(parsed.examples[0].key).toBe("sample-screen");
+		expect(parsed.examples[0].componentName).toBe("SampleScreenExample");
+	});
+
+	// --catalog is only an override; the default location is the one a host that has run
+	// nothing but `yosegi example apply` would use.
+	it("example list は --catalog 省略時に <data-dir>/examples.json を読む", async () => {
+		await writeCatalog();
+		const code = await runCli(["example", "list", "--data-dir", dataDir]);
+		expect(code).toBe(0);
+		expect(output()).toContain("sample-screen");
+	});
+
+	it("example apply はテンプレートを複製し componentName を置換する", async () => {
+		const catalog = await writeCatalog();
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("export function GuestListRoute()");
+		expect(written).not.toContain("SampleScreenExample");
+		// The copy owns itself, so it says so at the top rather than leaving a reader to
+		// assume edits here will be overwritten by a later template change.
+		expect(written).toContain('Copied from the "sample-screen" example');
+		expect(written).toContain("does not track later changes to the template");
+		// Everything else is carried over byte for byte.
+		expect(written).toContain(
+			"const rows: Row[] = [{ id: \"1\", name: 'Sample' }];",
+		);
+	});
+
+	it("example apply は import と埋め込みデータを行番号付きで案内する", async () => {
+		const catalog = await writeCatalog();
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+			"--json",
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			nextSteps: {
+				imports: { specifier: string; line: number }[];
+				mockData: { name: string; kind: string; line: number }[];
+			};
+		};
+		expect(parsed.nextSteps.imports.map((entry) => entry.specifier)).toEqual([
+			"react",
+			"~/components/button",
+		]);
+		// The two provenance lines shift every position, and the reported line has to address
+		// the file that now exists, not the template it came from.
+		expect(parsed.nextSteps.imports[0].line).toBe(3);
+		// The second import spans five lines in the source, which is why this is read off the
+		// AST rather than matched line by line.
+		expect(parsed.nextSteps.imports[1].line).toBe(4);
+		expect(parsed.nextSteps.mockData).toEqual([
+			{ name: "rows", kind: "array", line: 11 },
+		]);
+	});
+
+	// The destination is a file the host owns and may already have edited.
+	it("example apply は既存の --out を上書きせず EXAMPLE_OUTPUT_EXISTS を返す", async () => {
+		const catalog = await writeCatalog();
+		const out = join(dataDir, "routes", "guests.tsx");
+		await mkdir(join(dataDir, "routes"), { recursive: true });
+		await writeFile(out, "// hand-written\n");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("EXAMPLE_OUTPUT_EXISTS");
+		expect(await readFile(out, "utf8")).toBe("// hand-written\n");
+	});
+
+	it("カタログが無い場合は EXAMPLE_CATALOG_NOT_FOUND を返す", async () => {
+		const code = await runCli(["example", "list", "--data-dir", dataDir]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; path: string };
+		};
+		expect(parsed.error.code).toBe("EXAMPLE_CATALOG_NOT_FOUND");
+		expect(parsed.error.path).toBe(join(dataDir, "examples.json"));
+	});
+
+	it("壊れたカタログは INVALID_REQUEST をファイル向け文言で返す", async () => {
+		const catalog = join(dataDir, "examples.json");
+		await writeFile(catalog, JSON.stringify({ examples: [{ key: "x" }] }));
+		const code = await runCli(["example", "list", "--catalog", catalog]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; message: string };
+		};
+		expect(parsed.error.code).toBe("INVALID_REQUEST");
+		expect(parsed.error.message).toContain("Input file");
+	});
+
+	it("未知の key は EXAMPLE_NOT_FOUND と候補を返す", async () => {
+		const catalog = await writeCatalog();
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-scren",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			join(dataDir, "routes", "guests.tsx"),
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string; availableKeys: string[] };
+		};
+		expect(parsed.error.code).toBe("EXAMPLE_NOT_FOUND");
+		expect(parsed.error.suggestion).toContain("sample-screen");
+		expect(parsed.error.availableKeys).toEqual(["sample-screen"]);
+	});
+
+	it("templatePath が実在しない場合は EXAMPLE_TEMPLATE_NOT_FOUND を返す", async () => {
+		const catalog = await writeCatalog([
+			{
+				key: "missing",
+				label: "Missing",
+				description: "points nowhere",
+				templatePath: "templates/gone.tsx",
+				componentName: "GoneExample",
+			},
+		]);
+		const code = await runCli([
+			"example",
+			"apply",
+			"missing",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			join(dataDir, "routes", "guests.tsx"),
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; templatePath: string };
+		};
+		expect(parsed.error.code).toBe("EXAMPLE_TEMPLATE_NOT_FOUND");
+		expect(parsed.error.templatePath).toBe(
+			join(dataDir, "templates", "gone.tsx"),
+		);
+	});
+
+	// --name is substituted into source text, so a non-identifier would write a file that
+	// cannot parse. Rejected before the copy rather than after.
+	it("identifier でない --name は INVALID_ARGUMENT を返す", async () => {
+		const catalog = await writeCatalog();
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"guest-list",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+		expect(existsSync(out)).toBe(false);
+	});
+
+	it("example apply は --name 無しで MISSING_ARGUMENT を返す", async () => {
+		const catalog = await writeCatalog();
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--out",
+			join(dataDir, "routes", "guests.tsx"),
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; command: string };
+		};
+		expect(parsed.error.code).toBe("MISSING_ARGUMENT");
+		expect(parsed.error.command).toBe("example apply");
+	});
+
+	// The catalog's componentName having drifted from the template leaves a file that copied
+	// fine but kept the wrong export name — the one thing --name was asked to change.
+	it("componentName を宣言していないテンプレートは複製しつつ警告する", async () => {
+		const catalog = await writeCatalog([
+			{
+				key: "sample-screen",
+				label: "Sample screen",
+				description: "stale componentName",
+				templatePath: "templates/sample-screen.tsx",
+				componentName: "RenamedAgesAgoExample",
+			},
+		]);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain('declares no "RenamedAgesAgoExample"');
+		expect(await readFile(out, "utf8")).toContain("SampleScreenExample");
+	});
+
+	// A plain replaceAll rewrites `SampleScreenExampleProps` to `GuestListRouteProps`, which
+	// the module it is imported from does not export, so the copy stops compiling. Only
+	// identifier tokens that are the component itself may change.
+	it("example apply は componentName を部分文字列に含む別識別子を置換しない", async () => {
+		const catalog = await writeCatalog(undefined, COLLIDING_TEMPLATE);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		// The declaration and its references are renamed.
+		expect(written).toContain("export function GuestListRoute(");
+		expect(written).not.toContain("export function SampleScreenExample(");
+		// Identifiers that merely start with the same text are left alone, imports included.
+		expect(written).toContain(
+			'import type { SampleScreenExampleProps } from "~/components/props";',
+		);
+		expect(written).toContain(
+			'import { SampleScreenExampleHeader } from "~/components/header";',
+		);
+		expect(written).toContain("props: SampleScreenExampleProps");
+		expect(written).toContain("<SampleScreenExampleHeader");
+		expect(written).not.toContain("GuestListRouteProps");
+		expect(written).not.toContain("GuestListRouteHeader");
+	});
+
+	// Neither a comment nor a string literal is an identifier token, so neither is rewritten.
+	it("example apply はコメントと文字列リテラル内の同名テキストを置換しない", async () => {
+		const catalog = await writeCatalog(undefined, COLLIDING_TEMPLATE);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		expect(written).toContain(
+			"// SampleScreenExample is the template this file was copied from.",
+		);
+		expect(written).toContain('const label = "SampleScreenExample";');
+	});
+
+	// A name that appears only as prose is not a declaration, so the drift warning fires and
+	// the file comes through untouched.
+	it("コメント内にしか名前が無いテンプレートは置換せず警告する", async () => {
+		const catalog = await writeCatalog(
+			[
+				{
+					key: "sample-screen",
+					label: "Sample screen",
+					description: "name only in prose",
+					templatePath: "templates/sample-screen.tsx",
+					componentName: "OnlyInAComment",
+				},
+			],
+			[
+				"// OnlyInAComment used to live here.",
+				"export function Kept() {",
+				"\treturn null;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain('declares no "OnlyInAComment"');
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("// OnlyInAComment used to live here.");
+		expect(written).not.toContain("GuestListRoute");
+	});
+
+	// A JSX attribute name and a property key carry the component's text without referring to
+	// it, so rewriting them would change what the copy is passed and what shape it expects.
+	it("example apply は JSX 属性名・プロパティキーを置換しない", async () => {
+		const catalog = await writeCatalog(
+			undefined,
+			[
+				'import { Card } from "~/card";',
+				"",
+				"const config = { SampleScreenExample: 1 };",
+				"",
+				"export function SampleScreenExample() {",
+				"\treturn <Card SampleScreenExample={config.SampleScreenExample} />;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("export function GuestListRoute()");
+		expect(written).toContain("const config = { SampleScreenExample: 1 };");
+		expect(written).toContain(
+			"<Card SampleScreenExample={config.SampleScreenExample} />",
+		);
+		expect(written).not.toContain("GuestListRoute={");
+		expect(written).not.toContain("config.GuestListRoute");
+	});
+
+	// A local inside another function is not the exported component, so this is drift.
+	it("ネストした宣言しか無いテンプレートは置換せず警告する", async () => {
+		const catalog = await writeCatalog(
+			undefined,
+			[
+				"export function Other() {",
+				"\tconst SampleScreenExample = 1;",
+				"\treturn SampleScreenExample;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain('declares no "SampleScreenExample"');
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("const SampleScreenExample = 1;");
+		expect(written).not.toContain("GuestListRoute");
+	});
+
+	// A catalog componentName that is not an identifier can never name a component, and it
+	// reaches a RegExp in the no-compiler fallback.
+	it("identifier でない componentName は INVALID_ARGUMENT を返す", async () => {
+		const catalog = await writeCatalog([
+			{
+				key: "sample-screen",
+				label: "Sample screen",
+				description: "bad componentName",
+				templatePath: "templates/sample-screen.tsx",
+				componentName: "Sample.*Example",
+			},
+		]);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+		expect(existsSync(out)).toBe(false);
+	});
+
+	// An argument that is silently dropped lets a mistyped command run and report success,
+	// which an agent then trusts — the same reason an unknown flag is rejected.
+	it("example list は余分な positional を UNKNOWN_ARGUMENT で拒否する", async () => {
+		const catalog = await writeCatalog();
+		const code = await runCli([
+			"example",
+			"list",
+			"typo",
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; command: string; unexpected: string[] };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_ARGUMENT");
+		expect(parsed.error.command).toBe("example list");
+		expect(parsed.error.unexpected).toEqual(["typo"]);
+	});
+
+	it("example apply は余分な positional を UNKNOWN_ARGUMENT で拒否する", async () => {
+		const catalog = await writeCatalog();
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"typo",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; unexpected: string[] };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_ARGUMENT");
+		expect(parsed.error.unexpected).toEqual(["typo"]);
+		// Rejected before anything was written.
+		expect(existsSync(out)).toBe(false);
 	});
 
 	it("未知のコマンドは UNKNOWN_COMMAND と候補を返す", async () => {

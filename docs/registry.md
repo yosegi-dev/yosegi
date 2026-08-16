@@ -54,32 +54,55 @@ hand — see [Patterns that do not extract cleanly](#patterns-that-do-not-extrac
 ## How it works
 
 Type extraction uses
-[react-docgen-typescript](https://github.com/styleguidist/react-docgen-typescript), the same
-implementation Storybook uses to generate argTypes, so the registry is unlikely to diverge from how
-things look in the host's Storybook. Since `@yosegi/core` is kept zod-only, type extraction lives in
-`@yosegi/yosegi`.
+[react-docgen-typescript](https://github.com/styleguidist/react-docgen-typescript). Storybook can be
+pointed at that same implementation, and on a host that points at it the registry is unlikely to
+diverge from how things look in the host's Storybook; on a host that reads props some other way, the
+two can differ. Since `@yosegi/core` is kept zod-only, type extraction lives in `@yosegi/yosegi`.
 
 ### Hosts on TypeScript 7
 
 TypeScript 7.0 ships no compiler API, and extraction is built on the 6.x one, so a host that
-installed 7 has to alias `typescript` to the compatibility package the TypeScript team publishes for
-this. It keeps `tsc` on 7 and hands tools back the 6.x API:
+installed 7 takes the
+[side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) the
+TypeScript team recommends — two `devDependencies`, not one:
 
-```sh
-# npm
-npm install -D typescript@npm:@typescript/typescript6
-# pnpm
-pnpm add -D typescript@npm:@typescript/typescript6
-# yarn
-yarn add -D typescript@npm:@typescript/typescript6
-# bun
-bun add -d typescript@npm:@typescript/typescript6
+```json
+{
+	"devDependencies": {
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"typescript": "npm:@typescript/typescript6@^6.0.2"
+	}
+}
 ```
 
-The tree then holds one `typescript`, shared with Yosegi rather than duplicated. Without the alias,
-`registry build` fails with the version it resolved and the command above — installing Yosegi's own
-copy is not enough, because a package manager hoists react-docgen-typescript to the top of the
-host's tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
+`tsc` still runs 7, from `@typescript/native`; the compatibility package adds `tsc6`; and every tool
+resolving `typescript` — Yosegi included — reads the 6.x API. Aliasing `typescript` on its own takes
+`tsc` away with it, because the compatibility package ships `tsc6` and no `tsc`.
+
+The tree then holds one `typescript`, shared with Yosegi rather than duplicated. Without the
+aliases, `registry build` fails with the version it resolved and the entries above — installing
+Yosegi's own copy is not enough, because a package manager hoists react-docgen-typescript to the top
+of the host's tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
+
+bun does not resolve that setup correctly. The compatibility package reaches the real 6.x compiler
+through an `npm:typescript@^6` dependency of its own, and bun redirects that back to the
+compatibility package, so `typescript` ends up re-exporting itself and `registry build` fails on
+`ts.TypeFlags` being `undefined`. Depend on the 6.x compiler directly, with no compatibility package
+in between:
+
+```json
+{
+	"devDependencies": {
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"typescript": "^6"
+	}
+}
+```
+
+`tsc` still runs 7, from `@typescript/native`, and extraction reads the 6.x API; what the tree gives
+up is `tsc6`, which nothing here calls. This form works on npm and pnpm too. The bug is fixed
+upstream in [oven-sh/bun#33835](https://github.com/oven-sh/bun/pull/33835), unreleased as of bun
+1.3.14.
 
 ### ids and imports
 
@@ -168,6 +191,10 @@ The order of `options` follows the order in which TypeScript created the literal
 necessarily declaration order. It is stable for the same input, but no meaning should be attached to
 it.
 
+`shape` is best-effort. A type the extractor could not expand a level produces a `json` prop that
+`component inspect` prints with no `shape:` line under it, leaving the prop's `description` and the
+host's own source as the only account of what the value is.
+
 ### Variants that collide with HTML attributes
 
 In a component built as `React.HTMLAttributes<T> & VariantProps<typeof variants>`, a cva `color`
@@ -234,6 +261,26 @@ For a component whose props react-docgen-typescript cannot read at all, these tw
 off the call signature's first parameter through the TypeChecker, since that much can be settled
 even when the rest cannot. If even the props type is unreachable, nothing is added — omitting a real
 prop costs less than inventing one.
+
+### DOM props that pass through
+
+A component whose props type folds in one of React's DOM-attribute mixins — `HTMLAttributes`,
+`ComponentPropsWithoutRef<"button">`, a Radix primitive's props — accepts every attribute of that
+element. Listing them individually would add hundreds of entries per component, so the manifest
+carries a one-line `passthrough` note instead, which `component inspect` prints under `props`:
+
+```
+also accepts: button DOM props (onClick, aria-*, …) pass through
+```
+
+It is only set when a mixin was detected, and only on a component whose props could be read at all;
+under-claiming is preferred over guessing, so its absence is not evidence that nothing passes
+through.
+
+The note describes the component's type, not the Screen JSON schema. Validation checks `props`
+against the manifest's own props, so a passed-through attribute written into a Screen JSON is
+rejected with `UNKNOWN_PROP` — the route that can use these attributes is hand-written JSX, where
+the host's type checker is what confirms them.
 
 ### Categories and curation
 

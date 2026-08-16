@@ -52,7 +52,8 @@ reviews:
     gitleaks:
       enabled: true
     # The repository has no markdownlint config, and docs/conventions.md prescribes a house style
-    # (100-column wrap, stacked package-manager blocks) that default rules argue with.
+    # (100-column wrap on English pages, one sentence per line on Japanese ones, stacked
+    # package-manager blocks) that default rules argue with.
     markdownlint:
       enabled: false
     # English pages are deliberately terse and docs/ja/** is already linted by textlint
@@ -132,7 +133,14 @@ reviews:
         - Each page owns one subject; a concept is explained only where it is owned, and every
           other page links there.
         - A step is a command block plus one line of purpose. Cut any sentence that does not change
-          what the reader does next. Wrap at 100 columns.
+          what the reader does next. Wrap an English page at 100 columns. A Japanese page has no
+          width limit at all — see the `docs/ja/**` instruction below and never raise width there.
+        - That 100 is display columns, never bytes and never UTF-8 code units. Only East Asian Wide
+          and Fullwidth characters count 2; everything else counts 1, an em dash (U+2014, three
+          bytes in UTF-8) included. Counting bytes has twice reported a line that fits as over
+          budget. `eastAsianWidth` in `scripts/check-docs.ts` is what decides, `bun run check:docs`
+          runs it, and CI runs that on every push — so before raising width, count the line that
+          way and cite the number.
         - Package managers are stacked npm / pnpm / yarn / bun, in that order, and globs are quoted.
         - Every `docs/x.md` has a `docs/ja/x.md` twin, and `README.md` has `README.ja.md`, changed
           in the same commit with the same headings, code blocks, and tables. Flag an English-only
@@ -141,6 +149,24 @@ reviews:
           host, Story / CSF, `@yosegi/yosegi` (never `@yosegi/server`), Agent Skill.
         - No host project or company names, no host-specific component names, no absolute local
           paths.
+
+    - path: "{README.ja.md,docs/ja/**/*.md}"
+      instructions: |
+        [MUST] A Japanese page has no line-width limit. Never comment on line length, a 100-column
+        budget, wrapping, or East Asian character width here, in any label — `scripts/check-docs.ts`
+        exempts these pages from the width check on purpose, because counting a full-width character
+        as two columns left about 50 characters and broke nearly every sentence in the middle.
+
+        The rule that does apply is one sentence per line: a prose line carries a single sentence,
+        however long, and is never broken in the middle of one. Two sentences stay on the same line
+        wherever no break is available — the 「。」 sits inside inline code or inside a quote or
+        bracket pair, or the next character is not East Asian wide (a break next to an ASCII
+        character renders as a space). Tables, code blocks, and front matter are exempt.
+
+        Also check the translation itself, per docs/conventions.md "Translation review checklist":
+        no evaluation or reasoning the English lacks, hedges and negations kept where the English has
+        them, headings translated in full including their conditions, the terminology table
+        followed, the polite です / ます register, and no 「——」 standing in for an English em dash.
 
     - path: "skills/yosegi/**"
       instructions: |

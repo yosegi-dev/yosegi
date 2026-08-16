@@ -11,7 +11,8 @@ import {
 	resolveComponentSpecifier,
 	SYNTHETIC_HEADING_CLASS_NAME,
 } from "@yosegi/core/emit";
-import * as ts from "typescript";
+import type * as ts from "typescript";
+import { loadTypeScript } from "../typescript.ts";
 
 // Story importer: reads `.stories.tsx` source and converts it back into a Screen Definition tree.
 //
@@ -30,6 +31,10 @@ import * as ts from "typescript";
 
 // The primary target is a Story written by emitCsf, for which the round trip is exact.
 // Hand-written or hand-edited Stories are accepted on a best-effort basis.
+
+// The compiler API is picked up with loadTypeScript() inside each function that needs it,
+// rather than imported at the top of the module. See src/typescript.ts for why a host
+// without one has to fail there instead of here.
 
 const CHILDREN_SLOT = "children";
 // Inline elements that collapse into Text when their content is text-only. A relaxation to accept hand-written Stories.
@@ -156,37 +161,38 @@ const FAILED: Evaluated = { ok: false };
 
 // Folds literals only. Identifiers, function calls, and template interpolations are treated as unreadable values.
 function evaluate(expression: ts.Expression): Evaluated {
-	if (ts.isStringLiteral(expression)) {
+	const tsApi = loadTypeScript();
+	if (tsApi.isStringLiteral(expression)) {
 		return { ok: true, value: expression.text };
 	}
-	if (ts.isNoSubstitutionTemplateLiteral(expression)) {
+	if (tsApi.isNoSubstitutionTemplateLiteral(expression)) {
 		return { ok: true, value: expression.text };
 	}
-	if (ts.isNumericLiteral(expression)) {
+	if (tsApi.isNumericLiteral(expression)) {
 		return { ok: true, value: Number(expression.text) };
 	}
-	if (expression.kind === ts.SyntaxKind.TrueKeyword) {
+	if (expression.kind === tsApi.SyntaxKind.TrueKeyword) {
 		return { ok: true, value: true };
 	}
-	if (expression.kind === ts.SyntaxKind.FalseKeyword) {
+	if (expression.kind === tsApi.SyntaxKind.FalseKeyword) {
 		return { ok: true, value: false };
 	}
-	if (expression.kind === ts.SyntaxKind.NullKeyword) {
+	if (expression.kind === tsApi.SyntaxKind.NullKeyword) {
 		return { ok: true, value: null };
 	}
 	if (
-		ts.isPrefixUnaryExpression(expression) &&
-		expression.operator === ts.SyntaxKind.MinusToken
+		tsApi.isPrefixUnaryExpression(expression) &&
+		expression.operator === tsApi.SyntaxKind.MinusToken
 	) {
 		const operand = evaluate(expression.operand);
 		return operand.ok && typeof operand.value === "number"
 			? { ok: true, value: -operand.value }
 			: FAILED;
 	}
-	if (ts.isParenthesizedExpression(expression)) {
+	if (tsApi.isParenthesizedExpression(expression)) {
 		return evaluate(expression.expression);
 	}
-	if (ts.isArrayLiteralExpression(expression)) {
+	if (tsApi.isArrayLiteralExpression(expression)) {
 		const values: unknown[] = [];
 		for (const element of expression.elements) {
 			const evaluated = evaluate(element);
@@ -197,10 +203,10 @@ function evaluate(expression: ts.Expression): Evaluated {
 		}
 		return { ok: true, value: values };
 	}
-	if (ts.isObjectLiteralExpression(expression)) {
+	if (tsApi.isObjectLiteralExpression(expression)) {
 		const value: Record<string, unknown> = {};
 		for (const property of expression.properties) {
-			if (!ts.isPropertyAssignment(property)) {
+			if (!tsApi.isPropertyAssignment(property)) {
 				return FAILED;
 			}
 			const key = propertyName(property.name);
@@ -216,7 +222,8 @@ function evaluate(expression: ts.Expression): Evaluated {
 }
 
 function propertyName(name: ts.PropertyName): string | null {
-	if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+	const tsApi = loadTypeScript();
+	if (tsApi.isIdentifier(name) || tsApi.isStringLiteral(name)) {
 		return name.text;
 	}
 	return null;
@@ -225,16 +232,17 @@ function propertyName(name: ts.PropertyName): string | null {
 // ---- Import parsing and Registry matching ----
 
 function collectImports(sourceFile: ts.SourceFile): ImportedBinding[] {
+	const tsApi = loadTypeScript();
 	const bindings: ImportedBinding[] = [];
 	for (const statement of sourceFile.statements) {
-		if (!ts.isImportDeclaration(statement) || !statement.importClause) {
+		if (!tsApi.isImportDeclaration(statement) || !statement.importClause) {
 			continue;
 		}
 		// `import type { Meta }` isn't a building block.
 		if (statement.importClause.isTypeOnly) {
 			continue;
 		}
-		if (!ts.isStringLiteral(statement.moduleSpecifier)) {
+		if (!tsApi.isStringLiteral(statement.moduleSpecifier)) {
 			continue;
 		}
 		const specifier = statement.moduleSpecifier.text;
@@ -247,7 +255,7 @@ function collectImports(sourceFile: ts.SourceFile): ImportedBinding[] {
 				componentId: null,
 			});
 		}
-		if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+		if (clause.namedBindings && tsApi.isNamedImports(clause.namedBindings)) {
 			for (const element of clause.namedBindings.elements) {
 				if (element.isTypeOnly) {
 					continue;
@@ -540,17 +548,18 @@ function readAttribute(
 	// shape still falls through to OPAQUE_PROP, so nothing is dropped in silence.
 	allowBindings: boolean,
 ): Attribute {
-	const name = ts.isIdentifier(attribute.name)
+	const tsApi = loadTypeScript();
+	const name = tsApi.isIdentifier(attribute.name)
 		? attribute.name.text
 		: attribute.name.getText(context.sourceFile);
 	// A valueless attribute like `bold` is true.
 	if (!attribute.initializer) {
 		return { kind: "prop", name, value: true };
 	}
-	if (ts.isStringLiteral(attribute.initializer)) {
+	if (tsApi.isStringLiteral(attribute.initializer)) {
 		return { kind: "prop", name, value: attribute.initializer.text };
 	}
-	if (!ts.isJsxExpression(attribute.initializer)) {
+	if (!tsApi.isJsxExpression(attribute.initializer)) {
 		warn(
 			context,
 			"OPAQUE_PROP",
@@ -566,9 +575,9 @@ function readAttribute(
 	}
 	// If the attribute value is JSX, it's a named Slot — the inverse of emit writing a named Slot as an attribute.
 	if (
-		ts.isJsxElement(expression) ||
-		ts.isJsxSelfClosingElement(expression) ||
-		ts.isJsxFragment(expression)
+		tsApi.isJsxElement(expression) ||
+		tsApi.isJsxSelfClosingElement(expression) ||
+		tsApi.isJsxFragment(expression)
 	) {
 		return { kind: "slot", name, children: convertJsx(context, expression) };
 	}
@@ -607,7 +616,10 @@ function readElement(
 	context: ImportContext,
 	element: ts.JsxElement | ts.JsxSelfClosingElement,
 ): ElementParts {
-	const opening = ts.isJsxElement(element) ? element.openingElement : element;
+	const tsApi = loadTypeScript();
+	const opening = tsApi.isJsxElement(element)
+		? element.openingElement
+		: element;
 	const tagName = opening.tagName.getText(context.sourceFile);
 	const props: Record<string, unknown> = {};
 	const slots: Record<string, ScreenNode[]> = {};
@@ -615,7 +627,7 @@ function readElement(
 	// A tag starting with a lowercase letter is a DOM element.
 	const isComponent = !/^[a-z]/.test(tagName);
 	for (const attribute of opening.attributes.properties) {
-		if (ts.isJsxSpreadAttribute(attribute)) {
+		if (tsApi.isJsxSpreadAttribute(attribute)) {
 			warn(
 				context,
 				"SPREAD_ATTRIBUTE",
@@ -633,7 +645,7 @@ function readElement(
 			bindings[read.name] = read.expression;
 		}
 	}
-	const children = ts.isJsxElement(element)
+	const children = tsApi.isJsxElement(element)
 		? convertChildren(context, element.children)
 		: [];
 	return {
@@ -741,12 +753,13 @@ function convertChildren(
 	context: ImportContext,
 	children: readonly ts.JsxChild[],
 ): ScreenNode[] {
+	const tsApi = loadTypeScript();
 	const nodes: ScreenNode[] = [];
 	let pendingIntent: Intent | null = null;
 
 	for (const child of children) {
 		// An expression container that holds nothing but a comment is a note carried over to the element right after it.
-		if (ts.isJsxExpression(child) && child.expression === undefined) {
+		if (tsApi.isJsxExpression(child) && child.expression === undefined) {
 			pendingIntent = readJsxComment(context, child) ?? pendingIntent;
 			continue;
 		}
@@ -774,15 +787,16 @@ function convertExpression(
 	context: ImportContext,
 	child: ts.JsxExpression,
 ): ScreenNode[] {
+	const tsApi = loadTypeScript();
 	const expression = child.expression;
 	if (!expression) {
 		// An expression container that holds nothing but a comment. The caller (convertChildren) picks it up as intent.
 		return [];
 	}
 	if (
-		ts.isJsxElement(expression) ||
-		ts.isJsxSelfClosingElement(expression) ||
-		ts.isJsxFragment(expression)
+		tsApi.isJsxElement(expression) ||
+		tsApi.isJsxSelfClosingElement(expression) ||
+		tsApi.isJsxFragment(expression)
 	) {
 		return convertJsx(context, expression);
 	}
@@ -806,17 +820,18 @@ function convertExpression(
 // pending intent uniformly to whatever a node — element, Fragment, text, expression —
 // reconstructed into.
 function convertJsxNodes(context: ImportContext, child: ts.Node): ScreenNode[] {
-	if (ts.isJsxFragment(child)) {
+	const tsApi = loadTypeScript();
+	if (tsApi.isJsxFragment(child)) {
 		return convertChildren(context, child.children);
 	}
-	if (ts.isJsxExpression(child)) {
+	if (tsApi.isJsxExpression(child)) {
 		return convertExpression(context, child);
 	}
-	if (ts.isJsxText(child)) {
+	if (tsApi.isJsxText(child)) {
 		const text = normalizeJsxText(child.text);
 		return text.length > 0 ? [textNode(context, text)] : [];
 	}
-	if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) {
+	if (!tsApi.isJsxElement(child) && !tsApi.isJsxSelfClosingElement(child)) {
 		return [];
 	}
 
@@ -862,9 +877,10 @@ function objectProperty(
 	object: ts.ObjectLiteralExpression,
 	name: string,
 ): ts.Expression | null {
+	const tsApi = loadTypeScript();
 	for (const property of object.properties) {
 		if (
-			ts.isPropertyAssignment(property) &&
+			tsApi.isPropertyAssignment(property) &&
 			propertyName(property.name) === name
 		) {
 			return property.initializer;
@@ -877,29 +893,30 @@ function objectProperty(
 function findMetaObject(
 	sourceFile: ts.SourceFile,
 ): ts.ObjectLiteralExpression | null {
+	const tsApi = loadTypeScript();
 	const objects = new Map<string, ts.ObjectLiteralExpression>();
 	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
+		if (!tsApi.isVariableStatement(statement)) {
 			continue;
 		}
 		for (const declaration of statement.declarationList.declarations) {
 			if (
-				ts.isIdentifier(declaration.name) &&
+				tsApi.isIdentifier(declaration.name) &&
 				declaration.initializer &&
-				ts.isObjectLiteralExpression(declaration.initializer)
+				tsApi.isObjectLiteralExpression(declaration.initializer)
 			) {
 				objects.set(declaration.name.text, declaration.initializer);
 			}
 		}
 	}
 	for (const statement of sourceFile.statements) {
-		if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
+		if (!tsApi.isExportAssignment(statement) || statement.isExportEquals) {
 			continue;
 		}
-		if (ts.isObjectLiteralExpression(statement.expression)) {
+		if (tsApi.isObjectLiteralExpression(statement.expression)) {
 			return statement.expression;
 		}
-		if (ts.isIdentifier(statement.expression)) {
+		if (tsApi.isIdentifier(statement.expression)) {
 			return objects.get(statement.expression.text) ?? null;
 		}
 	}
@@ -927,16 +944,17 @@ const MUTATING_METHOD_NAMES: ReadonlySet<string> = new Set([
 // (`customers.items[0].name` -> "customers"). null when the chain does not
 // bottom out in a plain identifier.
 function rootIdentifierOfChain(expression: ts.Expression): string | null {
+	const tsApi = loadTypeScript();
 	let current: ts.Expression = expression;
 	while (
-		ts.isPropertyAccessExpression(current) ||
-		ts.isElementAccessExpression(current) ||
-		ts.isNonNullExpression(current) ||
-		ts.isParenthesizedExpression(current)
+		tsApi.isPropertyAccessExpression(current) ||
+		tsApi.isElementAccessExpression(current) ||
+		tsApi.isNonNullExpression(current) ||
+		tsApi.isParenthesizedExpression(current)
 	) {
 		current = current.expression;
 	}
-	return ts.isIdentifier(current) ? current.text : null;
+	return tsApi.isIdentifier(current) ? current.text : null;
 }
 
 // Best-effort scan for identifiers whose value is mutated after
@@ -952,6 +970,7 @@ function rootIdentifierOfChain(expression: ts.Expression): string | null {
 // Shadowing is not tracked either; a local variable sharing a fixture's name
 // counts against it, which errs on the side of importing less.
 function collectMutatedIdentifiers(sourceFile: ts.SourceFile): Set<string> {
+	const tsApi = loadTypeScript();
 	const mutated = new Set<string>();
 	const add = (root: string | null): void => {
 		if (root !== null) {
@@ -960,32 +979,33 @@ function collectMutatedIdentifiers(sourceFile: ts.SourceFile): Set<string> {
 	};
 	const visit = (node: ts.Node): void => {
 		if (
-			ts.isBinaryExpression(node) &&
-			node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-			node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
-			(ts.isPropertyAccessExpression(node.left) ||
-				ts.isElementAccessExpression(node.left))
+			tsApi.isBinaryExpression(node) &&
+			node.operatorToken.kind >= tsApi.SyntaxKind.FirstAssignment &&
+			node.operatorToken.kind <= tsApi.SyntaxKind.LastAssignment &&
+			(tsApi.isPropertyAccessExpression(node.left) ||
+				tsApi.isElementAccessExpression(node.left))
 		) {
 			add(rootIdentifierOfChain(node.left));
-		} else if (ts.isDeleteExpression(node)) {
+		} else if (tsApi.isDeleteExpression(node)) {
 			add(rootIdentifierOfChain(node.expression));
 		} else if (
-			(ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-			(node.operator === ts.SyntaxKind.PlusPlusToken ||
-				node.operator === ts.SyntaxKind.MinusMinusToken)
+			(tsApi.isPrefixUnaryExpression(node) ||
+				tsApi.isPostfixUnaryExpression(node)) &&
+			(node.operator === tsApi.SyntaxKind.PlusPlusToken ||
+				node.operator === tsApi.SyntaxKind.MinusMinusToken)
 		) {
 			// `customers.count++` mutates just like `customers.count += 1`. A bare
 			// `customers++` on a const is a runtime error, but flagging it too is
 			// harmless — it only errs toward importing less.
 			add(rootIdentifierOfChain(node.operand));
-		} else if (ts.isCallExpression(node)) {
+		} else if (tsApi.isCallExpression(node)) {
 			const callee = node.expression;
-			if (ts.isPropertyAccessExpression(callee)) {
+			if (tsApi.isPropertyAccessExpression(callee)) {
 				if (MUTATING_METHOD_NAMES.has(callee.name.text)) {
 					add(rootIdentifierOfChain(callee.expression));
 				} else if (
 					callee.name.text === "assign" &&
-					ts.isIdentifier(callee.expression) &&
+					tsApi.isIdentifier(callee.expression) &&
 					callee.expression.text === "Object"
 				) {
 					const target = node.arguments[0];
@@ -995,7 +1015,7 @@ function collectMutatedIdentifiers(sourceFile: ts.SourceFile): Set<string> {
 				}
 			}
 		}
-		ts.forEachChild(node, visit);
+		tsApi.forEachChild(node, visit);
 	};
 	visit(sourceFile);
 	return mutated;
@@ -1011,15 +1031,16 @@ function collectFixtures(
 	context: ImportContext,
 	meta: ts.ObjectLiteralExpression | null,
 ): Record<string, unknown> {
+	const tsApi = loadTypeScript();
 	const fixtures: Record<string, unknown> = {};
 	const mutatedIdentifiers = collectMutatedIdentifiers(context.sourceFile);
 	for (const statement of context.sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
+		if (!tsApi.isVariableStatement(statement)) {
 			continue;
 		}
 		// Story exports (and anything else exported) are not fixtures.
 		const exported = statement.modifiers?.some(
-			(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+			(modifier) => modifier.kind === tsApi.SyntaxKind.ExportKeyword,
 		);
 		if (exported) {
 			continue;
@@ -1028,7 +1049,7 @@ function collectFixtures(
 			if (declaration.initializer === meta) {
 				continue;
 			}
-			if (!ts.isIdentifier(declaration.name)) {
+			if (!tsApi.isIdentifier(declaration.name)) {
 				warn(
 					context,
 					"OPAQUE_FIXTURE",
@@ -1041,9 +1062,9 @@ function collectFixtures(
 			// emit writes fixtures as consts, and a `let` / `var` declares intent to
 			// reassign — a mutable top-level is Story machinery, not screen mock
 			// data, so it is skipped rather than snapshotted at its initial value.
-			if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
+			if ((statement.declarationList.flags & tsApi.NodeFlags.Const) === 0) {
 				const keyword =
-					(statement.declarationList.flags & ts.NodeFlags.Let) === 0
+					(statement.declarationList.flags & tsApi.NodeFlags.Let) === 0
 						? "var"
 						: "let";
 				warn(
@@ -1101,22 +1122,23 @@ type StoryCandidate = {
 
 // Enumerates `export const Default: StoryObj = { ... }` declarations.
 function findStories(sourceFile: ts.SourceFile): StoryCandidate[] {
+	const tsApi = loadTypeScript();
 	const stories: StoryCandidate[] = [];
 	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
+		if (!tsApi.isVariableStatement(statement)) {
 			continue;
 		}
 		const exported = statement.modifiers?.some(
-			(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+			(modifier) => modifier.kind === tsApi.SyntaxKind.ExportKeyword,
 		);
 		if (!exported) {
 			continue;
 		}
 		for (const declaration of statement.declarationList.declarations) {
 			if (
-				ts.isIdentifier(declaration.name) &&
+				tsApi.isIdentifier(declaration.name) &&
 				declaration.initializer &&
-				ts.isObjectLiteralExpression(declaration.initializer)
+				tsApi.isObjectLiteralExpression(declaration.initializer)
 			) {
 				stories.push({
 					name: declaration.name.text,
@@ -1130,25 +1152,27 @@ function findStories(sourceFile: ts.SourceFile): StoryCandidate[] {
 
 // Extracts JSX from a render's body. Accepts both `() => (<X />)` and `() => { return <X />; }`.
 function renderBody(render: ts.Expression): ts.Expression | null {
-	if (!ts.isArrowFunction(render) && !ts.isFunctionExpression(render)) {
+	const tsApi = loadTypeScript();
+	if (!tsApi.isArrowFunction(render) && !tsApi.isFunctionExpression(render)) {
 		return null;
 	}
 	const body = render.body;
-	if (!ts.isBlock(body)) {
+	if (!tsApi.isBlock(body)) {
 		return body;
 	}
 	const statements = body.statements.filter(
-		(statement) => !ts.isEmptyStatement(statement),
+		(statement) => !tsApi.isEmptyStatement(statement),
 	);
 	const last = statements.at(-1);
-	if (statements.length !== 1 || !last || !ts.isReturnStatement(last)) {
+	if (statements.length !== 1 || !last || !tsApi.isReturnStatement(last)) {
 		return null;
 	}
 	return last.expression ?? null;
 }
 
 function unwrapParentheses(expression: ts.Expression): ts.Expression {
-	return ts.isParenthesizedExpression(expression)
+	const tsApi = loadTypeScript();
+	return tsApi.isParenthesizedExpression(expression)
 		? unwrapParentheses(expression.expression)
 		: expression;
 }
@@ -1169,14 +1193,15 @@ function selectStory(
 // ---- Entry point ----
 
 export function importStory(options: ImportStoryOptions): ImportedStory {
+	const tsApi = loadTypeScript();
 	const fileName = options.fileName ?? "story.stories.tsx";
-	const sourceFile = ts.createSourceFile(
+	const sourceFile = tsApi.createSourceFile(
 		fileName,
 		options.source,
-		ts.ScriptTarget.Latest,
+		tsApi.ScriptTarget.Latest,
 		// Sets up parent links since getText / position info is used.
 		true,
-		ts.ScriptKind.TSX,
+		tsApi.ScriptKind.TSX,
 	);
 	const warnings: StoryImportWarning[] = [];
 
@@ -1244,12 +1269,15 @@ export function importStory(options: ImportStoryOptions): ImportedStory {
 	const stories = findStories(sourceFile);
 	const story = selectStory(stories, options.storyName);
 	if (!story) {
+		// The message has to carry the way out, because this is the shape of the failure a
+		// hand-written Story hits: only a `render` function holds a tree, so a
+		// `component` + `args` Story has nothing to import and never will.
 		warn(
 			context,
 			"STORY_NOT_FOUND",
 			options.storyName
 				? `Story "${options.storyName}" was not found (candidates: ${stories.map((s) => s.name).join(", ") || "none"})`
-				: "No Story with a render function was found",
+				: "No Story with a render function was found. Import only reads a Story whose export has a render function; a `component` + `args` Story carries no structure, so read the Story file directly instead of importing it.",
 			null,
 		);
 		return {

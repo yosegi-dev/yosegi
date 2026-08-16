@@ -1,6 +1,5 @@
 node_modules/
 dist/
-data/
 .yosegi/
 .pack/
 *.log
@@ -12,6 +11,10 @@ packages/server/skills/
 
 # brand asset generation (font is fetched, not committed)
 assets/brand/*.ttf
+
+# Agent worktrees are full checkouts of this repository. Only worktrees/ is ignored, so that
+# anything else under .claude/ stays available to commit.
+.claude/worktrees/
 
 # VitePress
 docs/.vitepress/dist/

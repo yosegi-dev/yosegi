@@ -17,7 +17,7 @@ bun add -d @yosegi/yosegi
 
 `yosegi <command>` means `npx yosegi <command>` (or `pnpm yosegi`, `yarn yosegi`, `bunx yosegi`).
 
-The CLI runs on Node.js 20 or newer. The host has to be a React + TypeScript project. Running with
+The CLI runs on Node.js 22 or newer. The host has to be a React + TypeScript project. Running with
 no arguments prints every command.
 
 From the checkout's own root, `bun --filter '@yosegi/yosegi' cli <command>` also works and needs no
@@ -328,6 +328,50 @@ yosegi story import <host>/app/components/examples/customer-list.stories.tsx \
 | `--out <screen.json>` | Writes only the Screen JSON to the file; warnings go to stdout. Without it, `{ title, storyName, screen, warnings }` all go to stdout together |
 
 **Always read the warnings** (`errors.md`) — whatever they name is missing from the Screen JSON.
+
+## `example list` / `example apply` (PoC)
+
+A different entry point from everything above: instead of assembling a screen out of components,
+these copy a whole screen the host has already written. **PoC — the shape may still change, and a
+host that has catalogued nothing has nothing to copy** (`example list` then fails with
+`EXAMPLE_CATALOG_NOT_FOUND`, which is the answer, not an error to work around). Check for a catalog
+before offering this route; if there is one, an entry in it usually beats assembling the same screen
+by hand.
+
+```sh
+yosegi example list --data-dir .yosegi
+yosegi example apply guest-list \
+  --name GuestListRoute \
+  --out app/routes/guest-list.tsx \
+  --data-dir .yosegi
+```
+
+The catalog is a JSON file the host maintains —
+`{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }` — read from
+`--catalog <path>`, or from `examples.json` under `--data-dir`. `templatePath` resolves against
+`root`, which is relative to the catalog file and defaults to the catalog's own directory.
+
+| Flag | Meaning |
+| --- | --- |
+| `--catalog <path>` | The catalog to read. Both commands take it |
+| `--name <ComponentName>` | `apply` only, required. The name the copy's export takes; a non-identifier is `INVALID_ARGUMENT` |
+| `--out <file.tsx>` | `apply` only, required. Where the copy goes |
+| `--quiet` | `list` only. Drops the `<n> examples in <path>` header line |
+| `--json` | `list`: `{ catalog, root, total, examples }`. `apply`: `{ out, key, componentName, template, nextSteps, warnings }` |
+
+What `apply` actually does is copy the file and rename one identifier. **The copy owns itself from
+then on** — it keeps no link to the template, so editing it afterwards is unremarkable, and later
+changes to the template never reach it. Two provenance comment lines go above it. `--out` is never
+overwritten (`EXAMPLE_OUTPUT_EXISTS`); delete the file or pick another path.
+
+Then read the survey it prints: the imports are what the host has to provide, and the top-level
+array / object consts are the mock data to replace, both addressed by line in the file just written.
+That is the work list for turning the copy into a real screen. A `Warning:` line, or `nextSteps`
+coming back `null`, means the rename or the survey ran degraded. The copy still exists, so open it
+and check it yourself rather than re-running.
+
+`errors.md` has the failure codes. Both commands reject a positional argument they do not take with
+`UNKNOWN_ARGUMENT` rather than ignoring it.
 
 ## The screen store (rarely needed)
 

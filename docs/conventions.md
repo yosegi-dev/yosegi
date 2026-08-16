@@ -30,7 +30,10 @@ links there.
 - Cut any sentence that does not change what the reader does next.
 - No connective filler, no "as mentioned above", no paragraph restating the previous one.
 - Prefer a table to a list, and a list to a paragraph.
-- Wrap at 100 columns.
+- Wrap English at 100 columns. A Japanese line carries one sentence, however long, and is never
+  broken in the middle of one. Two sentences share a line where no break is available: the stop
+  sits inside inline code or a bracket pair, or the next character is not Japanese — a break there
+  renders as a space, which the pages never write.
 
 ## Command examples
 
@@ -111,7 +114,8 @@ Reviewing a Japanese page against its English source, check that the translation
 - translates headings in full, conditions included.
 - renders the same English sentence identically wherever it appears across pages.
 - introduces no translation the terminology table does not list.
-- is re-wrapped at 100 columns counted in East Asian character width after translating.
+- is laid out one sentence per line after translating, under the rule in [Prose
+  budget](#prose-budget) — including the stops that are not break points.
 - does not copy an English em dash (—) as 「——」; parentheses or a sentence split take its place.
 
 ## Anonymity
@@ -142,8 +146,9 @@ node <repo>/packages/server/bin/yosegi.js registry build \
 
 Then, from the repository root, check that links and anchors resolve, that the twins line up —
 headings and table rows in matching numbers, fences matching in content with translated comments
-set aside — and that lines stay within 100 columns counted in East Asian character width (tables,
-code blocks, and front matter are exempt):
+set aside — and that the lines are laid out: English within 100 columns counted in East Asian
+character width, Japanese one sentence per line wherever a break is available (tables, code blocks,
+and front matter are exempt from both):
 
 ```sh
 bun run check:docs
@@ -153,6 +158,11 @@ The script is `scripts/check-docs.ts`, and CI runs it on every push.
 
 If `docs/ja/**` changed — authored or re-translated — run `bun run textlint` and fix every
 violation. It is the self-review on the translated output; do not commit with violations.
+
+If anything under `skills/` changed, update the `Version:` date at the top of
+`skills/yosegi/SKILL.md` to the commit's date, in the same commit. It is how an agent tells a stale
+installed copy from a current one, so a skill edit that leaves the date behind silently defeats that
+check.
 
 Finish with `bun lint`.
 

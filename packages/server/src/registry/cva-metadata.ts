@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { PropDefinition } from "@yosegi/core";
 import type { ComposerMetadata } from "@yosegi/core/registry";
-import * as ts from "typescript";
+import type * as ts from "typescript";
+import { loadTypeScript } from "../typescript.ts";
 import { listSourceFiles, toModulePath } from "./source-registry.ts";
 
 // Builds the scaffold passed to `registry build --metadata` from the host's cva
@@ -22,6 +23,10 @@ import { listSourceFiles, toModulePath } from "./source-registry.ts";
 // No type resolution is performed — only the AST is read. cva's config object is almost
 // always written as a literal, so there's no benefit to resolving tsconfig and building a
 // full Program just for this.
+//
+// The compiler API is picked up with loadTypeScript() inside each function that needs it,
+// rather than imported at the top of the module. See src/typescript.ts for why a host
+// without one has to fail there instead of here.
 
 const CVA_MODULE = "class-variance-authority";
 const CVA_EXPORT = "cva";
@@ -85,12 +90,13 @@ function resolveModuleFile(
 }
 
 function readSourceFile(path: string): ts.SourceFile {
-	return ts.createSourceFile(
+	const tsApi = loadTypeScript();
+	return tsApi.createSourceFile(
 		path,
 		readFileSync(path, "utf8"),
-		ts.ScriptTarget.Latest,
+		tsApi.ScriptTarget.Latest,
 		true,
-		ts.ScriptKind.TSX,
+		tsApi.ScriptKind.TSX,
 	);
 }
 
@@ -102,17 +108,18 @@ function describeLocation(node: ts.Node, sourceFile: ts.SourceFile): string {
 // Local names cva may be bound to. Follows aliased imports (`import { cva as tv }`) too.
 // `cva` stays a candidate even when no import is found (there may be a local definition or a wrapper-based declaration).
 function collectCvaNames(sourceFile: ts.SourceFile): Set<string> {
+	const tsApi = loadTypeScript();
 	const names = new Set<string>([CVA_EXPORT]);
 	for (const statement of sourceFile.statements) {
 		if (
-			!ts.isImportDeclaration(statement) ||
-			!ts.isStringLiteral(statement.moduleSpecifier) ||
+			!tsApi.isImportDeclaration(statement) ||
+			!tsApi.isStringLiteral(statement.moduleSpecifier) ||
 			statement.moduleSpecifier.text !== CVA_MODULE
 		) {
 			continue;
 		}
 		const bindings = statement.importClause?.namedBindings;
-		if (!bindings || !ts.isNamedImports(bindings)) {
+		if (!bindings || !tsApi.isNamedImports(bindings)) {
 			continue;
 		}
 		for (const specifier of bindings.elements) {
@@ -126,10 +133,11 @@ function collectCvaNames(sourceFile: ts.SourceFile): Set<string> {
 
 // A property name's literal value. Computed properties (`[key]:`) can't be read, so returns null.
 function literalKey(name: ts.PropertyName): string | number | null {
-	if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+	const tsApi = loadTypeScript();
+	if (tsApi.isIdentifier(name) || tsApi.isStringLiteral(name)) {
 		return name.text;
 	}
-	if (ts.isNumericLiteral(name)) {
+	if (tsApi.isNumericLiteral(name)) {
 		return Number(name.text);
 	}
 	return null;
@@ -138,16 +146,17 @@ function literalKey(name: ts.PropertyName): string | number | null {
 function literalValue(
 	expression: ts.Expression,
 ): string | number | boolean | null {
-	if (ts.isStringLiteral(expression)) {
+	const tsApi = loadTypeScript();
+	if (tsApi.isStringLiteral(expression)) {
 		return expression.text;
 	}
-	if (ts.isNumericLiteral(expression)) {
+	if (tsApi.isNumericLiteral(expression)) {
 		return Number(expression.text);
 	}
-	if (expression.kind === ts.SyntaxKind.TrueKeyword) {
+	if (expression.kind === tsApi.SyntaxKind.TrueKeyword) {
 		return true;
 	}
-	if (expression.kind === ts.SyntaxKind.FalseKeyword) {
+	if (expression.kind === tsApi.SyntaxKind.FalseKeyword) {
 		return false;
 	}
 	return null;
@@ -164,17 +173,18 @@ type CvaConfig = {
 function readDefaultVariants(
 	config: ts.ObjectLiteralExpression,
 ): Map<string, string | number | boolean> {
+	const tsApi = loadTypeScript();
 	const defaults = new Map<string, string | number | boolean>();
 	const property = config.properties.find(
 		(entry): entry is ts.PropertyAssignment =>
-			ts.isPropertyAssignment(entry) &&
+			tsApi.isPropertyAssignment(entry) &&
 			literalKey(entry.name) === DEFAULT_VARIANTS_KEY,
 	);
-	if (!property || !ts.isObjectLiteralExpression(property.initializer)) {
+	if (!property || !tsApi.isObjectLiteralExpression(property.initializer)) {
 		return defaults;
 	}
 	for (const entry of property.initializer.properties) {
-		if (!ts.isPropertyAssignment(entry)) {
+		if (!tsApi.isPropertyAssignment(entry)) {
 			continue;
 		}
 		const key = literalKey(entry.name);
@@ -188,34 +198,35 @@ function readDefaultVariants(
 
 // Collects every `const xxxVariants = cva(...)`.
 function collectCvaConfigs(sourceFile: ts.SourceFile): Map<string, CvaConfig> {
+	const tsApi = loadTypeScript();
 	const cvaNames = collectCvaNames(sourceFile);
 	const configs = new Map<string, CvaConfig>();
 	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
+		if (!tsApi.isVariableStatement(statement)) {
 			continue;
 		}
 		for (const declaration of statement.declarationList.declarations) {
 			const initializer = declaration.initializer;
 			if (
 				!initializer ||
-				!ts.isCallExpression(initializer) ||
-				!ts.isIdentifier(initializer.expression) ||
+				!tsApi.isCallExpression(initializer) ||
+				!tsApi.isIdentifier(initializer.expression) ||
 				!cvaNames.has(initializer.expression.text) ||
-				!ts.isIdentifier(declaration.name)
+				!tsApi.isIdentifier(declaration.name)
 			) {
 				continue;
 			}
 			const config = initializer.arguments[1];
 			const object =
-				config && ts.isObjectLiteralExpression(config) ? config : null;
+				config && tsApi.isObjectLiteralExpression(config) ? config : null;
 			const variantsProperty = object?.properties.find(
 				(entry): entry is ts.PropertyAssignment =>
-					ts.isPropertyAssignment(entry) &&
+					tsApi.isPropertyAssignment(entry) &&
 					literalKey(entry.name) === VARIANTS_KEY,
 			);
 			const variants =
 				variantsProperty &&
-				ts.isObjectLiteralExpression(variantsProperty.initializer)
+				tsApi.isObjectLiteralExpression(variantsProperty.initializer)
 					? variantsProperty.initializer
 					: null;
 			configs.set(declaration.name.text, {
@@ -243,10 +254,11 @@ function toVariantProps(
 	variants: ts.ObjectLiteralExpression,
 	defaults: Map<string, string | number | boolean>,
 ): VariantProps {
+	const tsApi = loadTypeScript();
 	const props: Record<string, PropDefinition> = {};
 	const opaque: string[] = [];
 	for (const entry of variants.properties) {
-		if (!ts.isPropertyAssignment(entry)) {
+		if (!tsApi.isPropertyAssignment(entry)) {
 			opaque.push(entry.name ? entry.name.getText() : "(unnamed)");
 			continue;
 		}
@@ -255,14 +267,14 @@ function toVariantProps(
 			opaque.push(entry.name.getText());
 			continue;
 		}
-		if (!ts.isObjectLiteralExpression(entry.initializer)) {
+		if (!tsApi.isObjectLiteralExpression(entry.initializer)) {
 			opaque.push(variantName);
 			continue;
 		}
 		const options: (string | number)[] = [];
 		let readable = true;
 		for (const option of entry.initializer.properties) {
-			const key = ts.isPropertyAssignment(option)
+			const key = tsApi.isPropertyAssignment(option)
 				? literalKey(option.name)
 				: null;
 			if (key === null) {
@@ -299,12 +311,13 @@ function resolveLocalName(
 	sourceFile: ts.SourceFile,
 	exportName: string,
 ): string {
+	const tsApi = loadTypeScript();
 	for (const statement of sourceFile.statements) {
 		if (
-			!ts.isExportDeclaration(statement) ||
+			!tsApi.isExportDeclaration(statement) ||
 			statement.moduleSpecifier ||
 			!statement.exportClause ||
-			!ts.isNamedExports(statement.exportClause)
+			!tsApi.isNamedExports(statement.exportClause)
 		) {
 			continue;
 		}
@@ -320,19 +333,20 @@ function resolveLocalName(
 type Declarations = Map<string, ts.Node>;
 
 function collectTopLevelDeclarations(sourceFile: ts.SourceFile): Declarations {
+	const tsApi = loadTypeScript();
 	const declarations: Declarations = new Map();
 	for (const statement of sourceFile.statements) {
-		if (ts.isVariableStatement(statement)) {
+		if (tsApi.isVariableStatement(statement)) {
 			for (const declaration of statement.declarationList.declarations) {
-				if (ts.isIdentifier(declaration.name)) {
+				if (tsApi.isIdentifier(declaration.name)) {
 					declarations.set(declaration.name.text, declaration);
 				}
 			}
 			continue;
 		}
 		if (
-			(ts.isFunctionDeclaration(statement) ||
-				ts.isClassDeclaration(statement)) &&
+			(tsApi.isFunctionDeclaration(statement) ||
+				tsApi.isClassDeclaration(statement)) &&
 			statement.name
 		) {
 			declarations.set(statement.name.text, statement);
@@ -346,20 +360,21 @@ function resolveDeclaration(
 	declarations: Declarations,
 	name: string,
 ): ts.Node | null {
+	const tsApi = loadTypeScript();
 	let current = declarations.get(name) ?? null;
 	for (let depth = 0; current && depth < ALIAS_DEPTH_LIMIT; depth += 1) {
-		if (!ts.isVariableDeclaration(current) || !current.initializer) {
+		if (!tsApi.isVariableDeclaration(current) || !current.initializer) {
 			return current;
 		}
 		let initializer: ts.Expression = current.initializer;
 		while (
-			ts.isAsExpression(initializer) ||
-			ts.isParenthesizedExpression(initializer) ||
-			ts.isTypeAssertionExpression(initializer)
+			tsApi.isAsExpression(initializer) ||
+			tsApi.isParenthesizedExpression(initializer) ||
+			tsApi.isTypeAssertionExpression(initializer)
 		) {
 			initializer = initializer.expression;
 		}
-		if (!ts.isIdentifier(initializer)) {
+		if (!tsApi.isIdentifier(initializer)) {
 			return current;
 		}
 		const next = declarations.get(initializer.text);
@@ -372,12 +387,13 @@ function resolveDeclaration(
 }
 
 function collectIdentifierNames(node: ts.Node): Set<string> {
+	const tsApi = loadTypeScript();
 	const names = new Set<string>();
 	const visit = (current: ts.Node): void => {
-		if (ts.isIdentifier(current)) {
+		if (tsApi.isIdentifier(current)) {
 			names.add(current.text);
 		}
-		ts.forEachChild(current, visit);
+		tsApi.forEachChild(current, visit);
 	};
 	visit(node);
 	return names;
@@ -480,35 +496,36 @@ function buildPropsForExport(
 // The names a file exposes. Used to find the owning file, among those expanded via
 // --source, when an id carries no module path.
 function collectExportNames(sourceFile: ts.SourceFile): Set<string> {
+	const tsApi = loadTypeScript();
 	const names = new Set<string>();
 	for (const statement of sourceFile.statements) {
 		if (
-			ts.isExportDeclaration(statement) &&
+			tsApi.isExportDeclaration(statement) &&
 			statement.exportClause &&
-			ts.isNamedExports(statement.exportClause)
+			tsApi.isNamedExports(statement.exportClause)
 		) {
 			for (const specifier of statement.exportClause.elements) {
 				names.add(specifier.name.text);
 			}
 			continue;
 		}
-		const exported = ts
+		const exported = tsApi
 			.getModifiers(statement as ts.HasModifiers)
-			?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+			?.some((modifier) => modifier.kind === tsApi.SyntaxKind.ExportKeyword);
 		if (!exported) {
 			continue;
 		}
-		if (ts.isVariableStatement(statement)) {
+		if (tsApi.isVariableStatement(statement)) {
 			for (const declaration of statement.declarationList.declarations) {
-				if (ts.isIdentifier(declaration.name)) {
+				if (tsApi.isIdentifier(declaration.name)) {
 					names.add(declaration.name.text);
 				}
 			}
 			continue;
 		}
 		if (
-			(ts.isFunctionDeclaration(statement) ||
-				ts.isClassDeclaration(statement)) &&
+			(tsApi.isFunctionDeclaration(statement) ||
+				tsApi.isClassDeclaration(statement)) &&
 			statement.name
 		) {
 			names.add(statement.name.text);

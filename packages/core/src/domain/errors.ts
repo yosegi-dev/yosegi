@@ -95,6 +95,16 @@ export const SERVICE_CODES = {
 	VALIDATION_FAILED: "VALIDATION_FAILED",
 	PUBLISHED_SCREEN_LOCKED: "PUBLISHED_SCREEN_LOCKED",
 	FORBIDDEN: "FORBIDDEN",
+	// The example-template commands. Each is a separate code because each has a different
+	// fix: write the catalog, correct the key, correct the catalog's templatePath, or pick
+	// another --out. Folding them into INVALID_ARGUMENT would leave an agent parsing prose
+	// to tell "you named a template that doesn't exist" from "you aimed at an occupied path".
+	EXAMPLE_CATALOG_NOT_FOUND: "EXAMPLE_CATALOG_NOT_FOUND",
+	EXAMPLE_NOT_FOUND: "EXAMPLE_NOT_FOUND",
+	EXAMPLE_TEMPLATE_NOT_FOUND: "EXAMPLE_TEMPLATE_NOT_FOUND",
+	// Copying is deliberately never an overwrite: the destination is a file the host owns
+	// and may already have edited.
+	EXAMPLE_OUTPUT_EXISTS: "EXAMPLE_OUTPUT_EXISTS",
 } as const;
 
 export type ServiceCode = (typeof SERVICE_CODES)[keyof typeof SERVICE_CODES];

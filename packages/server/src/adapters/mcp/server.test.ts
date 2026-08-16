@@ -1,12 +1,20 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { Composer, InMemoryScreenRepository } from "@yosegi/core/app";
+import {
+	Composer,
+	type CreateScreenInput,
+	InMemoryScreenRepository,
+} from "@yosegi/core/app";
 import { sampleRegistry, sampleScreen } from "@yosegi/core/testing";
 import { createMcpServer } from "./server.ts";
 
-// Returns an in-memory client paired with a server.
-async function connect(): Promise<Client> {
+// Returns an in-memory client paired with a server. `extra` seeds a second screen
+// for the cases that need a definition the sample does not carry.
+async function connect(extra?: CreateScreenInput): Promise<Client> {
 	const composer = new Composer(
 		sampleRegistry(),
 		new InMemoryScreenRepository(),
@@ -18,6 +26,9 @@ async function connect(): Promise<Client> {
 		name: screen.name,
 		root: screen.root,
 	});
+	if (extra) {
+		await composer.screens.createScreen(extra);
+	}
 	const server = createMcpServer(composer);
 	const [clientTransport, serverTransport] =
 		InMemoryTransport.createLinkedPair();
@@ -33,7 +44,38 @@ function textOf(result: {
 	return result.content.map((c) => c.text ?? "").join("");
 }
 
+// Read straight from package.json rather than through config.ts, so the assertion is about
+// the shipped version rather than about the two call sites agreeing.
+function packageVersion(): string {
+	const path = resolve(
+		dirname(fileURLToPath(import.meta.url)),
+		"../../../package.json",
+	);
+	return (JSON.parse(readFileSync(path, "utf8")) as { version: string })
+		.version;
+}
+
 describe("MCP server", () => {
+	// A hardcoded version silently drifts from the package on every release, and a client
+	// has no way to tell it is being lied to.
+	it("初期化で package.json のバージョンを返す", async () => {
+		const client = await connect();
+		expect(client.getServerVersion()).toEqual({
+			name: "yosegi",
+			version: packageVersion(),
+		});
+	});
+
+	// The registry these tools read is built by the CLI, so a client that only has MCP has
+	// to be told that much before its first call.
+	it("initialize で CLI 前提を伝える instructions を返す", async () => {
+		const client = await connect();
+		const instructions = client.getInstructions() ?? "";
+		expect(instructions.length).toBeGreaterThan(0);
+		expect(instructions).toContain("yosegi registry build");
+		expect(instructions).toContain("yosegi registry status");
+	});
+
 	it("tools を列挙できる", async () => {
 		const client = await connect();
 		const tools = await client.listTools();
@@ -442,6 +484,49 @@ describe("MCP server", () => {
 		expect(text).toContain("import { Page, PageHeader } from");
 		expect(text).toContain('"kind": "binding"');
 		expect(text).toContain("outline");
+	});
+
+	// The Story emits the variant, so the context has to carry it too — otherwise a
+	// component only a state uses disappears on the way to the implementation.
+	it("generate_implementation_context は variant 由来のコンポーネントも含む", async () => {
+		const client = await connect({
+			id: "customer-list-empty",
+			name: "Customer list (empty)",
+			root: sampleScreen().root,
+			variants: [
+				{
+					name: "Empty",
+					operations: [
+						{ type: "removeNode", nodeId: "node-table" },
+						{
+							type: "addNode",
+							target: { parentNodeId: "node-page", slot: "body" },
+							node: {
+								id: "node-empty-action",
+								component: "Button",
+								props: { variant: "secondary" },
+								slots: {},
+								events: {
+									onClick: {
+										action: "navigate",
+										arguments: { to: "/customers/new" },
+									},
+								},
+							},
+						},
+					],
+				},
+			],
+		});
+		const result = await client.callTool({
+			name: "generate_implementation_context",
+			arguments: { screenId: "customer-list-empty" },
+		});
+		const text = textOf(result as never);
+		expect(text).toContain("import { Button } from");
+		expect(text).toContain('"variantOnly": true');
+		expect(text).toContain('"variant": "Empty"');
+		expect(text).toContain('"addedComponents"');
 	});
 
 	it("generate_implementation_context は importMap をホストの alias へ反映する", async () => {

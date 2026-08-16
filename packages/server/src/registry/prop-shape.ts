@@ -1,5 +1,6 @@
 import type { PropField, PropShape } from "@yosegi/core";
-import * as ts from "typescript";
+import type * as ts from "typescript";
+import { loadTypeScript, type TypeScriptModule } from "../typescript.ts";
 
 // Reads the "shape one level deep" of a prop that was rounded down to json, from its TypeScript type.
 //
@@ -12,6 +13,10 @@ import * as ts from "typescript";
 // Expansion goes only one level deep. Nested objects stop at "object". Turning the
 // Manifest into a copy of the type definition would make inspect impossible to read
 // through, and if a deeper shape is actually needed, opening the host's source is faster anyway.
+//
+// The compiler API is picked up with loadTypeScript() inside each function that needs it,
+// rather than imported at the top of the module. See src/typescript.ts for why a host
+// without one has to fail there instead of here.
 
 // Upper bound on how many fields are listed. Beyond this, only the remaining count is
 // shown. Keeps even a third-party wrapper with 100+ props, like a chart component, from
@@ -49,12 +54,13 @@ const TS_LIB_FILE_PATTERN = /^lib\..*\.d\.ts$/;
 // doesn't resolve to exactly one type — the type alone can't tell us which branch to
 // write, so picking one here would be a lie.
 function stripNullish(type: ts.Type): ts.Type {
+	const tsApi = loadTypeScript();
 	if (!type.isUnion()) {
 		return type;
 	}
 	const members = type.types.filter(
 		(member) =>
-			(member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) === 0,
+			(member.flags & (tsApi.TypeFlags.Null | tsApi.TypeFlags.Undefined)) === 0,
 	);
 	return members.length === 1 ? members[0] : type;
 }
@@ -85,11 +91,12 @@ function typeName(type: ts.Type, checker: ts.TypeChecker): string | null {
 // Drops the undefined member from a union. When the remainder doesn't resolve to a
 // single type, the type is left as-is and dropped on the text side instead (UNDEFINED_UNION_PATTERN).
 function stripUndefined(type: ts.Type): ts.Type {
+	const tsApi = loadTypeScript();
 	if (!type.isUnion()) {
 		return type;
 	}
 	const members = type.types.filter(
-		(member) => (member.flags & ts.TypeFlags.Undefined) === 0,
+		(member) => (member.flags & tsApi.TypeFlags.Undefined) === 0,
 	);
 	return members.length === 1 ? members[0] : type;
 }
@@ -235,7 +242,8 @@ function declaringPackage(type: ts.Type): string | null {
 // more informative than "object", so it's not rounded down here — it falls through to
 // shortTypeText's length check instead. Whether to expand its fields is a decision made on the readFields side.
 function isStructuralObject(type: ts.Type): boolean {
-	if ((type.flags & ts.TypeFlags.Object) === 0) {
+	const tsApi = loadTypeScript();
+	if ((type.flags & tsApi.TypeFlags.Object) === 0) {
 		return false;
 	}
 	if (type.getCallSignatures().length > 0) {
@@ -281,7 +289,8 @@ function describe(
 	property: ts.Symbol,
 	checker: ts.TypeChecker,
 ): string | undefined {
-	const text = ts
+	const tsApi = loadTypeScript();
+	const text = tsApi
 		.displayPartsToString(property.getDocumentationComment(checker))
 		.replace(/\s+/g, " ")
 		.trim();
@@ -298,6 +307,7 @@ function toField(
 	checker: ts.TypeChecker,
 	fallback: ts.Node,
 ): PropField {
+	const tsApi = loadTypeScript();
 	const declaration =
 		property.valueDeclaration ?? property.getDeclarations()?.[0] ?? fallback;
 	return {
@@ -306,7 +316,7 @@ function toField(
 			stripUndefined(checker.getTypeOfSymbolAtLocation(property, declaration)),
 			checker,
 		),
-		optional: (property.flags & ts.SymbolFlags.Optional) !== 0 || undefined,
+		optional: (property.flags & tsApi.SymbolFlags.Optional) !== 0 || undefined,
 		description: describe(property, checker),
 	};
 }
@@ -331,7 +341,11 @@ type Fields = {
 // weren't excluded, calling getProperties() on a member would return the 52 members of
 // String.prototype (see the comment on the readMembers side).
 function isObjectUnionMember(type: ts.Type): boolean {
-	if ((type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection)) === 0) {
+	const tsApi = loadTypeScript();
+	if (
+		(type.flags & (tsApi.TypeFlags.Object | tsApi.TypeFlags.Intersection)) ===
+		0
+	) {
 		return false;
 	}
 	if (type.getCallSignatures().length > 0) {
@@ -363,6 +377,7 @@ function unionFields(
 	checker: ts.TypeChecker,
 	fallback: ts.Node,
 ): Fields {
+	const tsApi = loadTypeScript();
 	const perMember = members.map((member) => {
 		const properties = new Map<string, ts.Symbol>();
 		for (const property of member.getProperties()) {
@@ -400,7 +415,7 @@ function unionFields(
 			return {
 				symbol,
 				text: shortTypeText(stripUndefined(raw), checker),
-				optional: (symbol.flags & ts.SymbolFlags.Optional) !== 0,
+				optional: (symbol.flags & tsApi.SymbolFlags.Optional) !== 0,
 			};
 		});
 		// A `?: never` cancel-out branch resolves to "undefined" and contributes nothing
@@ -437,6 +452,7 @@ function readFields(
 	checker: ts.TypeChecker,
 	fallback: ts.Node,
 ): Fields | null {
+	const tsApi = loadTypeScript();
 	if (type.isUnion()) {
 		// A discriminated union's shape changes depending on which branch is written,
 		// but as long as every member is an object type with fields, there's no reason
@@ -453,7 +469,7 @@ function readFields(
 	// no ambiguity about which branch it is. getProperties() already returns the merged
 	// result, so it can be expanded as-is. Intersection types don't carry the Object
 	// flag, so a flag-only check would never reach this branch.
-	if ((type.flags & ts.TypeFlags.Object) === 0 && !type.isIntersection()) {
+	if ((type.flags & tsApi.TypeFlags.Object) === 0 && !type.isIntersection()) {
 		return null;
 	}
 	// A function is not "a shape with fields".
@@ -478,6 +494,7 @@ function parameterText(
 	checker: ts.TypeChecker,
 	fallback: ts.Node,
 ): string {
+	const tsApi = loadTypeScript();
 	const declaration =
 		parameter.valueDeclaration ?? parameter.getDeclarations()?.[0];
 	const type = checker.getTypeOfSymbolAtLocation(
@@ -485,7 +502,7 @@ function parameterText(
 		declaration ?? fallback,
 	);
 	const isParameterDeclaration =
-		declaration !== undefined && ts.isParameter(declaration);
+		declaration !== undefined && tsApi.isParameter(declaration);
 	// A rest parameter's type is the array itself (`...args: unknown[]`), so undefined isn't stripped from it.
 	const rest =
 		isParameterDeclaration && declaration.dotDotDotToken !== undefined;
@@ -541,12 +558,19 @@ export function resolveCallSignatures(
 // The kinds of union member that can be listed as-is — literals and primitives only.
 // Expanding an object union wouldn't get us its contents anyway (calling getProperties()
 // on a string-literal union returns String.prototype's 52 members instead), so the line is drawn here.
-const LISTABLE_MEMBER_FLAGS =
-	ts.TypeFlags.StringLike |
-	ts.TypeFlags.NumberLike |
-	ts.TypeFlags.BooleanLike |
-	ts.TypeFlags.BigIntLike |
-	ts.TypeFlags.ESSymbolLike;
+//
+// A function rather than a constant because the flags come from the compiler API, and
+// reading it while this module is being evaluated is exactly what the lazy load exists to
+// avoid.
+function listableMemberFlags(tsApi: TypeScriptModule): number {
+	return (
+		tsApi.TypeFlags.StringLike |
+		tsApi.TypeFlags.NumberLike |
+		tsApi.TypeFlags.BooleanLike |
+		tsApi.TypeFlags.BigIntLike |
+		tsApi.TypeFlags.ESSymbolLike
+	);
+}
 
 type Members = {
 	members: string[];
@@ -558,17 +582,19 @@ type Members = {
 // listing the members gives more actually-writable information than showing a name
 // would. Discriminated unions are left unexpanded here for the same reason as in readFields.
 function readMembers(type: ts.Type, checker: ts.TypeChecker): Members | null {
+	const tsApi = loadTypeScript();
 	if (!type.isUnion()) {
 		return null;
 	}
 	// null / undefined express "no value", which the nullable / optional flags already convey.
 	const listed = type.types.filter(
 		(member) =>
-			(member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) === 0,
+			(member.flags & (tsApi.TypeFlags.Null | tsApi.TypeFlags.Undefined)) === 0,
 	);
+	const listable = listableMemberFlags(tsApi);
 	if (
 		listed.length === 0 ||
-		listed.some((member) => (member.flags & LISTABLE_MEMBER_FLAGS) === 0)
+		listed.some((member) => (member.flags & listable) === 0)
 	) {
 		return null;
 	}

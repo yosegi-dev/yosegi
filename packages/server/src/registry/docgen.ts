@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { compilerApiFix } from "../typescript.ts";
 
 // react-docgen-typescript reads the TypeScript compiler API at import time (its module
 // body dereferences `ts.JsxEmit`). TypeScript 7.0 ships no compiler API at all —
@@ -40,35 +41,20 @@ export function resolveExtractorTypeScript(): string | null {
 	}
 }
 
-function majorOf(identifier: string | null): number | null {
-	if (identifier === null) {
-		return null;
-	}
-	const major = Number(identifier.split("@").pop()?.split(".")[0]);
-	return Number.isInteger(major) ? major : null;
-}
-
 export function formatDocgenLoadFailure(
 	resolved: string | null,
 	cause: string,
 ): string {
-	const lines = [
+	return [
 		"Failed to load react-docgen-typescript, which Yosegi uses to read props from types.",
 		resolved === null
 			? "It reads the TypeScript compiler API when it loads."
 			: `It reads the TypeScript compiler API when it loads, and resolved "typescript" to ${resolved}.`,
-	];
-	// TypeScript 7.0 ships no compiler API, and 7.1 is expected to introduce a new and
-	// different one. Until then the extractor needs the 6.x API, which the TypeScript team
-	// publishes as a compatibility package: `tsc` stays on 7 while tools keep the old API.
-	if ((majorOf(resolved) ?? 0) >= 7) {
-		lines.push(
-			"TypeScript 7.0 ships no compiler API, so Yosegi needs the 6.x one. Install the compatibility package:",
-			"  npm install -D typescript@npm:@typescript/typescript6",
-		);
-	}
-	lines.push(`Underlying error: ${cause}`);
-	return lines.join("\n");
+		// The extractor and Yosegi's own type reading fail on the same host state, so the fix
+		// is written once, in typescript.ts.
+		...compilerApiFix(resolved),
+		`Underlying error: ${cause}`,
+	].join("\n");
 }
 
 export function loadDocgen(): DocgenModule {

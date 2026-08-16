@@ -22,7 +22,7 @@ yarn add @yosegi/core
 bun add @yosegi/core
 ```
 
-Requires Node.js 20 or newer.
+Requires Node.js 22 or newer.
 
 ## Entry points
 
