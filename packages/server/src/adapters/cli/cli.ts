@@ -33,6 +33,7 @@ import {
 import { z } from "zod";
 import {
 	DEFAULT_DATA_DIR,
+	examplesPath,
 	loadRegistry,
 	registryPath,
 	screensDir,
@@ -40,6 +41,8 @@ import {
 	yosegiVersion,
 } from "../../config.ts";
 import { parseMetaTemplate } from "../../emit/meta-template.ts";
+import { applyExample } from "../../examples/apply.ts";
+import { loadExampleCatalog, requireExample } from "../../examples/catalog.ts";
 import {
 	importStory,
 	type StoryImportWarning,
@@ -49,8 +52,10 @@ import { collectUndocumentedProps } from "../../registry/doc-coverage.ts";
 import { buildRegistryFromSource } from "../../registry/source-registry.ts";
 import { toErrorResponse } from "../error-response.ts";
 import {
+	formatApplyResult,
 	formatComponentInspect,
 	formatComponentList,
+	formatExampleList,
 	formatRegistryHeader,
 	formatRegistryStatus,
 	formatRegistryVersionWarning,
@@ -180,6 +185,8 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
 		"screen-name",
 		"out",
 	],
+	"example list": ["catalog", "json", "quiet"],
+	"example apply": ["catalog", "name", "out", "json"],
 	mcp: [],
 };
 
@@ -197,7 +204,11 @@ const FLAG_SYNONYMS: Record<string, string> = {
 // The uniform shape of a command-level failure: JSON with a code, never bare usage text,
 // so an agent parses the same contract everywhere. Usage stays reserved for --help.
 function commandError(
-	code: "MISSING_ARGUMENT" | "UNKNOWN_COMMAND" | "UNKNOWN_FLAG",
+	code:
+		| "MISSING_ARGUMENT"
+		| "UNKNOWN_ARGUMENT"
+		| "UNKNOWN_COMMAND"
+		| "UNKNOWN_FLAG",
 	message: string,
 	extra: Record<string, unknown> = {},
 ): number {
@@ -210,6 +221,30 @@ function missingArgument(command: string, message: string): number {
 		"MISSING_ARGUMENT",
 		`${message} Run "yosegi --help" for usage.`,
 		{ command },
+	);
+}
+
+// Rejects positionals past the ones a command takes. The counterpart to checkFlags, and it
+// exists for the same reason: an argument that is silently dropped lets a mistyped command
+// run and report success, which an agent then trusts. Returns null when the count is fine.
+//
+// Only the example commands go through this so far — the older commands still ignore their
+// extras, and tightening those is a behaviour change beyond this PoC.
+function checkPositionals(
+	command: string,
+	rest: string[],
+	allowed: number,
+): number | null {
+	if (rest.length <= allowed) {
+		return null;
+	}
+	const extra = rest.slice(allowed);
+	return commandError(
+		"UNKNOWN_ARGUMENT",
+		`"${command}" takes ${allowed === 0 ? "no positional arguments" : `${allowed} positional argument${allowed > 1 ? "s" : ""}`}, but got ${extra
+			.map((value) => `"${value}"`)
+			.join(", ")} as well. A value meant for a flag needs its --name.`,
+		{ command, unexpected: extra },
 	);
 }
 
@@ -756,6 +791,83 @@ async function screenContext(
 	await mkdir(dirname(out), { recursive: true });
 	await writeFile(out, `${JSON.stringify(context, null, "\t")}\n`);
 	print(`Wrote ${out}`);
+	return 0;
+}
+
+// --catalog, or the host's <data-dir>/examples.json.
+function catalogPath(flags: CliFlags, dataDir: string): string {
+	return flagString(flags, "catalog") ?? examplesPath(dataDir);
+}
+
+// List the screen templates the host has catalogued. The entry point for `example apply`:
+// key is the argument it takes, so the two commands read as one flow.
+async function listExamples(
+	rest: string[],
+	flags: CliFlags,
+	dataDir: string,
+): Promise<number> {
+	// Checked before the catalog is read, so a mistyped invocation does no work at all.
+	const extra = checkPositionals("example list", rest, 0);
+	if (extra !== null) {
+		return extra;
+	}
+	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	if (flagBoolean(flags, "json")) {
+		print({
+			catalog: catalog.path,
+			root: catalog.root,
+			total: catalog.examples.length,
+			examples: catalog.examples,
+		});
+		return 0;
+	}
+	print(formatExampleList(catalog, { quiet: flagBoolean(flags, "quiet") }));
+	return 0;
+}
+
+// Copy one catalogued template into the host's tree under a new component name.
+async function applyExampleCommand(
+	rest: string[],
+	flags: CliFlags,
+	dataDir: string,
+): Promise<number> {
+	const extra = checkPositionals("example apply", rest, 1);
+	if (extra !== null) {
+		return extra;
+	}
+	const key = rest[0];
+	if (key === undefined) {
+		return missingArgument(
+			"example apply",
+			'example apply requires an <exampleKey>. Run "yosegi example list" for the keys.',
+		);
+	}
+	const componentName = flagString(flags, "name");
+	if (componentName === undefined) {
+		return missingArgument(
+			"example apply",
+			"example apply requires --name <ComponentName> (the name the copy's export takes).",
+		);
+	}
+	const out = flagString(flags, "out");
+	if (out === undefined) {
+		return missingArgument(
+			"example apply",
+			"example apply requires --out <file.tsx>.",
+		);
+	}
+	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	const result = await applyExample({
+		catalog,
+		example: requireExample(catalog, key),
+		componentName,
+		out,
+	});
+	if (flagBoolean(flags, "json")) {
+		print(result);
+		return 0;
+	}
+	print(formatApplyResult(result));
 	return 0;
 }
 
@@ -1342,6 +1454,16 @@ export async function runCli(argv: string[]): Promise<number> {
 			return await importStoryFile(rest[0], flags, dataDir);
 		}
 
+		// The example commands touch neither the registry nor the screen store — a
+		// catalogued template is copied as source text — so neither is loaded here.
+		if (group === "example" && action === "list") {
+			return await listExamples(rest, flags, dataDir);
+		}
+
+		if (group === "example" && action === "apply") {
+			return await applyExampleCommand(rest, flags, dataDir);
+		}
+
 		if (group === "screen") {
 			// Store commands address a screen by id (or a file by path); reject a missing
 			// one before touching the store, so the error names the argument rather than
@@ -1498,6 +1620,15 @@ function usage(): string {
 		"                                  [--out <screen.json>]",
 		"      Read a Story back into Screen JSON. Anything that could not be interpreted",
 		"      is reported in warnings.",
+		"",
+		"  example list [--catalog <path>] [--json] [--quiet]   # PoC",
+		"      List the host's catalogued screen templates. The catalog is a JSON file",
+		'      ({ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }),',
+		"      read from --catalog or <data-dir>/examples.json.",
+		"  example apply <exampleKey> --name <ComponentName> --out <file.tsx> [--catalog <path>] [--json]   # PoC",
+		"      Copy that template to --out, renaming its export to --name. The copy owns itself",
+		"      from then on and does not track the template. An existing --out is never",
+		"      overwritten. The output lists the copy's imports and inline data, by line.",
 		"",
 		"  mcp",
 		"      Serve the MCP tools over stdio, and keep running until the client disconnects.",
