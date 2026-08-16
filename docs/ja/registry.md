@@ -68,6 +68,25 @@ TypeScript 7.0 はコンパイラ API を同梱しておらず、型抽出は 6.
 エイリアスが無い場合、`registry build` は解決した version と上記のエントリを添えて失敗します。Yosegi 側にコピーが入るだけでは解決しません。
 パッケージマネージャが react-docgen-typescript をホストのツリー最上位へ巻き上げるため、`@yosegi/yosegi` 配下のコピーではなくホストの 7 を見てしまいます。
 
+bun ではこの構成が正しく解決されません。
+互換パッケージは自身の `npm:typescript@^6` 依存を経由して実体の 6.x コンパイラを参照しますが、bun はこれを互換パッケージ自身へ差し戻します。
+そのため `typescript` は自分自身を再 export する形になり、`registry build` は `ts.TypeFlags` が `undefined` であるところで失敗します。
+互換パッケージを挟まず、6.x のコンパイラに直接依存してください。
+
+```json
+{
+	"devDependencies": {
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"typescript": "^6"
+	}
+}
+```
+
+`tsc` は `@typescript/native` から 7 のまま動き、型抽出は 6.x の API を読みます。
+ツリーが手放すのは `tsc6` ですが、ここで呼ぶものはありません。
+この形は npm と pnpm でも動きます。
+この不具合は [oven-sh/bun#33835](https://github.com/oven-sh/bun/pull/33835) で上流では修正済みですが、bun 1.3.14 時点では未リリースです。
+
 ### id と import
 
 - `id` = `<projectRoot からのモジュールパス>#<exportName>`（例: `app/components/ui/card#CardHeader`）
