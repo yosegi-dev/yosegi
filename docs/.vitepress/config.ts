@@ -40,6 +40,7 @@ const en = [
 		items: [
 			{ text: "Screen JSON", link: "/screen-json" },
 			{ text: "CLI reference", link: "/cli" },
+			{ text: "Configuration file", link: "/configuration" },
 			{ text: "Component registry", link: "/registry" },
 			{ text: "Benchmark", link: "/benchmark" },
 		],
@@ -68,6 +69,7 @@ const ja = [
 		items: [
 			{ text: "Screen JSON", link: "/ja/screen-json" },
 			{ text: "CLI リファレンス", link: "/ja/cli" },
+			{ text: "設定ファイル", link: "/ja/configuration" },
 			{ text: "Component Registry", link: "/ja/registry" },
 			{ text: "ベンチマーク", link: "/ja/benchmark" },
 		],
@@ -157,7 +159,7 @@ export default withMermaid({
 						{
 							text: "Reference",
 							link: "/cli",
-							activeMatch: "/(cli|screen-json|registry)",
+							activeMatch: "/(cli|configuration|screen-json|registry)",
 						},
 						{ text: "Roadmap", link: "/ROADMAP" },
 					],
@@ -186,7 +188,7 @@ export default withMermaid({
 						{
 							text: "リファレンス",
 							link: "/ja/cli",
-							activeMatch: "/ja/(cli|screen-json|registry)",
+							activeMatch: "/ja/(cli|configuration|screen-json|registry)",
 						},
 						{ text: "ロードマップ", link: "/ja/ROADMAP" },
 					],
