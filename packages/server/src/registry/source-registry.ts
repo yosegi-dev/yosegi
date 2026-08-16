@@ -14,7 +14,8 @@ import type {
 	PropItem,
 	PropItemType,
 } from "react-docgen-typescript";
-import * as ts from "typescript";
+import type * as ts from "typescript";
+import { loadTypeScript } from "../typescript.ts";
 import { type DocCoverageStats, summarizeDocCoverage } from "./doc-coverage.ts";
 import { loadDocgen } from "./docgen.ts";
 import {
@@ -37,6 +38,10 @@ import {
 //
 // react-docgen-typescript is used for type extraction. It's the same implementation
 // Storybook itself uses to build argTypes, so what the Manifest contains rarely diverges from how things look in the host's own Storybook.
+//
+// The compiler API is picked up with loadTypeScript() inside each function that needs it,
+// rather than imported at the top of the module. See src/typescript.ts for why a host
+// without one has to fail there instead of here.
 
 // Extensions scanned. .d.ts has no implementation, so it's dropped on the exclude side.
 const SOURCE_EXTENSIONS = [".ts", ".tsx"];
@@ -208,23 +213,27 @@ function readCompilerOptions(rawTsconfigPath: string): {
 	// Base directory paths substitutions are resolved against: baseUrl if set, otherwise tsconfig's own location.
 	basePath: string;
 } {
+	const tsApi = loadTypeScript();
 	const tsconfigPath = resolve(rawTsconfigPath);
-	const { config, error } = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+	const { config, error } = tsApi.readConfigFile(
+		tsconfigPath,
+		tsApi.sys.readFile,
+	);
 	if (error) {
 		throw new Error(
-			`Failed to read ${tsconfigPath}: ${ts.flattenDiagnosticMessageText(error.messageText, " ")}`,
+			`Failed to read ${tsconfigPath}: ${tsApi.flattenDiagnosticMessageText(error.messageText, " ")}`,
 		);
 	}
-	const parsed = ts.parseJsonConfigFileContent(
+	const parsed = tsApi.parseJsonConfigFileContent(
 		config,
-		ts.sys,
+		tsApi.sys,
 		dirname(tsconfigPath),
 		{},
 		tsconfigPath,
 	);
 	if (parsed.errors.length > 0) {
 		throw new Error(
-			`Failed to parse ${tsconfigPath}: ${ts.flattenDiagnosticMessageText(parsed.errors[0].messageText, " ")}`,
+			`Failed to parse ${tsconfigPath}: ${tsApi.flattenDiagnosticMessageText(parsed.errors[0].messageText, " ")}`,
 		);
 	}
 	// Since only the type information matters here, emit is always suppressed.
@@ -258,11 +267,12 @@ function reactTypesResolve(
 	containingFile: string,
 	compilerOptions: ts.CompilerOptions,
 ): boolean {
-	const { resolvedModule } = ts.resolveModuleName(
+	const tsApi = loadTypeScript();
+	const { resolvedModule } = tsApi.resolveModuleName(
 		"react",
 		containingFile,
 		compilerOptions,
-		ts.sys,
+		tsApi.sys,
 	);
 	return (
 		resolvedModule !== undefined &&
@@ -376,6 +386,7 @@ function toPropItemType(type: ts.Type, checker: ts.TypeChecker): PropItemType {
 // this is the declaration's name; for `export default ContentCard`, it's the name after
 // alias resolution. An unnamed default export (`export default () => ...`) has no name, so this returns null.
 function resolveDefaultExportName(symbol: ts.Symbol): string | null {
+	const tsApi = loadTypeScript();
 	const resolvedName = symbol.getName();
 	if (resolvedName !== DEFAULT_EXPORT) {
 		return resolvedName;
@@ -383,8 +394,8 @@ function resolveDefaultExportName(symbol: ts.Symbol): string | null {
 	const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
 	if (
 		declaration &&
-		(ts.isFunctionDeclaration(declaration) ||
-			ts.isClassDeclaration(declaration)) &&
+		(tsApi.isFunctionDeclaration(declaration) ||
+			tsApi.isClassDeclaration(declaration)) &&
 		declaration.name
 	) {
 		return declaration.name.text;
@@ -539,6 +550,7 @@ function resolvePropOverrides(
 	// The names of props for which react-docgen-typescript took the type from React's own declaration.
 	reactDeclared: Set<string>,
 ): Map<string, PropOverride> {
+	const tsApi = loadTypeScript();
 	const overrides = new Map<string, PropOverride>();
 	for (const { type: propsType, location } of collectPropsTypes(
 		symbol,
@@ -557,7 +569,7 @@ function resolvePropOverrides(
 					checker.getTypeOfSymbolAtLocation(prop, location),
 					checker,
 				),
-				description: ts.displayPartsToString(
+				description: tsApi.displayPartsToString(
 					prop.getDocumentationComment(checker),
 				),
 			});
@@ -583,6 +595,7 @@ function collectExports(
 	program: ts.Program,
 	files: string[],
 ): Map<string, ExportedSymbol[]> {
+	const tsApi = loadTypeScript();
 	const checker = program.getTypeChecker();
 	const byFile = new Map<string, ExportedSymbol[]>();
 	for (const file of files) {
@@ -599,7 +612,7 @@ function collectExports(
 		for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
 			// A re-export like `export { X } from "./y"` is an alias, so it's followed through to the underlying symbol.
 			const resolved =
-				symbol.flags & ts.SymbolFlags.Alias
+				symbol.flags & tsApi.SymbolFlags.Alias
 					? checker.getAliasedSymbol(symbol)
 					: symbol;
 			const docName = symbol.getName();
@@ -869,6 +882,7 @@ const ATTRIBUTE_INTERFACE_NAMES = new Set([
 // inherits the wrong parent. Resolving straight from each property symbol's own
 // declarations sidesteps that shared cache entirely.
 function getPropDeclaringTypeName(prop: ts.Symbol): string | undefined {
+	const tsApi = loadTypeScript();
 	const declarations = prop.getDeclarations();
 	if (!declarations || declarations.length === 0) {
 		return undefined;
@@ -876,7 +890,10 @@ function getPropDeclaringTypeName(prop: ts.Symbol): string | undefined {
 	const parent = declarations[0].parent;
 	if (
 		!parent ||
-		!(ts.isInterfaceDeclaration(parent) || ts.isTypeAliasDeclaration(parent))
+		!(
+			tsApi.isInterfaceDeclaration(parent) ||
+			tsApi.isTypeAliasDeclaration(parent)
+		)
 	) {
 		return undefined;
 	}
@@ -998,14 +1015,15 @@ function toPropItem(
 	checker: ts.TypeChecker,
 	location: ts.Declaration,
 ): PropItem {
+	const tsApi = loadTypeScript();
 	return {
 		name,
-		required: (member.flags & ts.SymbolFlags.Optional) === 0,
+		required: (member.flags & tsApi.SymbolFlags.Optional) === 0,
 		type: toPropItemType(
 			checker.getTypeOfSymbolAtLocation(member, location),
 			checker,
 		),
-		description: ts.displayPartsToString(
+		description: tsApi.displayPartsToString(
 			member.getDocumentationComment(checker),
 		),
 		defaultValue: null,
@@ -1186,7 +1204,8 @@ export function listSourceFiles(
 	projectRoot: string,
 	sources: string[],
 ): string[] {
-	return ts.sys.readDirectory(
+	const tsApi = loadTypeScript();
+	return tsApi.sys.readDirectory(
 		resolve(projectRoot),
 		SOURCE_EXTENSIONS,
 		SOURCE_EXCLUDES,
@@ -1218,6 +1237,7 @@ function hostSpecifier(
 export function buildRegistryFromSource(
 	options: BuildSourceRegistryOptions,
 ): SourceRegistryResult {
+	const tsApi = loadTypeScript();
 	const startedAt = Date.now();
 	const projectRoot = resolve(options.projectRoot);
 	const files = listSourceFiles(projectRoot, options.sources);
@@ -1229,7 +1249,7 @@ export function buildRegistryFromSource(
 		paths: compilerOptions.paths,
 		basePath,
 	});
-	const program = ts.createProgram(files, compilerOptions);
+	const program = tsApi.createProgram(files, compilerOptions);
 	const checker = program.getTypeChecker();
 	const exportsByFile = collectExports(program, files);
 

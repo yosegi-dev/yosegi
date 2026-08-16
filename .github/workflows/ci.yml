@@ -300,6 +300,37 @@ jobs:
           test "$status" -eq 1
           # A host reading this error has to be able to act on it without leaving it.
           grep -q "typescript@npm:@typescript/typescript6" build.txt
+      - name: The same holds when Yosegi resolves the 7 as well
+        # zizmor: ignore[adhoc-packages] forces the single-copy-of-7 tree the
+        # scenario is about; no lockfile applies.
+        run: |
+          mkdir -p /tmp/yosegi-ts7-shared
+          cd /tmp/yosegi-ts7-shared
+          npm init -y > /dev/null
+          # The scenario above leaves a nested 6.x under @yosegi/yosegi, so only the
+          # hoisted extractor saw the 7. An override collapses the tree onto the host's
+          # 7, which is what Yosegi's own compiler API reads then — the state where a
+          # static `import * as ts` died in a module-level constant, taking every
+          # command with it.
+          npm pkg set devDependencies.typescript=7.0.2 overrides.typescript=7.0.2
+          npm install --no-audit --no-fund /tmp/yosegi-tarballs/*.tgz
+          copies="$(find node_modules -type d -path "*node_modules/typescript" | wc -l)"
+          find node_modules -type d -path "*node_modules/typescript"
+          test "$copies" -eq 1
+          set +e
+          node ./node_modules/.bin/yosegi > usage.txt 2>&1
+          set -e
+          cat usage.txt
+          grep -q "Yosegi CLI" usage.txt
+          set +e
+          node ./node_modules/.bin/yosegi registry build \
+            --source "components/**/*.tsx" \
+            --tsconfig /tmp/yosegi-ts7-host/tsconfig.json > build.txt 2>&1
+          status=$?
+          set -e
+          cat build.txt
+          test "$status" -eq 1
+          grep -q "typescript@npm:@typescript/typescript6" build.txt
 
   # A package whose types fail to resolve still passes both install and CLI
   # execution, so node-consumer wouldn't catch it. This job runs the

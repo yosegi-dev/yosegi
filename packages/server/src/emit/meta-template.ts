@@ -1,5 +1,6 @@
 import type { MetaTemplate } from "@yosegi/core/emit";
-import * as ts from "typescript";
+import type * as ts from "typescript";
+import { loadTypeScript } from "../typescript.ts";
 
 // Reads the boilerplate a host requires in a Story's meta from a TypeScript file the host wrote itself.
 //
@@ -16,6 +17,10 @@ import * as ts from "typescript";
 // on the Yosegi side would leave room to fabricate "information that doesn't exist," like a
 // Figma URL that doesn't actually apply. Conversely, a URL written in a copy-source Story can't
 // possibly belong to the screen being built, so any carried-over URL gets called out as a warning.
+//
+// The compiler API is picked up with loadTypeScript() inside each function that needs it,
+// rather than imported at the top of the module. See src/typescript.ts for why a host
+// without one has to fail there instead of here.
 
 // Properties Yosegi itself writes, so the template's values for them are never used.
 // title comes from `--title`; component is skipped because a screen isn't a single component.
@@ -34,11 +39,12 @@ export type ParsedMetaTemplate = {
 
 // Strips a wrapper like `const meta: Meta<typeof X> = { ... } satisfies Meta`.
 function unwrapExpression(expression: ts.Expression): ts.Expression {
+	const tsApi = loadTypeScript();
 	let current = expression;
 	while (
-		ts.isAsExpression(current) ||
-		ts.isSatisfiesExpression(current) ||
-		ts.isParenthesizedExpression(current)
+		tsApi.isAsExpression(current) ||
+		tsApi.isSatisfiesExpression(current) ||
+		tsApi.isParenthesizedExpression(current)
 	) {
 		current = current.expression;
 	}
@@ -56,30 +62,31 @@ type MetaDeclaration = {
 function findMetaDeclaration(
 	sourceFile: ts.SourceFile,
 ): MetaDeclaration | null {
+	const tsApi = loadTypeScript();
 	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
+		if (!tsApi.isVariableStatement(statement)) {
 			continue;
 		}
 		for (const declaration of statement.declarationList.declarations) {
 			if (
-				!ts.isIdentifier(declaration.name) ||
+				!tsApi.isIdentifier(declaration.name) ||
 				declaration.name.text !== META_VARIABLE_NAME ||
 				!declaration.initializer
 			) {
 				continue;
 			}
 			const object = unwrapExpression(declaration.initializer);
-			if (ts.isObjectLiteralExpression(object)) {
+			if (tsApi.isObjectLiteralExpression(object)) {
 				return { object, statement };
 			}
 		}
 	}
 	for (const statement of sourceFile.statements) {
-		if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
+		if (!tsApi.isExportAssignment(statement) || statement.isExportEquals) {
 			continue;
 		}
 		const object = unwrapExpression(statement.expression);
-		if (ts.isObjectLiteralExpression(object)) {
+		if (tsApi.isObjectLiteralExpression(object)) {
 			return { object, statement };
 		}
 	}
@@ -91,7 +98,11 @@ function readJsDoc(
 	source: string,
 	statement: ts.Statement,
 ): string | undefined {
-	const ranges = ts.getLeadingCommentRanges(source, statement.getFullStart());
+	const tsApi = loadTypeScript();
+	const ranges = tsApi.getLeadingCommentRanges(
+		source,
+		statement.getFullStart(),
+	);
 	const jsdoc = (ranges ?? [])
 		.filter((range) => source.slice(range.pos, range.pos + 3) === JSDOC_PREFIX)
 		.at(-1);
@@ -128,6 +139,7 @@ type ImportCandidate = {
 };
 
 function collectImportBindings(declaration: ts.ImportDeclaration): string[] {
+	const tsApi = loadTypeScript();
 	const clause = declaration.importClause;
 	if (!clause) {
 		return [];
@@ -137,10 +149,10 @@ function collectImportBindings(declaration: ts.ImportDeclaration): string[] {
 		names.push(clause.name.text);
 	}
 	const bindings = clause.namedBindings;
-	if (bindings && ts.isNamespaceImport(bindings)) {
+	if (bindings && tsApi.isNamespaceImport(bindings)) {
 		names.push(bindings.name.text);
 	}
-	if (bindings && ts.isNamedImports(bindings)) {
+	if (bindings && tsApi.isNamedImports(bindings)) {
 		for (const specifier of bindings.elements) {
 			names.push(specifier.name.text);
 		}
@@ -165,12 +177,13 @@ export function parseMetaTemplate(
 	source: string,
 	fileName: string,
 ): ParsedMetaTemplate {
-	const sourceFile = ts.createSourceFile(
+	const tsApi = loadTypeScript();
+	const sourceFile = tsApi.createSourceFile(
 		fileName,
 		source,
-		ts.ScriptTarget.Latest,
+		tsApi.ScriptTarget.Latest,
 		true,
-		ts.ScriptKind.TSX,
+		tsApi.ScriptKind.TSX,
 	);
 	const meta = findMetaDeclaration(sourceFile);
 	if (!meta) {
@@ -199,7 +212,7 @@ export function parseMetaTemplate(
 	const candidates: ImportCandidate[] = [];
 	for (const statement of sourceFile.statements) {
 		if (
-			!ts.isImportDeclaration(statement) ||
+			!tsApi.isImportDeclaration(statement) ||
 			isFrameworkTypeImport(statement)
 		) {
 			continue;
