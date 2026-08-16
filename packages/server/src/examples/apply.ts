@@ -118,41 +118,148 @@ export type RenameResult = {
 	occurrences: number;
 };
 
-// Declarations that count as "the template declares this name". A screen template's export
-// is a function in practice, but a `const X = () => ...` and a class are the same claim.
-function declaresName(
+// Whether a top-level statement declares `name` — a function, a class, or a variable. A
+// screen template's export is a function in practice, but `const X = () => ...` is the same
+// claim. Nested declarations are not considered: a `const X` inside some other function is a
+// local that happens to share the name, not the component this file exports.
+function topLevelDeclaration(
 	tsApi: TypeScriptModule,
-	node: ts.Node,
+	statement: ts.Statement,
+	name: string,
+): ts.Node | null {
+	if (
+		tsApi.isFunctionDeclaration(statement) ||
+		tsApi.isClassDeclaration(statement)
+	) {
+		return statement.name !== undefined && statement.name.text === name
+			? statement
+			: null;
+	}
+	if (tsApi.isVariableStatement(statement)) {
+		for (const declaration of statement.declarationList.declarations) {
+			if (
+				tsApi.isIdentifier(declaration.name) &&
+				declaration.name.text === name
+			) {
+				// The export modifier lives on the statement, not on the declaration.
+				return statement;
+			}
+		}
+	}
+	return null;
+}
+
+function hasExportModifier(tsApi: TypeScriptModule, node: ts.Node): boolean {
+	return tsApi.canHaveModifiers(node)
+		? (tsApi
+				.getModifiers(node)
+				?.some(
+					(modifier) => modifier.kind === tsApi.SyntaxKind.ExportKeyword,
+				) ?? false)
+		: false;
+}
+
+// Whether a top-level `export default X` or `export { X }` / `export { X as Public }` names
+// this binding. Checked separately from the modifier because declaring and exporting on
+// separate lines is ordinary style, and requiring the modifier would reject
+// `function X() {}` followed by `export default X;`.
+function isExportedByStatement(
+	tsApi: TypeScriptModule,
+	statement: ts.Statement,
 	name: string,
 ): boolean {
-	// Written as the positive form because that is the one that narrows to the union; the
-	// negated version leaves `node` as a bare Node with no `name`.
-	if (
-		tsApi.isFunctionDeclaration(node) ||
-		tsApi.isClassDeclaration(node) ||
-		tsApi.isVariableDeclaration(node)
-	) {
-		const declared = node.name;
-		return declared !== undefined && tsApi.isIdentifier(declared)
-			? declared.text === name
-			: false;
+	if (tsApi.isExportAssignment(statement)) {
+		return (
+			tsApi.isIdentifier(statement.expression) &&
+			statement.expression.text === name
+		);
+	}
+	if (tsApi.isExportDeclaration(statement)) {
+		const clause = statement.exportClause;
+		if (clause && tsApi.isNamedExports(clause)) {
+			return clause.elements.some((element) =>
+				// `export { X as Public }` carries the local name in propertyName; a bare
+				// `export { X }` carries it in name.
+				element.propertyName
+					? element.propertyName.text === name
+					: element.name.text === name,
+			);
+		}
 	}
 	return false;
 }
 
-// Rename by rewriting identifier tokens, not by matching text.
-//
-// A plain replaceAll is what the host's own plop generator does, and it is wrong in a way
-// that only shows up later: a template importing `FooExampleProps` alongside `FooExample`
-// has that import rewritten to `BarProps`, which the module it comes from does not export,
-// so the copy no longer compiles. Rewriting only Identifier nodes leaves substrings, string
-// literals, and comments alone, because none of them are identifier tokens.
-//
-// This is a token-level rename, not a scope-aware one — every identifier with this exact
-// text is rewritten, including an unrelated object property that happens to share the name.
-// Distinguishing those needs a full Program and a TypeChecker, which would mean resolving
-// the host's whole tsconfig to copy one file. The narrower guarantee is the one that matters
-// here: nothing that is not an identifier is ever touched.
+// Resolve the exported top-level binding this rename is about, or null when the template has
+// none. Returning null rather than renaming anyway is what keeps a template that only
+// mentions the name — in prose, as a property key, as a local inside some other function —
+// from being reported as a successful rename.
+function findExportedBinding(
+	tsApi: TypeScriptModule,
+	sourceFile: ts.SourceFile,
+	name: string,
+): ts.Node | null {
+	let declaration: ts.Node | null = null;
+	let exportedElsewhere = false;
+	for (const statement of sourceFile.statements) {
+		declaration ??= topLevelDeclaration(tsApi, statement, name);
+		if (isExportedByStatement(tsApi, statement, name)) {
+			exportedElsewhere = true;
+		}
+	}
+	if (declaration === null) {
+		return null;
+	}
+	return hasExportModifier(tsApi, declaration) || exportedElsewhere
+		? declaration
+		: null;
+}
+
+// Identifier positions that carry the same text without referring to the binding. Reading
+// them off the parent is what separates `<Card FooExample={x} />` and `{ FooExample: 1 }`,
+// which must not move, from `<FooExample />` and `export default FooExample`, which must.
+function isReferenceToBinding(
+	tsApi: TypeScriptModule,
+	id: ts.Identifier,
+): boolean {
+	const parent = id.parent;
+	// An import specifier always names another module's export. Renaming either side asks
+	// that module for a name it does not have.
+	if (
+		tsApi.isImportSpecifier(parent) ||
+		tsApi.isImportClause(parent) ||
+		tsApi.isNamespaceImport(parent)
+	) {
+		return false;
+	}
+	// `export { local as Public }`: the local half is this binding, the alias is the name
+	// the outside sees and is not ours to change. A bare `export { local }` is both.
+	if (tsApi.isExportSpecifier(parent)) {
+		return parent.propertyName === undefined || parent.propertyName === id;
+	}
+	// `const { FooExample: local } = obj` — the left half is the source object's key.
+	if (tsApi.isBindingElement(parent) && parent.propertyName === id) {
+		return false;
+	}
+	// `NS.FooExample` in type position.
+	if (tsApi.isQualifiedName(parent) && parent.right === id) {
+		return false;
+	}
+	// Property keys and member names. A shorthand `{ FooExample }` is deliberately absent:
+	// there the identifier is both the key and a reference, so it does move.
+	const isMemberName =
+		tsApi.isPropertyAssignment(parent) ||
+		tsApi.isPropertySignature(parent) ||
+		tsApi.isPropertyDeclaration(parent) ||
+		tsApi.isMethodDeclaration(parent) ||
+		tsApi.isMethodSignature(parent) ||
+		tsApi.isGetAccessorDeclaration(parent) ||
+		tsApi.isSetAccessorDeclaration(parent) ||
+		tsApi.isEnumMember(parent) ||
+		tsApi.isJsxAttribute(parent) ||
+		tsApi.isPropertyAccessExpression(parent);
+	return !(isMemberName && parent.name === id);
+}
+
 // The rename a host without the compiler API gets.
 //
 // Identifier boundaries still rule out the substring case that motivated all of this —
@@ -180,6 +287,25 @@ export function renameByIdentifierBoundary(
 	};
 }
 
+// Rename the component the template exports, by rewriting identifier tokens rather than
+// matching text.
+//
+// A plain replaceAll is what the host's own plop generator does, and it is wrong in a way
+// that only shows up later: a template importing `FooExampleProps` alongside `FooExample`
+// has that import rewritten to `BarProps`, which the module it comes from does not export,
+// so the copy no longer compiles.
+//
+// Two things narrow it from there. The top-level exported binding is resolved first, so a
+// template that merely mentions the name — as a property key, as a local inside some other
+// function, in a comment — renames nothing and is reported as drift. And each identifier is
+// judged by its position, so a JSX attribute name and a property key stay put while a JSX
+// tag name and an `export default` reference move.
+//
+// What is deliberately not done is full binding resolution. A local variable that shadows
+// the component's name inside some other function is still rewritten, because telling that
+// apart needs a Program and a TypeChecker, which would mean resolving the host's whole
+// tsconfig to copy a single file. That case is a shadowed name the template author chose to
+// collide with its own export, and the cost of catching it is out of proportion here.
 export function renameComponent(
 	source: string,
 	fileName: string,
@@ -200,14 +326,20 @@ export function renameComponent(
 		true,
 		tsApi.ScriptKind.TSX,
 	);
+	// No exported top-level binding means there is nothing to rename. Returning the source
+	// untouched keeps "the catalog is stale" from looking like a successful rename.
+	if (findExportedBinding(tsApi, sourceFile, from) === null) {
+		return { source, declared: false, structural: true, occurrences: 0 };
+	}
+
 	const spans: { start: number; end: number }[] = [];
-	let declared = false;
 	const visit = (node: ts.Node): void => {
-		if (tsApi.isIdentifier(node) && node.text === from) {
+		if (
+			tsApi.isIdentifier(node) &&
+			node.text === from &&
+			isReferenceToBinding(tsApi, node)
+		) {
 			spans.push({ start: node.getStart(sourceFile), end: node.getEnd() });
-		}
-		if (declaresName(tsApi, node, from)) {
-			declared = true;
 		}
 		tsApi.forEachChild(node, visit);
 	};
@@ -220,7 +352,7 @@ export function renameComponent(
 	}
 	return {
 		source: renamed,
-		declared,
+		declared: true,
 		structural: true,
 		occurrences: spans.length,
 	};

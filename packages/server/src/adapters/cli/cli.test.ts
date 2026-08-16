@@ -2680,6 +2680,76 @@ export default meta;
 		expect(written).not.toContain("GuestListRoute");
 	});
 
+	// A JSX attribute name and a property key carry the component's text without referring to
+	// it, so rewriting them would change what the copy is passed and what shape it expects.
+	it("example apply は JSX 属性名・プロパティキーを置換しない", async () => {
+		const catalog = await writeCatalog(
+			undefined,
+			[
+				'import { Card } from "~/card";',
+				"",
+				"const config = { SampleScreenExample: 1 };",
+				"",
+				"export function SampleScreenExample() {",
+				"\treturn <Card SampleScreenExample={config.SampleScreenExample} />;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("export function GuestListRoute()");
+		expect(written).toContain("const config = { SampleScreenExample: 1 };");
+		expect(written).toContain(
+			"<Card SampleScreenExample={config.SampleScreenExample} />",
+		);
+		expect(written).not.toContain("GuestListRoute={");
+		expect(written).not.toContain("config.GuestListRoute");
+	});
+
+	// A local inside another function is not the exported component, so this is drift.
+	it("ネストした宣言しか無いテンプレートは置換せず警告する", async () => {
+		const catalog = await writeCatalog(
+			undefined,
+			[
+				"export function Other() {",
+				"\tconst SampleScreenExample = 1;",
+				"\treturn SampleScreenExample;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain('declares no "SampleScreenExample"');
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("const SampleScreenExample = 1;");
+		expect(written).not.toContain("GuestListRoute");
+	});
+
 	// A catalog componentName that is not an identifier can never name a component, and it
 	// reaches a RegExp in the no-compiler fallback.
 	it("identifier でない componentName は INVALID_ARGUMENT を返す", async () => {

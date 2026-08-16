@@ -16,6 +16,25 @@ const COLLIDING = [
 	"",
 ].join("\n");
 
+// The same text in every position that is not a reference to the binding: a JSX attribute
+// name, a property key, a type member, a class member, and a property access.
+const MEMBER_POSITIONS = [
+	'import { Card } from "~/card";',
+	"",
+	"type Props = { ScreenExample: string };",
+	"",
+	"class Registry {",
+	"\tScreenExample() {}",
+	"}",
+	"",
+	"const config = { ScreenExample: 1 };",
+	"",
+	"export function ScreenExample(props: Props) {",
+	"\treturn <Card ScreenExample={config.ScreenExample} {...props} />;",
+	"}",
+	"",
+].join("\n");
+
 describe("renameComponent", () => {
 	it("宣言とその参照だけを置換する", () => {
 		const result = renameComponent(
@@ -71,6 +90,92 @@ describe("renameComponent", () => {
 		expect(result.declared).toBe(false);
 		expect(result.occurrences).toBe(0);
 		expect(result.source).toContain("// OnlyProse lived here.");
+	});
+
+	// JSX attribute names and property keys carry the text without referring to the binding,
+	// so rewriting them would change what the component is passed and what shape it expects.
+	it("JSX 属性名・プロパティキー・メンバー名は置換しない", () => {
+		const { source, declared } = renameComponent(
+			MEMBER_POSITIONS,
+			"screen.tsx",
+			"ScreenExample",
+			"GuestRoute",
+		);
+		expect(declared).toBe(true);
+		// Only the declaration moves.
+		expect(source).toContain("export function GuestRoute(props: Props)");
+		// Everything that is a name rather than a reference stays.
+		expect(source).toContain("type Props = { ScreenExample: string };");
+		expect(source).toContain("\tScreenExample() {}");
+		expect(source).toContain("const config = { ScreenExample: 1 };");
+		expect(source).toContain(
+			"<Card ScreenExample={config.ScreenExample} {...props} />",
+		);
+		expect(source).not.toContain("GuestRoute={");
+		expect(source).not.toContain("config.GuestRoute");
+		expect(source).not.toContain("{ GuestRoute:");
+	});
+
+	// A local inside another function is not the exported component, so the template
+	// declares nothing to rename and the copy comes through untouched.
+	it("ネストした宣言だけではドリフト扱いになる", () => {
+		const result = renameComponent(
+			[
+				"export function Other() {",
+				"\tconst ScreenExample = 1;",
+				"\treturn ScreenExample;",
+				"}",
+				"",
+			].join("\n"),
+			"screen.tsx",
+			"ScreenExample",
+			"GuestRoute",
+		);
+		expect(result.declared).toBe(false);
+		expect(result.occurrences).toBe(0);
+		expect(result.source).toContain("const ScreenExample = 1;");
+		expect(result.source).not.toContain("GuestRoute");
+	});
+
+	// Top level but never exported: not the component the catalog is pointing at.
+	it("export されていないトップレベル宣言はドリフト扱いになる", () => {
+		const result = renameComponent(
+			"const ScreenExample = 1;\nexport function Other() {\n\treturn ScreenExample;\n}\n",
+			"screen.tsx",
+			"ScreenExample",
+			"GuestRoute",
+		);
+		expect(result.declared).toBe(false);
+		expect(result.source).not.toContain("GuestRoute");
+	});
+
+	// An imported name belongs to the module it comes from; renaming either half asks that
+	// module for an export it does not have.
+	it("import 由来の名前は宣言として扱わない", () => {
+		const result = renameComponent(
+			'import { ScreenExample } from "~/elsewhere";\nexport default ScreenExample;\n',
+			"screen.tsx",
+			"ScreenExample",
+			"GuestRoute",
+		);
+		expect(result.declared).toBe(false);
+		expect(result.source).toContain(
+			'import { ScreenExample } from "~/elsewhere";',
+		);
+	});
+
+	// `export { local as Public }` — the local half is the binding, the alias is the name the
+	// outside sees and is not ours to change.
+	it("export エイリアスは変えずローカル名だけ置換する", () => {
+		const { source, declared } = renameComponent(
+			"function ScreenExample() {\n\treturn null;\n}\nexport { ScreenExample as Screen };\n",
+			"screen.tsx",
+			"ScreenExample",
+			"GuestRoute",
+		);
+		expect(declared).toBe(true);
+		expect(source).toContain("function GuestRoute()");
+		expect(source).toContain("export { GuestRoute as Screen };");
 	});
 
 	it("const で宣言されたコンポーネントも declared になる", () => {
