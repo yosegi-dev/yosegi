@@ -1,7 +1,7 @@
 {
 	"name": "@yosegi/core",
 	"description": "Yosegi domain layer: Screen JSON schema, validator, CSF emitter, and registry normalization (framework-agnostic)",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"license": "MIT",
 	"author": "dachi023",
 	"homepage": "https://github.com/yosegi-dev/yosegi#readme",

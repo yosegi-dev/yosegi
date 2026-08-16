@@ -24,20 +24,20 @@
     },
     "packages/core": {
       "name": "@yosegi/core",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "zod": "catalog:",
       },
     },
     "packages/server": {
       "name": "@yosegi/yosegi",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "bin": {
         "yosegi": "./bin/yosegi.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",
-        "@yosegi/core": "0.1.0",
+        "@yosegi/core": "0.3.0",
         "hono": "^4.13.1",
         "react-docgen-typescript": "2.4.0",
         "typescript": ">=5.4.0 <7",
