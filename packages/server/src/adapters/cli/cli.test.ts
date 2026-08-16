@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	realpath,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -3186,6 +3193,403 @@ describe("registry status", () => {
 		expect(code).toBe(0);
 		expect(output()).toContain("source: stale");
 		expect(output()).toContain("index: unknown — source already changed");
+	});
+});
+
+// Discovery reads process.cwd(), so these tests move into a temp tree and restore the cwd
+// afterwards. Everything they assert is invisible from a bare flag-only invocation.
+describe("yosegi.config.json", () => {
+	let root: string;
+	let logs: string[];
+	const originalLog = console.log;
+	const originalWarn = console.warn;
+	const originalCwd = process.cwd();
+
+	beforeEach(async () => {
+		// realpath because process.cwd() reports the resolved path after chdir, and
+		// discovery starts from there — on macOS /var is a symlink to /private/var, so the
+		// paths the CLI reports back would otherwise never match the ones written here.
+		root = await realpath(await mkdtemp(join(tmpdir(), "vc-host-config-")));
+		logs = [];
+		console.log = (value: unknown) => {
+			logs.push(typeof value === "string" ? value : JSON.stringify(value));
+		};
+		console.warn = () => {};
+	});
+
+	afterEach(async () => {
+		process.chdir(originalCwd);
+		console.log = originalLog;
+		console.warn = originalWarn;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	function output(): string {
+		return logs.join("\n");
+	}
+
+	async function writeConfig(
+		directory: string,
+		content: unknown | string,
+	): Promise<string> {
+		await mkdir(directory, { recursive: true });
+		const path = join(directory, "yosegi.config.json");
+		await writeFile(
+			path,
+			typeof content === "string" ? content : JSON.stringify(content),
+		);
+		return path;
+	}
+
+	// A --data-dir already seeded the way every other test does, so the commands under test
+	// have a registry to read.
+	async function seedDataDir(directory: string): Promise<string> {
+		await mkdir(join(directory, "screens"), { recursive: true });
+		await writeFile(
+			join(directory, "registry.json"),
+			JSON.stringify(sampleRegistry()),
+		);
+		return directory;
+	}
+
+	// A host with one component and a tsconfig, so registry build has something to read.
+	async function writeHost(directory: string): Promise<void> {
+		await mkdir(join(directory, "components"), { recursive: true });
+		await writeFile(
+			join(directory, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, jsx: "react-jsx" },
+				include: ["components"],
+			}),
+		);
+		await writeFile(
+			join(directory, "components", "badge.tsx"),
+			"export type BadgeProps = { label: string };\n" +
+				"export function Badge({ label }: BadgeProps) {\n" +
+				"\treturn <span>{label}</span>;\n" +
+				"}\n",
+		);
+	}
+
+	it("cwd から上方探索した config の dataDir が使われる", async () => {
+		await seedDataDir(join(root, ".yosegi"));
+		await writeConfig(root, { dataDir: ".yosegi" });
+		const nested = join(root, "apps", "web");
+		await mkdir(nested, { recursive: true });
+		process.chdir(nested);
+
+		const code = await runCli(["component", "list", "--json"]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as { total: number };
+		expect(parsed.total).toBeGreaterThan(0);
+	});
+
+	// The config's own directory is the base, not the cwd. Otherwise the same committed
+	// config would point at a different directory for every place a command is run from.
+	it("dataDir の相対パスは config の位置基準で解決される", async () => {
+		await seedDataDir(join(root, "store"));
+		await writeConfig(root, { dataDir: "./store" });
+		const nested = join(root, "apps", "web");
+		await mkdir(nested, { recursive: true });
+		process.chdir(nested);
+
+		const screenFile = join(root, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const code = await runCli([
+			"screen",
+			"push",
+			screenFile,
+			"--config",
+			join(root, "yosegi.config.json"),
+		]);
+		expect(code).toBe(0);
+		expect(
+			await Bun.file(
+				join(root, "store", "screens", "customer-list.json"),
+			).exists(),
+		).toBe(true);
+		expect(await Bun.file(join(nested, "store")).exists()).toBe(false);
+	});
+
+	it("--config は上方探索より優先される", async () => {
+		await seedDataDir(join(root, "discovered"));
+		await seedDataDir(join(root, "explicit"));
+		await writeConfig(root, { dataDir: "discovered" });
+		const other = join(root, "elsewhere.json");
+		await writeFile(other, JSON.stringify({ dataDir: join(root, "explicit") }));
+		process.chdir(root);
+
+		const screenFile = join(root, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const code = await runCli([
+			"screen",
+			"push",
+			screenFile,
+			"--config",
+			other,
+		]);
+		expect(code).toBe(0);
+		expect(
+			await Bun.file(
+				join(root, "explicit", "screens", "customer-list.json"),
+			).exists(),
+		).toBe(true);
+	});
+
+	it("--data-dir フラグは config の dataDir に勝つ", async () => {
+		await seedDataDir(join(root, "from-config"));
+		const fromFlag = await seedDataDir(join(root, "from-flag"));
+		await writeConfig(root, { dataDir: "from-config" });
+		process.chdir(root);
+
+		const screenFile = join(root, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const code = await runCli([
+			"screen",
+			"push",
+			screenFile,
+			"--data-dir",
+			fromFlag,
+		]);
+		expect(code).toBe(0);
+		expect(
+			await Bun.file(join(fromFlag, "screens", "customer-list.json")).exists(),
+		).toBe(true);
+		expect(
+			await Bun.file(
+				join(root, "from-config", "screens", "customer-list.json"),
+			).exists(),
+		).toBe(false);
+	});
+
+	// Running without a config has to keep working: the flags alone are still a complete
+	// invocation, and every host that predates the file is one.
+	it("config が無ければ従来どおり動く", async () => {
+		const explicitDataDir = await seedDataDir(join(root, "data"));
+		process.chdir(root);
+		const code = await runCli([
+			"component",
+			"list",
+			"--json",
+			"--data-dir",
+			explicitDataDir,
+		]);
+		expect(code).toBe(0);
+	});
+
+	it("--config はどのコマンドでも受け付ける", async () => {
+		const explicitDataDir = await seedDataDir(join(root, "data"));
+		const path = await writeConfig(root, { dataDir: explicitDataDir });
+		process.chdir(root);
+		const code = await runCli(["screen", "list", "--config", path]);
+		expect(code).toBe(0);
+		expect(output()).not.toContain("UNKNOWN_FLAG");
+	});
+
+	it("壊れた config は CONFIG_INVALID のエラーエンベロープで即失敗する", async () => {
+		const path = await writeConfig(root, "{ not json");
+		process.chdir(root);
+		const code = await runCli(["component", "list"]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; message: string; path: string };
+		};
+		expect(parsed.error.code).toBe("CONFIG_INVALID");
+		expect(parsed.error.path).toBe(path);
+	});
+
+	// A dropped key is a default the caller believes is in effect but isn't — the same
+	// failure mode COMMAND_FLAGS exists to prevent.
+	it("未知のキーは CONFIG_INVALID になり候補を返す", async () => {
+		await writeConfig(root, { datadir: ".yosegi" });
+		process.chdir(root);
+		const code = await runCli(["component", "list"]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; suggestion?: string };
+		};
+		expect(parsed.error.code).toBe("CONFIG_INVALID");
+		expect(parsed.error.suggestion).toBe("Did you mean: dataDir?");
+	});
+
+	it("--config の指す先が無ければ CONFIG_NOT_FOUND", async () => {
+		process.chdir(root);
+		const code = await runCli([
+			"component",
+			"list",
+			"--config",
+			join(root, "missing.json"),
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("CONFIG_NOT_FOUND");
+	});
+
+	it("registry build は config の source / tsconfig / dataDir を使う", async () => {
+		await writeHost(root);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: {
+				source: ["components/**/*.tsx"],
+				tsconfig: "./tsconfig.json",
+			},
+		});
+		const nested = join(root, "apps", "web");
+		await mkdir(nested, { recursive: true });
+		process.chdir(nested);
+
+		const code = await runCli(["registry", "build"]);
+		expect(code).toBe(0);
+		const written = JSON.parse(
+			await Bun.file(join(root, ".yosegi", "registry.json")).text(),
+		) as { components: { id: string }[] };
+		expect(
+			written.components.some(
+				(component) => component.id === "components/badge#Badge",
+			),
+		).toBe(true);
+	});
+
+	// The rebuild line and registry status both read inputs, so a config-supplied value has
+	// to be recorded exactly as the equivalent flag would have been.
+	it("registry build の provenance は config 由来の値も記録する", async () => {
+		await writeHost(root);
+		await writeFile(join(root, "metadata.json"), JSON.stringify({}));
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: {
+				source: ["components/**/*.tsx"],
+				tsconfig: "./tsconfig.json",
+				metadata: "./metadata.json",
+			},
+		});
+		process.chdir(root);
+
+		const code = await runCli(["registry", "build"]);
+		expect(code).toBe(0);
+		const written = JSON.parse(
+			await Bun.file(join(root, ".yosegi", "registry.json")).text(),
+		) as {
+			inputs: { sources: string[]; tsconfig: string; metadata: string };
+		};
+		expect(written.inputs.sources).toEqual(["components/**/*.tsx"]);
+		expect(written.inputs.tsconfig).toBe(join(root, "tsconfig.json"));
+		expect(written.inputs.metadata).toBe(join(root, "metadata.json"));
+	});
+
+	// --source replaces the config's list rather than adding to it, so a build can still be
+	// narrowed to one glob.
+	it("--source フラグは config の source を置き換える", async () => {
+		await writeHost(root);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: {
+				source: ["components/**/*.tsx"],
+				tsconfig: "./tsconfig.json",
+			},
+		});
+		process.chdir(root);
+
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"nowhere/*.tsx",
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain("--source matched no files");
+		const written = JSON.parse(
+			await Bun.file(join(root, ".yosegi", "registry.json")).text(),
+		) as { inputs: { sources: string[] } };
+		expect(written.inputs.sources).toEqual(["nowhere/*.tsx"]);
+	});
+
+	it("screen generate は config の importMap / metaTemplate を使う", async () => {
+		const dataDir = await seedDataDir(join(root, ".yosegi"));
+		await writeFile(
+			join(root, "meta.tsx"),
+			'const meta = {\n\ttags: ["autodocs"],\n};\n',
+		);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			emit: {
+				importMap: ["~/components=@host/ui"],
+				metaTemplate: "./meta.tsx",
+			},
+		});
+		const screenFile = join(root, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "out.stories.tsx");
+		process.chdir(root);
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			outFile,
+		]);
+		expect(code).toBe(0);
+		const source = await Bun.file(outFile).text();
+		expect(source).toContain('from "@host/ui/layout";');
+		expect(source).toContain('tags: ["autodocs"]');
+	});
+
+	it("--import-map フラグは config の importMap に勝つ", async () => {
+		const dataDir = await seedDataDir(join(root, ".yosegi"));
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			emit: { importMap: ["~/components=@host/ui"] },
+		});
+		const screenFile = join(root, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "out.stories.tsx");
+		process.chdir(root);
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--out",
+			outFile,
+			"--import-map",
+			"~/components=@flag/ui",
+		]);
+		expect(code).toBe(0);
+		const source = await Bun.file(outFile).text();
+		expect(source).toContain('from "@flag/ui/layout";');
+		expect(source).not.toContain("@host/ui");
+	});
+
+	// A config cannot know which --target a given run picks, so this is skipped rather than
+	// rejected the way an explicit --meta-template is — but never silently.
+	it("--target component では config の metaTemplate を使わず理由を出す", async () => {
+		const dataDir = await seedDataDir(join(root, ".yosegi"));
+		await writeFile(
+			join(root, "meta.tsx"),
+			'const meta = {\n\ttags: ["autodocs"],\n};\n',
+		);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			emit: { metaTemplate: "./meta.tsx" },
+		});
+		const screenFile = join(root, "screen.json");
+		await writeFile(screenFile, JSON.stringify(sampleScreen()));
+		const outFile = join(dataDir, "screen.tsx");
+		process.chdir(root);
+
+		const code = await runCli([
+			"screen",
+			"generate",
+			screenFile,
+			"--target",
+			"component",
+			"--out",
+			outFile,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain("emit.metaTemplate was not applied");
+		expect(await Bun.file(outFile).text()).not.toContain("autodocs");
 	});
 });
 
