@@ -5,7 +5,7 @@ description: Build a screen mock or screen proposal (画面モック) out of the
 
 # Yosegi — building screens from a host's own components
 
-> **Version: 2026-08-16.** An agent harness can load a stale copy of a skill without saying so. If
+> **Version: 2026-08-17.** An agent harness can load a stale copy of a skill without saying so. If
 > this date is older than the one in the repository's `skills/yosegi/SKILL.md`, you are reading an
 > out-of-date copy — re-install it before going further.
 

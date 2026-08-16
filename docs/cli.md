@@ -335,7 +335,9 @@ yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [optio
 
 ```sh
 yosegi example apply guest-list \
-  --name GuestListRoute --out app/routes/guest-list.tsx --data-dir .yosegi
+  --name GuestListRoute \
+  --out app/routes/guest-list.tsx \
+  --data-dir .yosegi
 ```
 
 Two provenance comment lines go above the copy. The output then lists the copy's imports and its

@@ -299,7 +299,9 @@ yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [optio
 
 ```sh
 yosegi example apply guest-list \
-  --name GuestListRoute --out app/routes/guest-list.tsx --data-dir .yosegi
+  --name GuestListRoute \
+  --out app/routes/guest-list.tsx \
+  --data-dir .yosegi
 ```
 
 複製の先頭には来歴を示すコメントが 2 行入ります。

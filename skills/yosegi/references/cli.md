@@ -341,7 +341,9 @@ by hand.
 ```sh
 yosegi example list --data-dir .yosegi
 yosegi example apply guest-list \
-  --name GuestListRoute --out app/routes/guest-list.tsx --data-dir .yosegi
+  --name GuestListRoute \
+  --out app/routes/guest-list.tsx \
+  --data-dir .yosegi
 ```
 
 The catalog is a JSON file the host maintains —
