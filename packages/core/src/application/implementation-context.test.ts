@@ -1,4 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { ComposerError } from "../domain/errors.ts";
+import {
+	parseScreenDefinition,
+	type ScreenDefinition,
+} from "../domain/screen-definition.ts";
 import { withSyntheticComponents } from "../domain/synthetics.ts";
 import { buildImportMapResolver } from "../emit/csf.ts";
 import { sampleRegistry, sampleScreen } from "../test-fixtures.ts";
@@ -190,5 +195,185 @@ describe("buildImplementationContext", () => {
 		});
 		expect(context.target.route).toBe("/customers");
 		expect(context.requirements).toEqual(["既存の ErrorBoundary を使う"]);
+	});
+
+	describe("variants", () => {
+		// The Empty state drops the table and puts a Button there instead. Button is in
+		// the Registry but nowhere in the base tree, so it is exactly the component the
+		// context used to lose.
+		function screenWithEmptyVariant(): ScreenDefinition {
+			return parseScreenDefinition({
+				...sampleScreen(),
+				variants: [
+					{
+						name: "Empty",
+						description: "No customers matched.",
+						operations: [
+							{ type: "removeNode", nodeId: "node-table" },
+							{
+								type: "addNode",
+								target: { parentNodeId: "node-page", slot: "body" },
+								node: {
+									id: "node-empty-action",
+									component: "Button",
+									props: { variant: "secondary" },
+									slots: {},
+									events: {
+										onClick: {
+											action: "navigate",
+											arguments: { to: "/customers/new" },
+										},
+									},
+								},
+							},
+						],
+					},
+				],
+			});
+		}
+
+		it("variant でしか使われないコンポーネントも imports と components に現れる", () => {
+			const context = buildImplementationContext(
+				screenWithEmptyVariant(),
+				components(),
+			);
+			expect(context.imports).toContain(
+				'import { Button } from "~/components/shadcn-ui/button";',
+			);
+
+			const button = context.components.find((c) => c.id === "Button");
+			expect(button?.importStatement).toBe(
+				'import { Button } from "~/components/shadcn-ui/button";',
+			);
+			expect(button?.variantOnly).toBe(true);
+			expect(button?.variants).toEqual(["Empty"]);
+			expect(button?.nodeIds).toEqual(["node-empty-action"]);
+			// The props a variant passes are part of what has to be implemented.
+			expect(button?.usedProps).toEqual({ variant: ["secondary"] });
+		});
+
+		it("ベースにしか無いコンポーネントは variants が付かない", () => {
+			const context = buildImplementationContext(
+				screenWithEmptyVariant(),
+				components(),
+			);
+			// The Empty variant removes the table, so its absence here is the signal
+			// that the state does not render one.
+			const table = context.components.find((c) => c.id === "Table");
+			expect(table?.variants).toBeUndefined();
+			expect(table?.variantOnly).toBeUndefined();
+
+			const page = context.components.find((c) => c.id === "Page");
+			expect(page?.variants).toEqual(["Empty"]);
+			expect(page?.variantOnly).toBeUndefined();
+		});
+
+		it("variant 由来の結線タスクは variant 名を持つ", () => {
+			const context = buildImplementationContext(
+				screenWithEmptyVariant(),
+				components(),
+			);
+			expect(context.tasks).toContainEqual({
+				kind: "event",
+				nodeId: "node-empty-action",
+				component: "Button",
+				path: "$.body[1]",
+				event: "onClick",
+				action: "navigate",
+				arguments: { to: "/customers/new" },
+				variant: "Empty",
+			});
+			// The base's own tasks stay untagged.
+			expect(
+				context.tasks
+					.filter((task) => task.nodeId === "node-keyword")
+					.every((task) => task.variant === undefined),
+			).toBe(true);
+		});
+
+		it("ベースと同じ結線は variant 側で重複しない", () => {
+			const screen = parseScreenDefinition({
+				...sampleScreen(),
+				variants: [
+					{
+						name: "Loading",
+						operations: [
+							{
+								type: "setProps",
+								nodeId: "node-table",
+								props: { loading: true },
+							},
+						],
+					},
+				],
+			});
+			const context = buildImplementationContext(screen, components());
+			expect(
+				context.tasks.filter((task) => task.nodeId === "node-table"),
+			).toHaveLength(3);
+			expect(context.tasks.every((task) => task.variant === undefined)).toBe(
+				true,
+			);
+			// A node the variant keeps is one node, not two.
+			const table = context.components.find((c) => c.id === "Table");
+			expect(table?.usageCount).toBe(1);
+			expect(table?.nodeIds).toEqual(["node-table"]);
+			// setProps is a prop the state passes, so it shows up as a used value.
+			expect(table?.usedProps).toEqual({ loading: [true] });
+		});
+
+		it("variants には outline と追加コンポーネントが入り structure はベースのまま", () => {
+			const context = buildImplementationContext(
+				screenWithEmptyVariant(),
+				components(),
+			);
+			expect(context.variants).toEqual([
+				{
+					name: "Empty",
+					description: "No customers matched.",
+					outline: [
+						"Page #node-page",
+						"  header: PageHeader #node-header props=title",
+						"  body: SearchForm #node-search",
+						"    fields: TextField #node-keyword props=label,placeholder bindings=value",
+						"  body: Button #node-empty-action props=variant events=onClick",
+					],
+					addedComponents: ["Button"],
+				},
+			]);
+			// The top-level structure keeps describing the base tree alone.
+			expect(context.structure.outline).toContain(
+				"  body: Table #node-table bindings=rows,loading events=onRowClick",
+			);
+			expect(
+				context.structure.nodes.some((n) => n.nodeId === "node-empty-action"),
+			).toBe(false);
+		});
+
+		it("variants を持たない画面は variant 用のキーを一切出さない", () => {
+			const context = buildImplementationContext(sampleScreen(), components());
+			expect("variants" in context).toBe(false);
+			expect(
+				context.components.every(
+					(usage) => !("variants" in usage) && !("variantOnly" in usage),
+				),
+			).toBe(true);
+			expect(context.tasks.every((task) => !("variant" in task))).toBe(true);
+		});
+
+		it("適用できない variant は例外にする（emit と同じ扱い）", () => {
+			const screen = parseScreenDefinition({
+				...sampleScreen(),
+				variants: [
+					{
+						name: "Broken",
+						operations: [{ type: "removeNode", nodeId: "node-missing" }],
+					},
+				],
+			});
+			expect(() => buildImplementationContext(screen, components())).toThrow(
+				ComposerError,
+			);
+		});
 	});
 });

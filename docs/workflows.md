@@ -228,7 +228,19 @@ flowchart TD
 - `tasks[]`: `bindings` and `events` flattened into wiring tasks, each carrying `nodeId` and a
   `path` in `$.children[1]` form.
 
-The rest (`requirements` / `target` / `implementation` / `screen`) is supporting information.
+A variant is another state of the same screen, so it is part of the context. `imports` and
+`components[]` cover the base tree and every variant tree together: a component only one state
+renders still appears, carrying `variantOnly: true` and the `variants` that use it. A component the
+base renders lists the `variants` that keep it, so a state that drops it is visible by its absence.
+Wiring a variant adds joins `tasks[]` tagged with `variant`, limited to what the base does not
+already state.
+
+`structure` stays the base tree alone. Each state's shape is a `variants[]` entry — its `outline` in
+the same form, plus the `addedComponents` no base node renders. A screen that declares no variants
+gets none of these keys.
+
+The rest (`screenId` / `screenName` / `registryVersion` / `target` / `implementation` /
+`requirements` / `screen`) is supporting information.
 
 ## `story import` warnings
 

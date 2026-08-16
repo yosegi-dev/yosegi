@@ -803,6 +803,76 @@ describe("runCli", () => {
 		expect(context.target.route).toBe("/customers");
 	});
 
+	// screen generate emits the variant's components, so screen context has to hand
+	// the implementer the same set — a component only a state uses must not vanish
+	// between the two commands.
+	it("screen context は variant でしか使わないコンポーネントも返す", async () => {
+		const screen = {
+			...sampleScreen(),
+			variants: [
+				{
+					name: "Empty",
+					description: "No customers matched.",
+					operations: [
+						{ type: "removeNode", nodeId: "node-table" },
+						{
+							type: "addNode",
+							target: { parentNodeId: "node-page", slot: "body" },
+							node: {
+								id: "node-empty-action",
+								component: "Button",
+								props: { variant: "secondary" },
+								slots: {},
+								events: {
+									onClick: {
+										action: "navigate",
+										arguments: { to: "/customers/new" },
+									},
+								},
+							},
+						},
+					],
+				},
+			],
+		};
+		const screenFile = join(dataDir, "variants-context-screen.json");
+		await writeFile(screenFile, JSON.stringify(screen));
+
+		const code = await runCli([
+			"screen",
+			"context",
+			screenFile,
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+
+		const context = JSON.parse(output()) as {
+			imports: string[];
+			components: { id: string; variantOnly?: true; variants?: string[] }[];
+			tasks: { nodeId: string; variant?: string }[];
+			variants?: {
+				name: string;
+				outline: string[];
+				addedComponents: string[];
+			}[];
+		};
+		expect(context.imports).toContain(
+			'import { Button } from "~/components/shadcn-ui/button";',
+		);
+		const button = context.components.find((c) => c.id === "Button");
+		expect(button?.variantOnly).toBe(true);
+		expect(button?.variants).toEqual(["Empty"]);
+		expect(
+			context.tasks.find((task) => task.nodeId === "node-empty-action")
+				?.variant,
+		).toBe("Empty");
+		expect(context.variants?.[0]?.addedComponents).toEqual(["Button"]);
+		expect(context.variants?.[0]?.outline).toContain(
+			"  body: Button #node-empty-action props=variant events=onClick",
+		);
+	});
+
 	it("screen context は --import-map を反映し --out へ書き出せる", async () => {
 		const screenFile = join(dataDir, "screen.json");
 		await writeFile(screenFile, JSON.stringify(sampleScreen()));
