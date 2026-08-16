@@ -269,21 +269,16 @@ describe("checkDocs", () => {
 	it("東アジア文字幅で 100 桁を超えた行を報告する", () => {
 		const long = "あ".repeat(51);
 		const { widthErrors } = checkDocs(
-			[{ path: "docs/ja/page.md", text: en(long) }],
+			[{ path: "docs/page.md", text: en(long) }],
 			never,
 		);
-		expect(widthErrors).toEqual([
-			`docs/ja/page.md:3: 102 columns (limit ${100})`,
-		]);
+		expect(widthErrors).toEqual([`docs/page.md:3: 102 columns (limit ${100})`]);
 	});
 
 	it("表・コードブロック・front matter は幅の検査から除く", () => {
 		const long = "あ".repeat(51);
 		const text = `---\ntagline: ${long}\n---\n\n| ${long} |\n\n\`\`\`sh\n${long}\n\`\`\`\n`;
-		const { widthErrors } = checkDocs(
-			[{ path: "docs/ja/page.md", text }],
-			never,
-		);
+		const { widthErrors } = checkDocs([{ path: "docs/page.md", text }], never);
 		expect(widthErrors).toEqual([]);
 	});
 
@@ -291,7 +286,10 @@ describe("checkDocs", () => {
 		const long = "あ".repeat(51);
 		const text = `# Page\n\n~~~md\n[example](./missing.md)\n${long}\n~~~\n`;
 		const { errors, widthErrors } = checkDocs(
-			[{ path: "docs/ja/page.md", text }],
+			[
+				{ path: "docs/page.md", text },
+				{ path: "docs/ja/page.md", text },
+			],
 			never,
 		);
 		expect(errors).toEqual([]);
@@ -305,7 +303,10 @@ describe("checkDocs", () => {
 		for (const marker of ["```", "~~~"]) {
 			const text = `# Page\n\n-  a\n\n   ${marker}md\n   [example](./missing.md)\n   ${long}\n   ${marker}\n`;
 			const { errors, widthErrors } = checkDocs(
-				[{ path: "docs/ja/page.md", text }],
+				[
+					{ path: "docs/page.md", text },
+					{ path: "docs/ja/page.md", text },
+				],
 				never,
 			);
 			expect(errors).toEqual([]);
@@ -326,27 +327,17 @@ describe("checkDocs", () => {
 	it("外側パイプの無い表も幅の検査から除く", () => {
 		const long = "あ".repeat(51);
 		const text = en(`名前 | 説明\n--- | ---\n${long} | 値\n\n${long}`);
-		const { widthErrors } = checkDocs(
-			[{ path: "docs/ja/page.md", text }],
-			never,
-		);
+		const { widthErrors } = checkDocs([{ path: "docs/page.md", text }], never);
 		// The prose line after the table is still checked.
-		expect(widthErrors).toEqual([
-			`docs/ja/page.md:7: 102 columns (limit ${100})`,
-		]);
+		expect(widthErrors).toEqual([`docs/page.md:7: 102 columns (limit ${100})`]);
 	});
 
 	// A lone thematic break must not turn the paragraph above it into a table.
 	it("--- 単独の行は表の区切りとして扱わない", () => {
 		const long = `${"あ".repeat(50)} | x`;
 		const text = en(`${long}\n\n---`);
-		const { widthErrors } = checkDocs(
-			[{ path: "docs/ja/page.md", text }],
-			never,
-		);
-		expect(widthErrors).toEqual([
-			`docs/ja/page.md:3: 104 columns (limit ${100})`,
-		]);
+		const { widthErrors } = checkDocs([{ path: "docs/page.md", text }], never);
+		expect(widthErrors).toEqual([`docs/page.md:3: 104 columns (limit ${100})`]);
 	});
 
 	it("docs の外のファイルは幅を検査しない", () => {
@@ -355,5 +346,65 @@ describe("checkDocs", () => {
 			never,
 		);
 		expect(widthErrors).toEqual([]);
+	});
+
+	// Japanese pages are written one sentence per line, so the column budget
+	// does not apply to them.
+	it("日本語ページは幅を検査しない", () => {
+		const long = `${"あ".repeat(80)}を書きます。`;
+		for (const path of ["README.ja.md", "docs/ja/page.md"]) {
+			const { errors, widthErrors } = checkDocs(
+				[{ path, text: en(long) }],
+				never,
+			);
+			expect(errors).toEqual([]);
+			expect(widthErrors).toEqual([]);
+		}
+	});
+
+	it("日本語ページで 1 行に 2 文以上あれば報告する", () => {
+		const { errors } = checkDocs(
+			[{ path: "docs/ja/page.md", text: en("一文目です。二文目です。") }],
+			never,
+		);
+		expect(errors).toEqual(["docs/ja/page.md:3: 2 sentences on one line"]);
+	});
+
+	it("箇条書きの行も 1 文ごとに検査する", () => {
+		const { errors } = checkDocs(
+			[{ path: "docs/ja/page.md", text: en("- 一文目です。二文目です。") }],
+			never,
+		);
+		expect(errors).toEqual(["docs/ja/page.md:3: 2 sentences on one line"]);
+	});
+
+	// A break there would render as a space, so the two sentences have to stay
+	// on one line.
+	it("「。」の次が ASCII なら分割点として扱わない", () => {
+		const { errors } = checkDocs(
+			[
+				{
+					path: "docs/ja/page.md",
+					text: en("一文目です。`yosegi` を実行します。"),
+				},
+			],
+			never,
+		);
+		expect(errors).toEqual([]);
+	});
+
+	it("括弧やインラインコードの中の「。」では分割しない", () => {
+		const text = en(
+			"外側です（内側です。まだ括弧の中です）。\n\n`a。b` を含む一文です。",
+		);
+		const { errors } = checkDocs([{ path: "docs/ja/page.md", text }], never);
+		expect(errors).toEqual([]);
+	});
+
+	it("表・コードブロック・front matter は文の検査からも除く", () => {
+		const two = "一文目です。二文目です。";
+		const text = `---\ntagline: ${two}\n---\n\n| ${two} |\n\n\`\`\`sh\n# ${two}\n\`\`\`\n`;
+		const { errors } = checkDocs([{ path: "docs/ja/page.md", text }], never);
+		expect(errors).toEqual([]);
 	});
 });

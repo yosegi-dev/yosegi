@@ -6,16 +6,16 @@ import { fileURLToPath } from "node:url";
 // `bun run check:docs`. This is the executable form of the checklist in
 // docs/conventions.md: relative links and anchors must resolve, every English
 // page must have a Japanese twin with as many headings and table rows and with
-// fences whose content matches (translated comments aside), and lines must
-// stay within the 100-column budget counted in East Asian character width
-// (tables, code blocks, and front matter are exempt — they cannot always be
-// wrapped).
+// fences whose content matches (translated comments aside), English lines must
+// stay within the 100-column budget counted in East Asian character width, and
+// a Japanese line must hold one sentence (tables, code blocks, and front matter
+// are exempt from both — they cannot always be wrapped).
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const WIDTH_LIMIT = 100;
 
-// Every page is wrapped within the budget, so an over-long line fails the
-// check the same way a broken link does.
+// Every English page is wrapped within the budget, so an over-long line fails
+// the check the same way a broken link does.
 export const WIDTH_VIOLATIONS_FAIL = true;
 
 export type DocFile = {
@@ -49,13 +49,59 @@ const WIDE_RANGES: ReadonlyArray<readonly [number, number]> = [
 	[0x30000, 0x3fffd],
 ];
 
+function isWide(ch: string): boolean {
+	if (ch === "") return false;
+	const cp = ch.codePointAt(0) as number;
+	return WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi);
+}
+
 export function eastAsianWidth(line: string): number {
 	let width = 0;
 	for (const ch of line) {
-		const cp = ch.codePointAt(0) as number;
-		width += WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
+		width += isWide(ch) ? 2 : 1;
 	}
 	return width;
+}
+
+const OPENERS = "「『（【〔《〈［([";
+const CLOSERS = "」』）】〕》〉］)]";
+
+// Where a Japanese line may be broken: after 「。」, unless the stop sits inside
+// inline code or inside a quote or bracket pair, or the next character is not
+// East Asian wide. That last case is left joined because breaking there would
+// change the rendered sentence — a soft line break between two wide characters
+// is removed, while one next to an ASCII character collapses to a space.
+export function sentences(line: string): string[] {
+	const chars = [...line];
+	const out: string[] = [];
+	let start = 0;
+	let depth = 0;
+	// Length of the backtick run that opened the current code span, or 0.
+	let span = 0;
+	let i = 0;
+	while (i < chars.length) {
+		const ch = chars[i] as string;
+		if (ch === "`") {
+			let run = 0;
+			while (chars[i + run] === "`") run++;
+			if (span === 0) span = run;
+			else if (span === run) span = 0;
+			i += run;
+			continue;
+		}
+		if (span === 0) {
+			if (OPENERS.includes(ch)) depth++;
+			else if (CLOSERS.includes(ch)) depth = Math.max(0, depth - 1);
+			else if (ch === "。" && depth === 0 && isWide(chars[i + 1] ?? "")) {
+				out.push(chars.slice(start, i + 1).join(""));
+				start = i + 1;
+			}
+		}
+		i++;
+	}
+	const tail = chars.slice(start).join("");
+	if (tail !== "") out.push(tail);
+	return out;
 }
 
 // The GitHub-style slug the docs link against: lowercase, punctuation dropped,
@@ -183,10 +229,18 @@ function twinPath(path: string): string | null {
 	return match ? `docs/ja/${match[1]}` : null;
 }
 
+function isJapanesePage(path: string): boolean {
+	return path === "README.ja.md" || path.startsWith("docs/ja/");
+}
+
+// Japanese pages are exempt from the column budget: their convention is one
+// sentence per line, whatever that line's width. Counting a full-width
+// character as two columns left about 50 characters, which broke nearly every
+// sentence in the middle and made the source and its diffs hard to read.
+// `sentences` holds them to the convention the budget no longer does.
 function isWidthChecked(path: string): boolean {
-	return (
-		path === "README.md" || path === "README.ja.md" || path.startsWith("docs/")
-	);
+	if (isJapanesePage(path)) return false;
+	return path === "README.md" || path.startsWith("docs/");
 }
 
 // A GFM delimiter row: cells of `:?-+:?` separated by pipes, with the outer
@@ -200,9 +254,10 @@ function isDelimiterRow(line: string): boolean {
 	);
 }
 
-// Lines exempt from the width limit: front matter (VitePress reads it, humans
-// do not), table rows (their width is the table's business), and fenced code.
-function widthCheckedLines(text: string): Array<[number, string]> {
+// The prose lines, the ones both the width limit and the one-sentence rule
+// apply to. Exempt: front matter (VitePress reads it, humans do not), table
+// rows (their width is the table's business), and fenced code.
+function proseLines(text: string): Array<[number, string]> {
 	const lines = text.split("\n");
 	let start = 0;
 	if (lines[0] === "---") {
@@ -348,8 +403,19 @@ export function checkDocs(
 	}
 
 	for (const file of files) {
+		if (isJapanesePage(file.path)) {
+			for (const [lineNumber, line] of proseLines(file.text)) {
+				const parts = sentences(line);
+				if (parts.length > 1) {
+					errors.push(
+						`${file.path}:${lineNumber}: ${parts.length} sentences on one line`,
+					);
+				}
+			}
+			continue;
+		}
 		if (!isWidthChecked(file.path)) continue;
-		for (const [lineNumber, line] of widthCheckedLines(file.text)) {
+		for (const [lineNumber, line] of proseLines(file.text)) {
 			const width = eastAsianWidth(line);
 			if (width > WIDTH_LIMIT) {
 				widthErrors.push(
