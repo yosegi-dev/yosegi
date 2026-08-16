@@ -75,6 +75,7 @@ Storybook 10.5 の `storybook build` は Component Manifest（`/manifests/compon
 カタログはホストが書く宣言で、上の設定ファイルの `examples` セクションに置きます。
 1 件ごとに key・label・description・`templatePath`・`componentName` を持ちます。
 title の namespace（`Examples/*`）に置いた Story がプレビューを兼ねるため、キュレーションが既に読んでいる `storyFile` を通じて機械的に検出する余地も残ります。
+PoC がこの宣言を読むのは `--catalog <path>` か `<data-dir>/examples.json` からで、設定ファイルへの載せ替えが残っています。
 
 これが効くのは、構築による正しさです。
 新しい画面の骨格・状態管理・デザインシステムの慣用は、ゼロから生成されるのではなく、レビュー済みのコードから受け継がれます。
@@ -206,14 +207,16 @@ npm でも pnpm でも警告は出ません。
 
 一方で失うものは実在します。
 エイリアスを持たない素の 7 のホストでは `npm install` が `ERESOLVE` で失敗し、optional な peer にしても回避できません。
-pnpm と bun ではインストールは通りますが、実行時に生の `TypeError` でクラッシュします。
-遅延ロードしているのは `docgen.ts` だけで、5 つのモジュールがトップレベルで `typescript` を import しているためです。
+pnpm と bun ではインストールは通りますが、コンパイラに到達するコマンドを最初に実行した時点で失敗します。
 そして同じホストは現状の `dependencies` なら動いています。
 pnpm の isolated なレイアウトが Yosegi 自身の 6 系を与えるからです。
 つまりこの変更は、今動いているホストを壊します。
 
-再訪するのは、それらのトップレベルの `import * as ts` が遅延化された後です。
-これは別途進めており、コンパイラ API が欠けている場合に生の `TypeError` ではなく `docgen.ts` が既に出しているエラーを出すようにするものです。
+再訪の前提としていた遅延ロードは完了しました。
+ホストの型を読むモジュールはいずれも `import type` で名前空間を import し、`loadTypeScript()` を呼びます。
+そのため、コンパイラ API が欠けている場合は生の `TypeError` ではなく `docgen.ts` が出すのと同じ対処方法つきのメッセージが出ます。
+改善したのは失敗の出方であって、結論ではありません。
+判断を決めたのは `ERESOLVE` と、今動いている pnpm のホストであり、どちらも変わっていません。
 
 ### `@yosegi/core` とファイルシステム
 

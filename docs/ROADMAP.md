@@ -89,7 +89,9 @@ goes, rewrites the component identifiers, and leaves a comment naming what it ca
 The catalog is a declaration the host writes, in the `examples` section of the config file above:
 per entry a key, a label, a description, a `templatePath`, and a `componentName`. A Story under a
 title namespace (`Examples/*`) doubles as the preview, which leaves room to detect entries
-mechanically through the same `storyFile` that curation already reads.
+mechanically through the same `storyFile` that curation already reads. The PoC reads that
+declaration from `--catalog <path>` or from `<data-dir>/examples.json`; moving it onto the config
+file is what is left.
 
 What it buys is correctness by construction. A new screen's skeleton, its state management, and the
 design system's idioms are inherited from reviewed code rather than generated from nothing, so the
@@ -251,13 +253,15 @@ pulls the real compiler in through `@typescript/old: npm:typescript@^6`, so the 
 way.
 
 What it costs is real. A host on plain 7 with no alias fails `npm install` with `ERESOLVE`, which an
-optional peer does not avoid; pnpm and bun install and then crash at runtime with a bare
-`TypeError`, because only `docgen.ts` defers its load while five modules import `typescript` at the
-top level. That same host works today under `dependencies` — pnpm's isolated layout gives Yosegi its
-own 6.x — so the change breaks a host that currently runs.
+optional peer does not avoid; pnpm and bun install and then fail the first time a command reaches
+the compiler. That same host works today under `dependencies` — pnpm's isolated layout gives Yosegi
+its own 6.x — so the change breaks a host that currently runs.
 
-Revisit it once those top-level `import * as ts` are lazy, which is being done separately so that a
-missing compiler API raises the error `docgen.ts` already raises instead of a bare `TypeError`.
+The lazy load this was to be revisited after has landed. Every module that reads the host's types
+imports the namespace with `import type` and calls `loadTypeScript()`, so a missing compiler API
+raises the fix-it message `docgen.ts` prints rather than a bare `TypeError`. That improved the
+failure, not the verdict: the `ERESOLVE` and the pnpm host that runs today are what decided this,
+and both stand.
 
 ### `@yosegi/core` and the filesystem
 
