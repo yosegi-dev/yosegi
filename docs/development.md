@@ -221,8 +221,10 @@ None of this can be done from the repository; it needs an npm account with right
 3. On a minor or larger release (`x.y.0`), once the publish is through, measure the released version
    with the benchmark harness ([`yosegi-benchmark`](https://github.com/yosegi-dev/yosegi-benchmark))
    and commit the results there. The measurement is the full
-   [68-implementation run](./benchmark.md), so a patch release skips it. Tag that repository with
-   the same tag name, so a set of numbers names the version it measured:
+   [68-implementation run](./benchmark.md), so a patch release skips it. Follow
+   ["Running it"](https://github.com/yosegi-dev/yosegi-benchmark#running-it) there for the commands
+   — the arms in the middle are agent-driven, so the run is a procedure rather than a command. Tag
+   that repository with the same tag name, so a set of numbers names the version it measured:
 
    ```sh
    git tag v0.2.0            # in the yosegi-benchmark repository
