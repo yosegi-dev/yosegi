@@ -30,7 +30,8 @@ links there.
 - Cut any sentence that does not change what the reader does next.
 - No connective filler, no "as mentioned above", no paragraph restating the previous one.
 - Prefer a table to a list, and a list to a paragraph.
-- Wrap at 100 columns.
+- Wrap English at 100 columns. A Japanese line carries one sentence, however long, and is never
+  broken in the middle of one.
 
 ## Command examples
 
@@ -111,7 +112,8 @@ Reviewing a Japanese page against its English source, check that the translation
 - translates headings in full, conditions included.
 - renders the same English sentence identically wherever it appears across pages.
 - introduces no translation the terminology table does not list.
-- is re-wrapped at 100 columns counted in East Asian character width after translating.
+- is laid out one sentence per line after translating. The break goes after 「。」, except where the
+  next character is ASCII — a break there renders as a space.
 - does not copy an English em dash (—) as 「——」; parentheses or a sentence split take its place.
 
 ## Anonymity
@@ -142,8 +144,9 @@ node <repo>/packages/server/bin/yosegi.js registry build \
 
 Then, from the repository root, check that links and anchors resolve, that the twins line up —
 headings and table rows in matching numbers, fences matching in content with translated comments
-set aside — and that lines stay within 100 columns counted in East Asian character width (tables,
-code blocks, and front matter are exempt):
+set aside — and that the lines are laid out: English within 100 columns counted in East Asian
+character width, Japanese one sentence each (tables, code blocks, and front matter are exempt from
+both):
 
 ```sh
 bun run check:docs
