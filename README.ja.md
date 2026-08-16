@@ -127,6 +127,7 @@ cp -R node_modules/@yosegi/yosegi/skills/yosegi .claude/skills/
 | [Storybook MCP と Yosegi](./docs/ja/storybook-mcp.md) | 公式 Storybook MCP との重なりと棲み分け |
 | [Screen JSON](./docs/ja/screen-json.md) | コンポーネント id、合成プリミティブ、bindings / events |
 | [CLI リファレンス](./docs/ja/cli.md) | 全コマンドとフラグ、および MCP ツール |
+| [設定ファイル](./docs/ja/configuration.md) | `yosegi.config.json` の探索・スキーマ・優先順位 |
 | [開発](./docs/ja/development.md) | パッケージ構成、ビルド、公開前検証 |
 | [ロードマップ](./docs/ja/ROADMAP.md) | 予定している作業と未決の論点 |
 | [Component Registry](./docs/ja/registry.md) | 型がカタログになる仕組みと実測 |

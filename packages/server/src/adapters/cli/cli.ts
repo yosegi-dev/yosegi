@@ -44,6 +44,12 @@ import { parseMetaTemplate } from "../../emit/meta-template.ts";
 import { applyExample } from "../../examples/apply.ts";
 import { loadExampleCatalog, requireExample } from "../../examples/catalog.ts";
 import {
+	HOST_CONFIG_FILENAME,
+	type HostConfigDefaults,
+	hostConfigDefaults,
+	loadHostConfig,
+} from "../../host-config.ts";
+import {
 	importStory,
 	type StoryImportWarning,
 } from "../../importer/story-importer.ts";
@@ -191,7 +197,7 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
 };
 
 // Accepted by every command.
-const COMMON_FLAGS = ["data-dir"];
+const COMMON_FLAGS = ["data-dir", "config"];
 
 // Synonyms the edit-distance matcher can't reach (--search is nowhere near --query).
 // Only suggested when the target flag exists on the command at hand.
@@ -295,14 +301,18 @@ function checkFlags(command: string, flags: CliFlags): number | null {
 }
 
 // The base directory used to resolve --source globs and component id module paths.
-// Defaults to the directory containing --tsconfig (i.e. the host's package root); cwd is
+// Defaults to the directory containing the tsconfig (i.e. the host's package root); cwd is
 // never used as the base. Centralized here so registry build / registry metadata share the rule.
-function resolveProjectRoot(flags: CliFlags): string | null {
+// tsconfigPath is passed in already resolved through the flag / config precedence chain, so
+// a config-supplied tsconfig moves the project root with it.
+function resolveProjectRoot(
+	flags: CliFlags,
+	tsconfigPath: string | undefined,
+): string | null {
 	const explicit = flagString(flags, "project-root");
 	if (explicit) {
 		return resolve(explicit);
 	}
-	const tsconfigPath = flagString(flags, "tsconfig");
 	return tsconfigPath ? dirname(resolve(tsconfigPath)) : null;
 }
 
@@ -558,6 +568,7 @@ async function generateStory(
 	screenFile: string | undefined,
 	flags: CliFlags,
 	dataDir: string,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	if (screenFile === undefined) {
 		return missingArgument(
@@ -583,13 +594,25 @@ async function generateStory(
 		print(errors);
 		return 1;
 	}
-	const importMap = flagString(flags, "import-map");
+	const importMap =
+		flagString(flags, "import-map") ?? defaults.importMap ?? undefined;
 	const resolveImport = importMap
 		? buildImportMapResolver(importMap)
 		: undefined;
 	// The host's meta conventions (tags / parameters / design-reference JSDoc) are carried
 	// over from the template. Anything not carried over, or that looks suspect, is warned about.
-	const metaTemplatePath = flagString(flags, "meta-template");
+	// A meta template only exists on the CSF target. An explicit --meta-template with
+	// --target component is rejected outright by resolveGenerateTarget above; a config
+	// default is not an error — a project-wide setting cannot know which target a given run
+	// picks — but it is skipped out loud rather than silently.
+	const configMetaTemplateSkipped =
+		target === "component" && defaults.metaTemplate !== null;
+	const metaTemplatePath =
+		target === "component"
+			? undefined
+			: (flagString(flags, "meta-template") ??
+				defaults.metaTemplate ??
+				undefined);
 	const metaTemplate = metaTemplatePath
 		? parseMetaTemplate(
 				await readFile(metaTemplatePath, "utf8"),
@@ -627,6 +650,11 @@ async function generateStory(
 	for (const warning of metaTemplate?.warnings ?? []) {
 		print(`Warning: ${warning}`);
 	}
+	if (configMetaTemplateSkipped) {
+		print(
+			`Note: ${HOST_CONFIG_FILENAME}'s emit.metaTemplate was not applied — --target component writes a file with no Story meta.`,
+		);
+	}
 	return 0;
 }
 
@@ -644,7 +672,7 @@ async function generateMetadata(
 		);
 	}
 	// Both the glob and the id's module path are resolved with the same base as registry build.
-	const projectRoot = resolveProjectRoot(flags);
+	const projectRoot = resolveProjectRoot(flags, flagString(flags, "tsconfig"));
 	if (!projectRoot) {
 		throw new ComposerError(
 			SERVICE_CODES.INVALID_ARGUMENT,
@@ -1171,11 +1199,15 @@ async function registryStatus(
 // hash, so re-reading the host produces the same value as long as the content is the same —
 // it can't be used to judge freshness. Recording this lets component list print the
 // rebuild command directly.
+//
+// The values recorded are the ones the build actually ran with, so a default that came from
+// yosegi.config.json is written down exactly as a flag would have been. Otherwise the
+// rebuild line would only reproduce the build from a cwd where the same config is
+// discovered, and registry status would recompute from inputs the build never used.
 function withBuildProvenance(
 	registry: ComponentRegistry,
-	flags: CliFlags,
+	inputs: ResolvedBuildInputs,
 ): ComponentRegistry {
-	const sources = flagList(flags, "source");
 	return {
 		version: registry.version,
 		generatedAt: new Date().toISOString(),
@@ -1185,20 +1217,56 @@ function withBuildProvenance(
 		// Which checkout's CLI built it. Printed as-is in component list's header, so the
 		// reader doesn't have to guess which path the `yosegi` in the rebuild line refers to.
 		builtWithCliPath: yosegiCliPath(),
-		// Every flag that affects the content is recorded, so the rebuild can be reproduced
+		// Every input that affects the content is recorded, so the rebuild can be reproduced
 		// exactly. Dropping storybookUrl / version / projectRoot would make the rebuild line
 		// produce a different registry.
 		inputs: {
-			sources: sources.length > 0 ? sources : undefined,
-			tsconfig: flagString(flags, "tsconfig"),
-			projectRoot: flagString(flags, "project-root"),
-			index: flagString(flags, "index"),
-			storybookUrl: flagString(flags, "storybook-url"),
-			version: flagString(flags, "version"),
-			metadata: flagString(flags, "metadata"),
-			report: flagString(flags, "report"),
+			sources: inputs.sources.length > 0 ? inputs.sources : undefined,
+			tsconfig: inputs.tsconfig,
+			projectRoot: inputs.projectRoot,
+			index: inputs.index,
+			storybookUrl: inputs.storybookUrl,
+			version: inputs.version,
+			metadata: inputs.metadata,
+			report: inputs.report,
 		},
 		components: registry.components,
+	};
+}
+
+// Every registry build input after the flag / config / built-in precedence chain has been
+// applied. Resolved in one place so the build, the provenance record, and the error messages
+// can never disagree about which value was actually used.
+type ResolvedBuildInputs = {
+	sources: string[];
+	tsconfig: string | undefined;
+	projectRoot: string | undefined;
+	index: string | undefined;
+	storybookUrl: string | undefined;
+	version: string | undefined;
+	metadata: string | undefined;
+	report: string | undefined;
+	importMap: string | undefined;
+};
+
+function resolveBuildInputs(
+	flags: CliFlags,
+	defaults: HostConfigDefaults,
+): ResolvedBuildInputs {
+	const sources = flagList(flags, "source");
+	return {
+		// A --source on the command line replaces the config's list rather than adding to
+		// it: the two are alternative answers to "which files is this registry built from",
+		// and merging them would make narrowing a build to one glob impossible.
+		sources: sources.length > 0 ? sources : defaults.registrySources,
+		tsconfig: flagString(flags, "tsconfig") ?? defaults.tsconfig ?? undefined,
+		projectRoot: flagString(flags, "project-root"),
+		index: flagString(flags, "index"),
+		storybookUrl: flagString(flags, "storybook-url"),
+		version: flagString(flags, "version"),
+		metadata: flagString(flags, "metadata") ?? defaults.metadata ?? undefined,
+		report: flagString(flags, "report"),
+		importMap: flagString(flags, "import-map"),
 	};
 }
 
@@ -1208,20 +1276,24 @@ function withBuildProvenance(
 // truth. Combined with --index, components that have a Story get a category and a
 // recommendation flag (curation). Without --source, the registry is assembled from
 // index.json alone, as before.
-async function buildRegistry(flags: CliFlags): Promise<void> {
-	const dataDir = flagString(flags, "data-dir") ?? DEFAULT_DATA_DIR;
+async function buildRegistry(
+	flags: CliFlags,
+	dataDir: string,
+	defaults: HostConfigDefaults,
+): Promise<void> {
+	const inputs = resolveBuildInputs(flags, defaults);
 	const out = flagString(flags, "out") ?? registryPath(dataDir);
 	// The output destination is auto-created, same as screen generate. Otherwise an agent
 	// would have to remember to insert an mkdir step just to pass a fresh --data-dir tmp/yosegi.
 	await mkdir(dirname(out), { recursive: true });
-	const storybookBaseUrl = flagString(flags, "storybook-url");
-	const version = flagString(flags, "version");
-	const sources = flagList(flags, "source");
-	const indexFlag = flagString(flags, "index");
+	const storybookBaseUrl = inputs.storybookUrl;
+	const version = inputs.version;
+	const sources = inputs.sources;
+	const indexFlag = inputs.index;
 	// --metadata applies through either the --source or the --index path. If one path
 	// silently ignored it, the result would be "I meant to supplement this but it had no
 	// effect", so the load happens before the branch.
-	const metadataPath = flagString(flags, "metadata");
+	const metadataPath = inputs.metadata;
 	const metadata: Record<string, ComposerMetadata> | undefined = metadataPath
 		? z
 				.record(z.string(), composerMetadataSchema)
@@ -1229,19 +1301,19 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		: undefined;
 
 	if (sources.length > 0) {
-		const tsconfigPath = flagString(flags, "tsconfig");
+		const tsconfigPath = inputs.tsconfig;
 		if (!tsconfigPath) {
 			// INVALID_ARGUMENT rather than a bare Error: the caller can fix the invocation,
 			// so it must not read as an internal failure.
 			throw new ComposerError(
 				SERVICE_CODES.INVALID_ARGUMENT,
-				"--source requires --tsconfig <path>.",
+				`--source requires --tsconfig <path>, or a registry.tsconfig in ${HOST_CONFIG_FILENAME}.`,
 			);
 		}
 		// The base for globs and ids. Defaults to the directory containing tsconfig (i.e.
 		// the host's package root) when unspecified.
 		const projectRoot =
-			resolveProjectRoot(flags) ?? dirname(resolve(tsconfigPath));
+			resolveProjectRoot(flags, tsconfigPath) ?? dirname(resolve(tsconfigPath));
 		const index = indexFlag
 			? storybookIndexSchema.parse(
 					await readStorybookIndex(indexFlag, {
@@ -1253,7 +1325,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		// Defaults to resolving via tsconfig's paths. Hosts whose aliases live outside
 		// tsconfig can spell them out with --import-map (same format as screen generate's
 		// flag of the same name).
-		const importMap = flagString(flags, "import-map");
+		const importMap = inputs.importMap;
 		const {
 			registry: built,
 			stats,
@@ -1271,7 +1343,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 			metadata,
 			importMap: importMap ? buildImportMapResolver(importMap) : undefined,
 		});
-		const registry = withBuildProvenance(built, flags);
+		const registry = withBuildProvenance(built, inputs);
 		await writeFile(out, `${JSON.stringify(registry, null, "\t")}\n`);
 		const warnings: string[] = [];
 		const hints: string[] = [];
@@ -1325,7 +1397,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 			);
 		}
 		// Don't drop what couldn't be extracted silently; let --report surface the breakdown.
-		const reportPath = flagString(flags, "report");
+		const reportPath = inputs.report;
 		if (reportPath) {
 			await mkdir(dirname(reportPath), { recursive: true });
 			const undocumented = collectUndocumentedProps(registry.components);
@@ -1381,7 +1453,7 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 			metadata,
 		}),
 		// Record the default path too, as "what this was built from", even when --index was omitted.
-		{ ...flags, index: indexPath },
+		{ ...inputs, index: indexPath },
 	);
 	await writeFile(out, `${JSON.stringify(registry, null, "\t")}\n`);
 	if (flagBoolean(flags, "json")) {
@@ -1413,7 +1485,6 @@ export async function runCli(argv: string[]): Promise<number> {
 	}
 	const { positionals, flags } = parseArgs(argv);
 	const [group, action, ...rest] = positionals;
-	const dataDir = flagString(flags, "data-dir") ?? DEFAULT_DATA_DIR;
 
 	if (positionals.length === 0) {
 		// Only a bare "yosegi --version" reaches here — with a command present, --version
@@ -1443,6 +1514,16 @@ export async function runCli(argv: string[]): Promise<number> {
 	}
 
 	try {
+		// Read inside the try so a broken config comes back as the same coded JSON envelope
+		// every other failure uses. It is plain JSON, so this stays available on a host
+		// without the TypeScript compiler API — the commands that need no compiler must not
+		// start needing one just to learn their defaults.
+		const defaults = hostConfigDefaults(
+			await loadHostConfig({ explicitPath: flagString(flags, "config") }),
+		);
+		const dataDir =
+			flagString(flags, "data-dir") ?? defaults.dataDir ?? DEFAULT_DATA_DIR;
+
 		// The MCP server doesn't return until the connection closes. The import is kept
 		// inside this branch so a single CLI invocation doesn't also load the MCP SDK
 		// (the same reason bin/yosegi.js isn't started via exports).
@@ -1453,7 +1534,7 @@ export async function runCli(argv: string[]): Promise<number> {
 		}
 
 		if (group === "registry" && action === "build") {
-			await buildRegistry(flags);
+			await buildRegistry(flags, dataDir, defaults);
 			return 0;
 		}
 
@@ -1485,7 +1566,7 @@ export async function runCli(argv: string[]): Promise<number> {
 		// a file), so this branch comes first, letting them work with just --registry even
 		// without a data/registry.json.
 		if (group === "screen" && action === "generate") {
-			return await generateStory(rest[0], flags, dataDir);
+			return await generateStory(rest[0], flags, dataDir, defaults);
 		}
 
 		if (group === "screen" && action === "context") {
@@ -1676,7 +1757,13 @@ function usage(): string {
 		"      Serve the MCP tools over stdio, and keep running until the client disconnects.",
 		"      Register it with: claude mcp add yosegi -- npx yosegi mcp",
 		"",
-		"  common: --data-dir <dir>",
+		"  common: --data-dir <dir> [--config <path>]",
+		`      --config points at a ${HOST_CONFIG_FILENAME}. Without it, one is searched for from the`,
+		"      cwd upwards; running without one is fine. It supplies defaults for --data-dir, for",
+		"      registry build's --source / --tsconfig / --metadata, and for screen generate's",
+		"      --import-map / --meta-template. A flag always wins over the file, and paths inside it",
+		"      are read against the file's own directory (--source globs excepted: those keep their",
+		"      --project-root base).",
 		"",
 		"  --help / -h   Print this list and exit 0.",
 		'  --version     Print { "version", "cliPath" } as JSON and exit 0.',

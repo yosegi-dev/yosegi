@@ -90,6 +90,13 @@ export const SERVICE_CODES = {
 	// A structurally valid invocation whose argument combination is unusable
 	// (e.g. --source without --tsconfig). Not INTERNAL_ERROR: the caller can fix it.
 	INVALID_ARGUMENT: "INVALID_ARGUMENT",
+	// An explicitly named host config file that isn't there. Only reachable when the path
+	// was spelled out, since discovery treats "no config anywhere" as "run without one".
+	CONFIG_NOT_FOUND: "CONFIG_NOT_FOUND",
+	// A host config file that could be found but not used: unparsable JSON, a value of the
+	// wrong type, or a key the schema doesn't know. Never downgraded to a warning — a
+	// silently ignored key is a default the caller believes is in effect but isn't.
+	CONFIG_INVALID: "CONFIG_INVALID",
 	SCREEN_ALREADY_EXISTS: "SCREEN_ALREADY_EXISTS",
 	REVISION_CONFLICT: "REVISION_CONFLICT",
 	VALIDATION_FAILED: "VALIDATION_FAILED",
