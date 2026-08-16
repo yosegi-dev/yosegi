@@ -59,8 +59,9 @@ What you review and what you implement are the same components.
 - You find out early when the existing components are not enough, as a request against the design
   system rather than a surprise during implementation.
 
-Figma still owns new visual design. What Yosegi covers is showing a screen that can be built from
-the components you already have.
+Figma still owns new visual design, and Figma's own MCP reaches into existing code through Code
+Connect, so this is not a choice between the two. What Yosegi covers is showing a screen that can be
+built from the components you already have, validated against the registry before any JSX exists.
 
 ## Upstream — assembling a Story
 

@@ -54,10 +54,10 @@ hand — see [Patterns that do not extract cleanly](#patterns-that-do-not-extrac
 ## How it works
 
 Type extraction uses
-[react-docgen-typescript](https://github.com/styleguidist/react-docgen-typescript), the same
-implementation Storybook uses to generate argTypes, so the registry is unlikely to diverge from how
-things look in the host's Storybook. Since `@yosegi/core` is kept zod-only, type extraction lives in
-`@yosegi/yosegi`.
+[react-docgen-typescript](https://github.com/styleguidist/react-docgen-typescript). Storybook can be
+pointed at that same implementation, and on a host that points at it the registry is unlikely to
+diverge from how things look in the host's Storybook; on a host that reads props some other way, the
+two can differ. Since `@yosegi/core` is kept zod-only, type extraction lives in `@yosegi/yosegi`.
 
 ### Hosts on TypeScript 7
 
