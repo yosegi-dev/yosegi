@@ -135,6 +135,12 @@ reviews:
         - A step is a command block plus one line of purpose. Cut any sentence that does not change
           what the reader does next. Wrap an English page at 100 columns. A Japanese page has no
           width limit at all — see the `docs/ja/**` instruction below and never raise width there.
+        - That 100 is display columns, never bytes and never UTF-8 code units. Only East Asian Wide
+          and Fullwidth characters count 2; everything else counts 1, an em dash (U+2014, three
+          bytes in UTF-8) included. Counting bytes has twice reported a line that fits as over
+          budget. `eastAsianWidth` in `scripts/check-docs.ts` is what decides, `bun run check:docs`
+          runs it, and CI runs that on every push — so before raising width, count the line that
+          way and cite the number.
         - Package managers are stacked npm / pnpm / yarn / bun, in that order, and globs are quoted.
         - Every `docs/x.md` has a `docs/ja/x.md` twin, and `README.md` has `README.ja.md`, changed
           in the same commit with the same headings, code blocks, and tables. Flag an English-only
