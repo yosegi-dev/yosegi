@@ -57,6 +57,57 @@ user.
   (`UNKNOWN_COMMAND` / `UNKNOWN_FLAG` — a misspelled flag is never silently ignored), and a missing
   required argument returns `MISSING_ARGUMENT`. Usage text appears via `--help` (`-h`, exit 0) and on
   a bare `yosegi` (exit 1); `--version` prints `{ "version", "cliPath" }` with exit 0.
+- `--config <path>` names a `yosegi.config.json`, which can supply some of the flags above as
+  defaults. Every command accepts it. See below.
+
+### `yosegi.config.json`
+
+The host may keep its paths in a `yosegi.config.json`, so they do not have to be spelled out on
+every invocation. **Check whether the host has one before assembling a long command by hand** —
+its `registry.source` and `registry.tsconfig` are the two hardest values to get right, and a host
+that committed them has already answered them for you.
+
+```json
+{
+  "dataDir": ".yosegi",
+  "registry": {
+    "source": ["app/components/**/*.tsx"],
+    "tsconfig": "./tsconfig.json",
+    "metadata": "./tools/yosegi-metadata.json"
+  },
+  "emit": {
+    "importMap": ["./app=~"],
+    "metaTemplate": "./.storybook/screen-meta.tsx"
+  }
+}
+```
+
+- **Discovery.** Without `--config`, the file is searched for from the current directory upwards to
+  the filesystem root, the way tsconfig resolution works. The nearest one wins. Finding none is not
+  an error — flags alone remain a complete invocation, and every command in this reference works
+  without a config. `--config <path>` names one outright and skips the search.
+- **What it supplies.** `dataDir` for `--data-dir` on every command; `registry.source` /
+  `registry.tsconfig` / `registry.metadata` for `registry build`; `emit.importMap` /
+  `emit.metaTemplate` for `screen generate`. Every key is optional. `emit.importMap` is an array of
+  the same `<from>=<to>` entries `--import-map` takes as one comma-separated string.
+- **Precedence.** A flag beats the file, and the file beats the built-in default. Nothing merges: a
+  `--source` on the command line replaces the config's list rather than adding to it. Keep passing
+  `--data-dir` explicitly as this reference shows — an explicit flag wins either way, so it stays
+  correct whether or not the host has a config.
+- **Paths inside it** resolve against the file's own directory, never your cwd, so one committed
+  config means the same thing from anywhere in the host. `registry.source` globs are the single
+  exception: they keep their `--project-root` base, which is also the base component ids are derived
+  from.
+- **Typos are rejected, not ignored.** An unknown key fails the command with `CONFIG_INVALID` and a
+  did-you-mean, as does unparsable JSON or a value of the wrong type; a `--config` naming a file
+  that does not exist fails with `CONFIG_NOT_FOUND` (`errors.md`). A broken config also stops the
+  upward search rather than being climbed past, so the error always names the file you wrote.
+- `registry build` records the values that actually won in the registry's `inputs`, so the
+  `rebuild:` line in `component list` stays runnable whether they came from flags or from the
+  config.
+- `emit.metaTemplate` does not apply to `screen generate --target component`, which writes a file
+  with no Story meta. That is a skip with a `Note:`, not an error — unlike an explicit
+  `--meta-template`, which is still rejected there.
 
 ## `registry build`
 

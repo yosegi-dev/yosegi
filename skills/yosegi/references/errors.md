@@ -12,6 +12,7 @@ at before fixing anything.
 4. **A command error** — `{ "error": { "code": "...", "message": "..." } }`, exit code 1. The
    command failed before or outside validation, and the code says how: `MISSING_ARGUMENT`,
    `UNKNOWN_COMMAND`, `UNKNOWN_FLAG`, `REGISTRY_NOT_FOUND`, `INVALID_ARGUMENT`, `INVALID_JSON`,
+   `CONFIG_INVALID` / `CONFIG_NOT_FOUND` from the host's `yosegi.config.json`,
    a lookup miss such as `COMPONENT_NOT_FOUND` / `SCREEN_NOT_FOUND`, `STORY_NOT_FOUND` /
    `RENDER_NOT_STATIC` from `story import`, or `INTERNAL_ERROR` for everything else. It is JSON
    with a `code`, so do not go looking for a bare `Error:` line. The table at the bottom of this
@@ -184,6 +185,8 @@ reached the screen. Every code is self-correcting from the payload alone:
 | `REGISTRY_NOT_FOUND` | No registry where the command looked; `path` and `dataDir` name the location consulted | Either you have not built one yet, or `--data-dir` differs from the one `registry build` wrote to. Check the second before rebuilding — the default (`.yosegi` under the cwd) moves with your working directory |
 | `INVALID_ARGUMENT` | The argument combination is unusable (e.g. `--source` without `--tsconfig`) | Fix the invocation as the message says |
 | `INVALID_JSON` | The file you passed is not valid JSON | Fix the file. The message says "Input file", not "Request body", on the CLI |
+| `CONFIG_INVALID` | The host's `yosegi.config.json` cannot be used: unparsable JSON, a value of the wrong type, a key the schema does not know, or a duplicate `examples` key. `path` names the file, `issues` carries the schema detail | Fix the file — an unknown key comes with a did-you-mean in `suggestion`. It is never downgraded to a warning, because a silently dropped key is a default you would believe is in effect. The schema is in `cli.md` |
+| `CONFIG_NOT_FOUND` | `--config` names a file that does not exist; `path` names it | Correct the path, or drop the flag and let discovery find one. Discovery finding nothing is *not* this error — it just means no config, and the flags stand on their own |
 | `COMPONENT_NOT_FOUND` | The id you passed to `component inspect` (or wrote in a screen operation) is not in the registry | Take the `suggestion` (did-you-mean over the registry). A short id (`Button`) may need the full `<module path>#<export>` form from `component list` |
 | `SCREEN_NOT_FOUND` | No saved screen has that id | List the saved screens (`yosegi screen list`) and use an id from there |
 | `SCREEN_ALREADY_EXISTS` | `screen push` with an id the store already has, without an update intent | Pull the stored screen, or pick a new id |
@@ -222,3 +225,4 @@ These carry no `code`, and every one of them appears alongside a *successful* ex
 | `Warning:` naming a URL inherited from `--meta-template` | A Figma or Notion link came along from the Story you built the template from | Check it and either remove or replace it. **Never leave a URL you have not verified** |
 | `Warning: Ignored "title" from the meta template ...` | `title` and `component` are not carried over; the screen decides them | Harmless. Remove them from the template if you want the warning to stop |
 | `Warning: Dropped the meta template import "<names>" ...` | The template imported something its carried-over meta never references | Harmless. Remove the unused import from the template to silence it |
+| `Note: yosegi.config.json's emit.metaTemplate was not applied ...` | `--target component` writes a file with no Story meta, so a config-supplied meta template has nowhere to go | Nothing to fix. An explicit `--meta-template` on that target is an `INVALID_ARGUMENT` instead; only the config default is skipped |
