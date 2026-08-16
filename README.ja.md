@@ -53,7 +53,7 @@ flowchart TD
 
 詳細は [`docs/ja/workflows.md`](./docs/ja/workflows.md)。
 
-Storybook 10.3 以降は公式の MCP サーバと Component Manifest を同梱します。Yosegi は競合ではなく補完関係にあり、棲み分けは [`docs/ja/storybook-mcp.md`](./docs/ja/storybook-mcp.md) にまとめています。
+Storybook 10.3 以降は公式の MCP サーバと Component Manifest を同梱します。Yosegi がどこで重なり、どこで重ならないかは [`docs/ja/storybook-mcp.md`](./docs/ja/storybook-mcp.md) にまとめています。
 
 ## インストール
 

@@ -61,8 +61,9 @@ with props read from types, deterministic output. See [`docs/registry.md`](./doc
 
 Details in [`docs/workflows.md`](./docs/workflows.md).
 
-Storybook 10.3+ ships an official MCP server and Component Manifest of its own. Yosegi complements
-them rather than competing; the split is in [`docs/storybook-mcp.md`](./docs/storybook-mcp.md).
+Storybook 10.3+ ships an official MCP server and Component Manifest of its own. Where Yosegi
+overlaps with them and where it does not is in
+[`docs/storybook-mcp.md`](./docs/storybook-mcp.md).
 
 ## Install
 

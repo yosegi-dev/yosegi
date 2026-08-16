@@ -44,7 +44,8 @@ props を型で表現できない少数のコンポーネントについては `
 
 ## 仕組み
 
-型の抽出には [react-docgen-typescript](https://github.com/styleguidist/react-docgen-typescript) を使います。Storybook が argTypes を生成するのと同じ実装なので、Registry の内容がホストの Storybook での見え方から乖離しにくくなります。`@yosegi/core` は zod のみに保つ方針なので、型抽出は `@yosegi/yosegi` に置いています。
+型の抽出には [react-docgen-typescript](https://github.com/styleguidist/react-docgen-typescript) を使います。Storybook も同じ実装を使うように設定でき、そう設定しているホストでは、Registry の内容がホストの Storybook での見え方から乖離しにくくなります。
+props を別の方法で読んでいるホストでは、両者がずれる場合もあります。`@yosegi/core` は zod のみに保つ方針なので、型抽出は `@yosegi/yosegi` に置いています。
 
 ### TypeScript 7 のホスト
 
