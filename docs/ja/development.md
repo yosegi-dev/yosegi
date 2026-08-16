@@ -109,11 +109,15 @@ tarball を作る手段は `bun run pack`（`scripts/pack.ts`）だけで、CI �
 この経路は `node-consumer` の CI ジョブが毎 push で通しているため、手でやるのはパッケージング自体を変更したときだけでかまいません。
 
 検証中のバージョンが npm に無い段階でもこの install が通るのは、tarball を両方渡しているからです。server の tarball は `@yosegi/core` を厳密なバージョンで要求しますが、npm は直接渡された引数を、まだそのバージョンを持たない npm レジストリより優先します。
-server の tarball だけを渡すと `ETARGET` で失敗し、`overrides` はその形のときだけの回避策です。npm 11 は直接渡したパッケージへの override を `EOVERRIDE` で拒否します。
+server の tarball だけを渡すと `ETARGET` で失敗します。
+その形を補うのが `overrides` です。
 
 ```json
 "overrides": { "@yosegi/core": "file:<tmp>/yosegi-core-0.1.0.tgz" }
 ```
+
+override を足すのはこの形のときだけにします。npm が既に直接の依存として持つパッケージへの override は、2 つの spec が完全に一致するときしか受け付けられません。
+また npm は tarball の引数をプロジェクトからの相対パスに書き換えるため、tarball を両方渡したうえで絶対パスの override を置くと `EOVERRIDE` で失敗します。
 
 そのうえで、作業用プロジェクト側で次を確認します。
 

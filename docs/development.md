@@ -133,12 +133,15 @@ it by hand is for when you are changing packaging itself.
 Passing both tarballs is what lets that install work before the version is on npm: the server
 tarball asks for `@yosegi/core` at an exact version, and npm takes a direct argument over the npm
 registry, which has no such version yet. The server tarball alone fails with `ETARGET`, and
-`overrides` is the way out of that shape alone — npm 11 rejects an override of a package that is
-also a direct argument, with `EOVERRIDE`:
+`overrides` is what covers that shape:
 
 ```json
 "overrides": { "@yosegi/core": "file:<tmp>/yosegi-core-0.1.0.tgz" }
 ```
+
+Keep the override to that shape. npm accepts an override of a package it already has as a direct
+dependency only when the two specs are identical, and it rewrites a tarball argument to a path
+relative to the project — so an absolute one alongside both tarballs fails with `EOVERRIDE`.
 
 Then confirm, in the scratch project:
 
