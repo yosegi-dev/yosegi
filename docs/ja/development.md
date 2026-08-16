@@ -182,7 +182,8 @@ tarball を作る手段は `bun run pack`（`scripts/pack.ts`）だけで、CI �
 
    ワークフローはまず lint / test / typecheck / build を回し、そのうえで core、続いて server を公開します。
    順序は重要で、server は core を厳密なバージョンで要求するため、2 つの publish の間に入った install は解決に失敗します。
-3. 公開が通ったら、ベンチマークハーネス（[`yosegi-benchmark`](https://github.com/yosegi-dev/yosegi-benchmark)）でそのバージョンを計測し、結果を同リポジトリにコミットします。
+3. minor 以上のリリース（`x.y.0`）では、公開が通ったあとにベンチマークハーネス（[`yosegi-benchmark`](https://github.com/yosegi-dev/yosegi-benchmark)）でそのバージョンを計測し、結果を同リポジトリにコミットします。
+   計測は [68 実装すべてを回すもの](./benchmark.md)なので、パッチリリースでは省略します。
    同リポジトリにも同じ名前のタグを打ちます。
    どの数値がどのバージョンのものかは、このタグで対応付けます。
 
