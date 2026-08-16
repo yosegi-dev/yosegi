@@ -97,6 +97,13 @@ export function screensDir(dataDir = DEFAULT_DATA_DIR): string {
 	return join(dataDir, "screens");
 }
 
+// The example-template catalog. Unlike registry.json this is hand-written by the host and
+// never generated, so it is only the default location — a host that keeps its catalog beside
+// the templates it lists points --catalog at that instead.
+export function examplesPath(dataDir = DEFAULT_DATA_DIR): string {
+	return join(dataDir, "examples.json");
+}
+
 // Loads data/registry.json. If it doesn't exist, explains how to generate it.
 export async function loadRegistry(dataDir = DEFAULT_DATA_DIR) {
 	const path = registryPath(dataDir);

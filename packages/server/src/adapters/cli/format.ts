@@ -10,6 +10,8 @@ import {
 	renderImportStatement,
 	resolveComponentSpecifier,
 } from "@yosegi/core/emit";
+import type { ApplyResult } from "../../examples/apply.ts";
+import type { LoadedCatalog } from "../../examples/catalog.ts";
 
 // Builds the default (text) output for component list / inspect.
 //
@@ -575,4 +577,63 @@ export function formatComponentInspect(manifest: ComponentManifest): string {
 	}
 
 	return lines.join("\n");
+}
+
+// The example-template commands' text output.
+//
+// list stays at two lines per entry — the key is the argument, and label/description are
+// what the choice is made on. Nothing else about a template can be summarized usefully
+// without reading it, so the entry stops there rather than guessing.
+export function formatExampleList(
+	catalog: LoadedCatalog,
+	options: { quiet?: boolean } = {},
+): string {
+	const head = options.quiet
+		? null
+		: `${catalog.examples.length} examples in ${catalog.path}`;
+	if (catalog.examples.length === 0) {
+		const note = `No examples in ${catalog.path}. Add entries under "examples".`;
+		return head ? `${head}\n\n${note}` : note;
+	}
+	const body = [
+		...catalog.examples.map((example) =>
+			[
+				`${example.key}  ${example.label}`,
+				`  ${example.description}`,
+				`  template: ${example.templatePath}`,
+			].join("\n"),
+		),
+		"",
+		"Copy one with: yosegi example apply <key> --name <ComponentName> --out <file.tsx>",
+	].join("\n");
+	return head ? `${head}\n\n${body}` : body;
+}
+
+// What apply prints after the copy. The survey is the point of it: the imports say what the
+// host has to provide, and the literals are the mock data to replace, both addressed by line
+// in the file just written so they can be opened directly.
+export function formatApplyResult(result: ApplyResult): string {
+	const lines = [`Wrote ${result.out} (from example "${result.key}")`];
+	if (result.nextSteps === null) {
+		return [...lines, ...result.warnings].join("\n");
+	}
+	const { imports, mockData } = result.nextSteps;
+	lines.push("", "Next steps:");
+	lines.push(
+		imports.length === 0
+			? "  imports: none"
+			: `  imports (${imports.length}) — confirm the host provides each:`,
+	);
+	for (const entry of imports) {
+		lines.push(`    ${entry.specifier}  (line ${entry.line})`);
+	}
+	lines.push(
+		mockData.length === 0
+			? "  inline data: none"
+			: `  inline data (${mockData.length}) — replace with real data:`,
+	);
+	for (const entry of mockData) {
+		lines.push(`    ${entry.name}: ${entry.kind}  (line ${entry.line})`);
+	}
+	return [...lines, ...result.warnings].join("\n");
 }
