@@ -211,7 +211,17 @@ flowchart TD
 - `tasks[]`: `bindings` と `events` を結線タスクへ平坦化したもの。
   各タスクは `nodeId` と `$.children[1]` 形式の `path` を持ちます。
 
-残り（`requirements` / `target` / `implementation` / `screen`）は補助情報です。
+variant は同じ画面のもう 1 つの状態なので、コンテキストにも含まれます。
+`imports` と `components[]` はベースツリーと全 variant ツリーをまとめて対象にします。
+1 つの状態でしか描かれないコンポーネントもここに現れ、`variantOnly: true` と、それを使う `variants` を持ちます。
+ベースが描くコンポーネントは、それを残す `variants` を列挙するので、落とす状態は載っていないことで分かります。
+variant が足す結線は `variant` を付けて `tasks[]` に並び、ベースが既に述べているものは重複しません。
+
+`structure` はベースツリーだけを表します。
+各状態の形は `variants[]` の項目で、同じ形式の `outline` と、ベースのどのノードも描かない `addedComponents` を持ちます。
+variant を宣言していない画面には、これらのキーは一切付きません。
+
+残り（`screenId` / `screenName` / `registryVersion` / `target` / `implementation` / `requirements` / `screen`）は補助情報です。
 
 ## `story import` の警告
 

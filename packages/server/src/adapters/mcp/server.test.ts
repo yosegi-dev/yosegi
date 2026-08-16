@@ -4,12 +4,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { Composer, InMemoryScreenRepository } from "@yosegi/core/app";
+import {
+	Composer,
+	type CreateScreenInput,
+	InMemoryScreenRepository,
+} from "@yosegi/core/app";
 import { sampleRegistry, sampleScreen } from "@yosegi/core/testing";
 import { createMcpServer } from "./server.ts";
 
-// Returns an in-memory client paired with a server.
-async function connect(): Promise<Client> {
+// Returns an in-memory client paired with a server. `extra` seeds a second screen
+// for the cases that need a definition the sample does not carry.
+async function connect(extra?: CreateScreenInput): Promise<Client> {
 	const composer = new Composer(
 		sampleRegistry(),
 		new InMemoryScreenRepository(),
@@ -21,6 +26,9 @@ async function connect(): Promise<Client> {
 		name: screen.name,
 		root: screen.root,
 	});
+	if (extra) {
+		await composer.screens.createScreen(extra);
+	}
 	const server = createMcpServer(composer);
 	const [clientTransport, serverTransport] =
 		InMemoryTransport.createLinkedPair();
@@ -476,6 +484,49 @@ describe("MCP server", () => {
 		expect(text).toContain("import { Page, PageHeader } from");
 		expect(text).toContain('"kind": "binding"');
 		expect(text).toContain("outline");
+	});
+
+	// The Story emits the variant, so the context has to carry it too — otherwise a
+	// component only a state uses disappears on the way to the implementation.
+	it("generate_implementation_context は variant 由来のコンポーネントも含む", async () => {
+		const client = await connect({
+			id: "customer-list-empty",
+			name: "Customer list (empty)",
+			root: sampleScreen().root,
+			variants: [
+				{
+					name: "Empty",
+					operations: [
+						{ type: "removeNode", nodeId: "node-table" },
+						{
+							type: "addNode",
+							target: { parentNodeId: "node-page", slot: "body" },
+							node: {
+								id: "node-empty-action",
+								component: "Button",
+								props: { variant: "secondary" },
+								slots: {},
+								events: {
+									onClick: {
+										action: "navigate",
+										arguments: { to: "/customers/new" },
+									},
+								},
+							},
+						},
+					],
+				},
+			],
+		});
+		const result = await client.callTool({
+			name: "generate_implementation_context",
+			arguments: { screenId: "customer-list-empty" },
+		});
+		const text = textOf(result as never);
+		expect(text).toContain("import { Button } from");
+		expect(text).toContain('"variantOnly": true');
+		expect(text).toContain('"variant": "Empty"');
+		expect(text).toContain('"addedComponents"');
 	});
 
 	it("generate_implementation_context は importMap をホストの alias へ反映する", async () => {
