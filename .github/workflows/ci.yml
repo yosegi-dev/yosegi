@@ -58,7 +58,7 @@ jobs:
   # Consumers are assumed not to have Bun, so a successful build inside the
   # workspace guarantees nothing. This job installs the tarball with npm and
   # runs the CLI under Node alone. Node is pinned to the engines lower bound
-  # (20), since it's more likely to work at the upper bound and fail at the
+  # (22), since it's more likely to work at the upper bound and fail at the
   # lower one than the other way around.
   node-consumer:
     name: Node consumer
