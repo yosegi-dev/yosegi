@@ -84,6 +84,26 @@ aliases, `registry build` fails with the version it resolved and the entries abo
 Yosegi's own copy is not enough, because a package manager hoists react-docgen-typescript to the top
 of the host's tree, where it finds the host's 7 rather than the copy nested under `@yosegi/yosegi`.
 
+bun does not resolve that setup correctly. The compatibility package reaches the real 6.x compiler
+through an `npm:typescript@^6` dependency of its own, and bun redirects that back to the
+compatibility package, so `typescript` ends up re-exporting itself and `registry build` fails on
+`ts.TypeFlags` being `undefined`. Depend on the 6.x compiler directly, with no compatibility package
+in between:
+
+```json
+{
+	"devDependencies": {
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"typescript": "^6"
+	}
+}
+```
+
+`tsc` still runs 7, from `@typescript/native`, and extraction reads the 6.x API; what the tree gives
+up is `tsc6`, which nothing here calls. This form works on npm and pnpm too. The bug is fixed
+upstream in [oven-sh/bun#33835](https://github.com/oven-sh/bun/pull/33835), unreleased as of bun
+1.3.14.
+
 ### ids and imports
 
 - `id` = `<module path relative to projectRoot>#<exportName>` (e.g.
