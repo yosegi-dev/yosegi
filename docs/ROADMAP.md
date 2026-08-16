@@ -60,7 +60,25 @@ It stands beside item 3 rather than replacing it: where the manifest is availabl
 unnecessary, and where it is not — an older Storybook, or manifests turned off — 3's own extraction
 is what remains.
 
-### 5. Example templates: catalog and replication
+### 5. A host configuration file (`yosegi.config.json`)
+
+Everything a host tells Yosegi is a CLI flag — `--source`, `--tsconfig`, `--data-dir`, `--metadata`,
+`--import-map`, `--meta-template` — and there is nowhere to keep any of it, so every command
+restates the set. The skill spends one of its numbered steps on "fix a `--data-dir` now and pass the
+same one to every command", because the default follows the cwd. That warning is the symptom; the
+problem is that settings have no home.
+
+One `yosegi.config.json`, found by searching upward from the cwd, is the plan. Paths written in it
+resolve against the config's own location rather than the cwd, which removes the cwd dependence
+structurally instead of by reminder. Precedence is CLI flag > config > default, so every invocation
+that works today keeps working.
+
+The sections it would carry are `dataDir`, `registry` (`source`, `tsconfig`, `metadata`), `emit`
+(`importMap`, `metaTemplate`), and `examples` — where the next item's catalog lives, since a second
+declaration file would put the host back to keeping two of them in step. The format is JSON, and
+editor completion needs nothing beyond shipping a `$schema`.
+
+### 6. Example templates: catalog and replication
 
 A host's finished screens are the best starting point for its next one, and nothing today lets an
 agent start from them. The plan is a catalog of host-written templates — real, renderable TSX, state
@@ -68,10 +86,10 @@ management and table logic included — and replication in the shadcn sense, cop
 `example list` presents the catalog; `example apply` copies a template to where the new screen
 goes, rewrites the component identifiers, and leaves a comment naming what it came from.
 
-The catalog is a declaration the host writes: per entry a key, a label, a description, a
-`templatePath`, and a `componentName`. A Story under a title namespace (`Examples/*`) doubles as the
-preview, which leaves room to detect entries mechanically through the same `storyFile` that curation
-already reads.
+The catalog is a declaration the host writes, in the `examples` section of the config file above:
+per entry a key, a label, a description, a `templatePath`, and a `componentName`. A Story under a
+title namespace (`Examples/*`) doubles as the preview, which leaves room to detect entries
+mechanically through the same `storyFile` that curation already reads.
 
 What it buys is correctness by construction. A new screen's skeleton, its state management, and the
 design system's idioms are inherited from reviewed code rather than generated from nothing, so the
@@ -86,7 +104,7 @@ line holds: Yosegi still has no rendering environment of its own.
 A host has already proved the flow with hand-written templates and a replication script of its own.
 Generalizing that is this item, and a PoC is in progress.
 
-### 6. Let CI gate on `registry status`
+### 7. Let CI gate on `registry status`
 
 `registry status` reports `source: current` / `stale` / `unknown`, but only as text — a pipeline
 cannot fail on it without parsing. An `--exit-code` flag (non-zero on `stale`) would make staleness
@@ -98,7 +116,7 @@ typed, absolute paths included. Shared across machines, both turn into noise. Se
 machine-local fields from shareable ones — or recording paths relative to the project root — is a
 precondition for treating a committed registry as canonical.
 
-### 7. Apply curation to the default ordering
+### 8. Apply curation to the default ordering
 
 `curation.recommended` looks at nothing but "does a Story exist". The registry also lists plenty of
 components that have no Story, so we need a policy on how far agents may go in using them. Using it
@@ -108,7 +126,7 @@ The constraint to design around: only a `--source` registry decides `recommended
 registry built from `index.json` alone sets it to `true` on everything, since every entry in the
 index has a Story by construction — on that path the field is a constant and orders nothing.
 
-### 8. Put type extraction behind a replaceable interface
+### 9. Put type extraction behind a replaceable interface
 
 Two kinds of component come back with only `className` / `children`: a value cast to an overloaded
 call signature type, and re-exports of third-party components. Reading the first parameter of the
@@ -138,7 +156,7 @@ package, so today it is not something to depend on. A swappable extractor is wha
 adoptable without another rewrite. The workaround in the meantime is unchanged: `--metadata`, which
 `component inspect` points you at.
 
-### 9. Read the component target back
+### 10. Read the component target back
 
 `story import` reads Stories only, so a file `screen generate --target component` wrote cannot be
 read back into Screen JSON — [`workflows.md`](./workflows.md) documents the asymmetry and the
@@ -148,7 +166,7 @@ conversion, so closing the gap is a component-file variant of the first half: lo
 functions, feed the JSX they return to the same conversion. Until then the asymmetry stays
 documented rather than fixed.
 
-### 10. What a screen diff would compare
+### 11. What a screen diff would compare
 
 An approved mock and the implementation built from it drift apart silently. A structural diff —
 the approved Screen JSON on one side, the current tree on the other — would name what changed
@@ -156,7 +174,7 @@ the approved Screen JSON on one side, the current tree on the other — would na
 side: the implementation is not a Story, so what to read it back through (the component-target
 importer above, once it exists?) decides whether the diff is possible at all.
 
-### 11. A migration strategy for saved screens
+### 12. A migration strategy for saved screens
 
 A screen saved under `<data-dir>/screens/` is pinned to two things that can move under it, and both
 need an answer before saved screens hold anything worth keeping.
@@ -172,7 +190,7 @@ saved screen and every hand-written Screen JSON with `INVALID_REQUEST`. Pre-1.0 
 that breaking change, which is exactly why the release taking it needs a path across both axes
 rather than one.
 
-### 12. How far to widen the shape of the output
+### 13. How far to widen the shape of the output
 
 The file shape is settled: one module carrying one export per screen state — Story exports on the
 CSF target, exported functions on the component target (`screen generate --target component`, which
@@ -190,7 +208,7 @@ value internal and no props lifted out.
   into the host's file layout conventions.
 - A single file with no lifted props stays the default until Screen JSON can express boundaries.
 
-### 13. Confirm the Story appears in a rebuilt index
+### 14. Confirm the Story appears in a rebuilt index
 
 `screen generate` ends at a file. Whether the Story then shows up in the host's Storybook — the
 title resolves, the imports build, nothing throws on render — is confirmed today by the host's type
@@ -274,4 +292,4 @@ leaving it open.
 Driving a generated Story through the host's own Storybook — its test runner, its addons — to get a
 screenshot or an a11y result back is not something Yosegi will do. Brokering is not owning a
 rendering environment, but it puts the host's browser stack on Yosegi's critical path, which is the
-founding line it was drawn to protect. Machine confirmation stops at the index check in item 13.
+founding line it was drawn to protect. Machine confirmation stops at the index check in item 14.
