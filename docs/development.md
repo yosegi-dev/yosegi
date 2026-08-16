@@ -130,9 +130,11 @@ Install with npm rather than Bun. Consumers only need Node, so Bun installing it
 nothing about whether they can. The `node-consumer` CI job covers this path on every push, so doing
 it by hand is for when you are changing packaging itself.
 
-Until the version being verified is on npm, that install fails — the server tarball asks for
-`@yosegi/core` at an exact version and the registry 404s. Point it at the local tarball for the
-duration of the check:
+Passing both tarballs is what lets that install work before the version is on npm: the server
+tarball asks for `@yosegi/core` at an exact version, and npm takes a direct argument over the npm
+registry, which has no such version yet. The server tarball alone fails with `ETARGET`, and
+`overrides` is the way out of that shape alone — npm 11 rejects an override of a package that is
+also a direct argument, with `EOVERRIDE`:
 
 ```json
 "overrides": { "@yosegi/core": "file:<tmp>/yosegi-core-0.1.0.tgz" }
@@ -168,8 +170,12 @@ token in this repository and none should ever be added — the `id-token: write`
 publish job is the whole credential. Provenance attestations are generated as well, which is what
 lets anyone verify that a published tarball came from this repository at that commit.
 
-Releases are npm-only. The workflow does not create a GitHub Release and does not generate release
-notes; the tag and the commit history are the record.
+A separate `release` job then creates the GitHub Release from the tag, with
+`gh release create --verify-tag --generate-notes`. It is separate because creating a release needs
+`contents: write`, which the job holding `id-token: write` should not also carry, and because
+running after the publish keeps a Release from ever naming a version npm does not have.
+`.github/release.yml` maps labels to the note categories, and an unlabelled pull request falls
+through to Other Changes.
 
 ### One-time setup (owner only)
 
@@ -195,7 +201,17 @@ None of this can be done from the repository; it needs an npm account with right
 
 ### Each release
 
-1. Bump the version everywhere it is recorded, in one commit:
+`main` is protected, so the bump lands through a pull request like any other change, and the two
+`make` targets are that flow.
+
+1. Open the release PR:
+
+   ```sh
+   make release-pr VERSION=0.2.0
+   ```
+
+   It branches from `origin/main`, bumps the version everywhere it is recorded, runs `make verify`
+   (lint, test, typecheck, and `bun run pack`), commits, and opens a Draft PR.
 
    | What | Where |
    | --- | --- |
@@ -208,16 +224,17 @@ None of this can be done from the repository; it needs an npm account with right
    `--version`, the registry's `builtWith`, and the MCP server's `initialize` response all go
    through it. A new literal is the thing to catch in review. `skills/yosegi/SKILL.md` is dated
    rather than versioned — that date tracks the skill's last content change, not the release.
-2. Commit, then tag and push:
+2. Merge that PR, move to the updated `main`, and tag it:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   git switch main && git pull
+   make release-tag VERSION=0.2.0
    ```
 
-   The workflow runs lint, tests, typecheck, and the build first, and only then publishes core
-   followed by server. The order matters: server depends on an exact version of core, so an install
-   landing between the two publishes would fail to resolve.
+   The target refuses to tag unless `HEAD` is `origin/main` and the merged `packages/core` is at
+   `VERSION`, then pushes `v0.2.0`. The workflow runs lint, tests, typecheck, and the build first,
+   and only then publishes core followed by server. The order matters: server depends on an exact
+   version of core, so an install landing between the two publishes would fail to resolve.
 3. On a minor or larger release (`x.y.0`), once the publish is through, measure the released version
    with the benchmark harness ([`yosegi-benchmark`](https://github.com/yosegi-dev/yosegi-benchmark))
    and commit the results there. The measurement is the full

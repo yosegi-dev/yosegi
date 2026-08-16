@@ -108,8 +108,8 @@ tarball を作る手段は `bun run pack`（`scripts/pack.ts`）だけで、CI �
 利用者に必要なのは Node だけなので、Bun で入ることは利用者が入れられることの証明になりません。
 この経路は `node-consumer` の CI ジョブが毎 push で通しているため、手でやるのはパッケージング自体を変更したときだけでかまいません。
 
-検証中のバージョンが npm に無いあいだ、この install は失敗します。server の tarball が `@yosegi/core` を厳密なバージョンで要求し、npm レジストリが 404 を返すためです。
-検証のあいだだけローカルの tarball を指します。
+検証中のバージョンが npm に無い段階でもこの install が通るのは、tarball を両方渡しているからです。server の tarball は `@yosegi/core` を厳密なバージョンで要求しますが、npm は直接渡された引数を、まだそのバージョンを持たない npm レジストリより優先します。
+server の tarball だけを渡すと `ETARGET` で失敗し、`overrides` はその形のときだけの回避策です。npm 11 は直接渡したパッケージへの override を `EOVERRIDE` で拒否します。
 
 ```json
 "overrides": { "@yosegi/core": "file:<tmp>/yosegi-core-0.1.0.tgz" }
@@ -137,9 +137,10 @@ tarball を作る手段は `bun run pack`（`scripts/pack.ts`）だけで、CI �
 あわせて provenance の証明書も生成されます。
 公開された tarball がこのリポジトリのそのコミットから来たことを誰でも検証できるのはこれによります。
 
-リリースは npm への公開だけです。
-ワークフローは GitHub Release を作らず、リリースノートも生成しません。
-記録として残るのはタグとコミット履歴です。
+そのあと、独立した `release` ジョブが `gh release create --verify-tag --generate-notes` でタグから GitHub Release を作ります。
+ジョブを分けているのは、Release の作成が要求する `contents: write` を `id-token: write` のジョブに与えないためです。
+publish の後に走らせるので、npm へ公開されていないバージョンを指す Release は作られません。
+リリースノートの分類は `.github/release.yml` のラベル設定で決まり、ラベルの無い Pull Request は Other Changes に落ちます。
 
 ### 初回のみのセットアップ（オーナーのみ）
 
@@ -162,7 +163,17 @@ tarball を作る手段は `bun run pack`（`scripts/pack.ts`）だけで、CI �
 
 ### 各リリース
 
-1. バージョンが記録されている箇所をまとめて上げ、1 つのコミットにします。
+`main` は保護されており、バージョンの更新も他の変更と同じく Pull Request 経由で入ります。
+2 つの `make` ターゲットがその流れです。
+
+1. リリース PR を作ります。
+
+   ```sh
+   make release-pr VERSION=0.2.0
+   ```
+
+   `origin/main` からブランチを切り、バージョンが記録されている箇所をまとめて上げます。
+   そのうえで `make verify`（lint / test / typecheck と `bun run pack`）を回し、コミットして Draft PR を作ります。
 
    | 対象 | 場所 |
    | --- | --- |
@@ -173,13 +184,15 @@ tarball を作る手段は `bun run pack`（`scripts/pack.ts`）だけで、CI �
    これらがタグと食い違っているとワークフローは公開を拒否します。
    ソースにバージョンを書いた箇所はありません。`yosegiVersion()`（`packages/server/src/config.ts`）が `package.json` を読みます。CLI の `--version`、Registry の `builtWith`、MCP サーバの `initialize` の応答は、すべてこれを通ります。
    新しいリテラルが増えていないかがレビューで見る点です。`skills/yosegi/SKILL.md` はバージョンではなく日付を持ちますが、これはリリースではなく Skill の内容を最後に変えた時点を指します。
-2. コミットし、タグを打って push します:
+2. その PR をマージし、更新された `main` に移ってタグを打ちます:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   git switch main && git pull
+   make release-tag VERSION=0.2.0
    ```
 
+   このターゲットは、`HEAD` が `origin/main` であり、マージ後の `packages/core` が `VERSION` になっていない限りタグを打ちません。
+   条件を満たせば `v0.2.0` を push します。
    ワークフローはまず lint / test / typecheck / build を回し、そのうえで core、続いて server を公開します。
    順序は重要で、server は core を厳密なバージョンで要求するため、2 つの publish の間に入った install は解決に失敗します。
 3. minor 以上のリリース（`x.y.0`）では、公開が通ったあとにベンチマークハーネス（[`yosegi-benchmark`](https://github.com/yosegi-dev/yosegi-benchmark)）でそのバージョンを計測し、結果を同リポジトリにコミットします。
