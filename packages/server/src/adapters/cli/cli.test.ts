@@ -2274,6 +2274,22 @@ export default meta;
 		"",
 	].join("\n");
 
+	// The rename's hard cases, all sharing "SampleScreenExample" as a prefix or as prose:
+	// two imported identifiers that merely start with it, the name inside a comment, and the
+	// name inside a string literal. Only the declaration and its references may change.
+	const COLLIDING_TEMPLATE = [
+		'import type { SampleScreenExampleProps } from "~/components/props";',
+		'import { SampleScreenExampleHeader } from "~/components/header";',
+		"",
+		"// SampleScreenExample is the template this file was copied from.",
+		'const label = "SampleScreenExample";',
+		"",
+		"export function SampleScreenExample(props: SampleScreenExampleProps) {",
+		"\treturn <SampleScreenExampleHeader title={label} {...props} />;",
+		"}",
+		"",
+	].join("\n");
+
 	async function writeCatalog(
 		entries: unknown[] = [
 			{
@@ -2284,12 +2300,10 @@ export default meta;
 				componentName: "SampleScreenExample",
 			},
 		],
+		template: string = SAMPLE_TEMPLATE,
 	): Promise<string> {
 		await mkdir(join(dataDir, "templates"), { recursive: true });
-		await writeFile(
-			join(dataDir, "templates", "sample-screen.tsx"),
-			SAMPLE_TEMPLATE,
-		);
+		await writeFile(join(dataDir, "templates", "sample-screen.tsx"), template);
 		const catalog = join(dataDir, "examples.json");
 		await writeFile(catalog, JSON.stringify({ examples: entries }));
 		return catalog;
@@ -2541,7 +2555,7 @@ export default meta;
 
 	// The catalog's componentName having drifted from the template leaves a file that copied
 	// fine but kept the wrong export name — the one thing --name was asked to change.
-	it("componentName がテンプレートに無い場合は複製しつつ警告する", async () => {
+	it("componentName を宣言していないテンプレートは複製しつつ警告する", async () => {
 		const catalog = await writeCatalog([
 			{
 				key: "sample-screen",
@@ -2564,8 +2578,181 @@ export default meta;
 			catalog,
 		]);
 		expect(code).toBe(0);
-		expect(output()).toContain("nothing was renamed");
+		expect(output()).toContain('declares no "RenamedAgesAgoExample"');
 		expect(await readFile(out, "utf8")).toContain("SampleScreenExample");
+	});
+
+	// A plain replaceAll rewrites `SampleScreenExampleProps` to `GuestListRouteProps`, which
+	// the module it is imported from does not export, so the copy stops compiling. Only
+	// identifier tokens that are the component itself may change.
+	it("example apply は componentName を部分文字列に含む別識別子を置換しない", async () => {
+		const catalog = await writeCatalog(undefined, COLLIDING_TEMPLATE);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		// The declaration and its references are renamed.
+		expect(written).toContain("export function GuestListRoute(");
+		expect(written).not.toContain("export function SampleScreenExample(");
+		// Identifiers that merely start with the same text are left alone, imports included.
+		expect(written).toContain(
+			'import type { SampleScreenExampleProps } from "~/components/props";',
+		);
+		expect(written).toContain(
+			'import { SampleScreenExampleHeader } from "~/components/header";',
+		);
+		expect(written).toContain("props: SampleScreenExampleProps");
+		expect(written).toContain("<SampleScreenExampleHeader");
+		expect(written).not.toContain("GuestListRouteProps");
+		expect(written).not.toContain("GuestListRouteHeader");
+	});
+
+	// Neither a comment nor a string literal is an identifier token, so neither is rewritten.
+	it("example apply はコメントと文字列リテラル内の同名テキストを置換しない", async () => {
+		const catalog = await writeCatalog(undefined, COLLIDING_TEMPLATE);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		expect(written).toContain(
+			"// SampleScreenExample is the template this file was copied from.",
+		);
+		expect(written).toContain('const label = "SampleScreenExample";');
+	});
+
+	// A name that appears only as prose is not a declaration, so the drift warning fires and
+	// the file comes through untouched.
+	it("コメント内にしか名前が無いテンプレートは置換せず警告する", async () => {
+		const catalog = await writeCatalog(
+			[
+				{
+					key: "sample-screen",
+					label: "Sample screen",
+					description: "name only in prose",
+					templatePath: "templates/sample-screen.tsx",
+					componentName: "OnlyInAComment",
+				},
+			],
+			[
+				"// OnlyInAComment used to live here.",
+				"export function Kept() {",
+				"\treturn null;",
+				"}",
+				"",
+			].join("\n"),
+		);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(0);
+		expect(output()).toContain('declares no "OnlyInAComment"');
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("// OnlyInAComment used to live here.");
+		expect(written).not.toContain("GuestListRoute");
+	});
+
+	// A catalog componentName that is not an identifier can never name a component, and it
+	// reaches a RegExp in the no-compiler fallback.
+	it("identifier でない componentName は INVALID_ARGUMENT を返す", async () => {
+		const catalog = await writeCatalog([
+			{
+				key: "sample-screen",
+				label: "Sample screen",
+				description: "bad componentName",
+				templatePath: "templates/sample-screen.tsx",
+				componentName: "Sample.*Example",
+			},
+		]);
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as { error: { code: string } };
+		expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+		expect(existsSync(out)).toBe(false);
+	});
+
+	// An argument that is silently dropped lets a mistyped command run and report success,
+	// which an agent then trusts — the same reason an unknown flag is rejected.
+	it("example list は余分な positional を UNKNOWN_ARGUMENT で拒否する", async () => {
+		const catalog = await writeCatalog();
+		const code = await runCli([
+			"example",
+			"list",
+			"typo",
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; command: string; unexpected: string[] };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_ARGUMENT");
+		expect(parsed.error.command).toBe("example list");
+		expect(parsed.error.unexpected).toEqual(["typo"]);
+	});
+
+	it("example apply は余分な positional を UNKNOWN_ARGUMENT で拒否する", async () => {
+		const catalog = await writeCatalog();
+		const out = join(dataDir, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"typo",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+			"--catalog",
+			catalog,
+		]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; unexpected: string[] };
+		};
+		expect(parsed.error.code).toBe("UNKNOWN_ARGUMENT");
+		expect(parsed.error.unexpected).toEqual(["typo"]);
+		// Rejected before anything was written.
+		expect(existsSync(out)).toBe(false);
 	});
 
 	it("未知のコマンドは UNKNOWN_COMMAND と候補を返す", async () => {

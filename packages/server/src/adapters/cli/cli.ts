@@ -204,7 +204,11 @@ const FLAG_SYNONYMS: Record<string, string> = {
 // The uniform shape of a command-level failure: JSON with a code, never bare usage text,
 // so an agent parses the same contract everywhere. Usage stays reserved for --help.
 function commandError(
-	code: "MISSING_ARGUMENT" | "UNKNOWN_COMMAND" | "UNKNOWN_FLAG",
+	code:
+		| "MISSING_ARGUMENT"
+		| "UNKNOWN_ARGUMENT"
+		| "UNKNOWN_COMMAND"
+		| "UNKNOWN_FLAG",
 	message: string,
 	extra: Record<string, unknown> = {},
 ): number {
@@ -217,6 +221,30 @@ function missingArgument(command: string, message: string): number {
 		"MISSING_ARGUMENT",
 		`${message} Run "yosegi --help" for usage.`,
 		{ command },
+	);
+}
+
+// Rejects positionals past the ones a command takes. The counterpart to checkFlags, and it
+// exists for the same reason: an argument that is silently dropped lets a mistyped command
+// run and report success, which an agent then trusts. Returns null when the count is fine.
+//
+// Only the example commands go through this so far — the older commands still ignore their
+// extras, and tightening those is a behaviour change beyond this PoC.
+function checkPositionals(
+	command: string,
+	rest: string[],
+	allowed: number,
+): number | null {
+	if (rest.length <= allowed) {
+		return null;
+	}
+	const extra = rest.slice(allowed);
+	return commandError(
+		"UNKNOWN_ARGUMENT",
+		`"${command}" takes ${allowed === 0 ? "no positional arguments" : `${allowed} positional argument${allowed > 1 ? "s" : ""}`}, but got ${extra
+			.map((value) => `"${value}"`)
+			.join(", ")} as well. A value meant for a flag needs its --name.`,
+		{ command, unexpected: extra },
 	);
 }
 
@@ -773,7 +801,16 @@ function catalogPath(flags: CliFlags, dataDir: string): string {
 
 // List the screen templates the host has catalogued. The entry point for `example apply`:
 // key is the argument it takes, so the two commands read as one flow.
-async function listExamples(flags: CliFlags, dataDir: string): Promise<number> {
+async function listExamples(
+	rest: string[],
+	flags: CliFlags,
+	dataDir: string,
+): Promise<number> {
+	// Checked before the catalog is read, so a mistyped invocation does no work at all.
+	const extra = checkPositionals("example list", rest, 0);
+	if (extra !== null) {
+		return extra;
+	}
 	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
 	if (flagBoolean(flags, "json")) {
 		print({
@@ -790,10 +827,15 @@ async function listExamples(flags: CliFlags, dataDir: string): Promise<number> {
 
 // Copy one catalogued template into the host's tree under a new component name.
 async function applyExampleCommand(
-	key: string | undefined,
+	rest: string[],
 	flags: CliFlags,
 	dataDir: string,
 ): Promise<number> {
+	const extra = checkPositionals("example apply", rest, 1);
+	if (extra !== null) {
+		return extra;
+	}
+	const key = rest[0];
 	if (key === undefined) {
 		return missingArgument(
 			"example apply",
@@ -1415,11 +1457,11 @@ export async function runCli(argv: string[]): Promise<number> {
 		// The example commands touch neither the registry nor the screen store — a
 		// catalogued template is copied as source text — so neither is loaded here.
 		if (group === "example" && action === "list") {
-			return await listExamples(flags, dataDir);
+			return await listExamples(rest, flags, dataDir);
 		}
 
 		if (group === "example" && action === "apply") {
-			return await applyExampleCommand(rest[0], flags, dataDir);
+			return await applyExampleCommand(rest, flags, dataDir);
 		}
 
 		if (group === "screen") {
