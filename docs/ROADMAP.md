@@ -84,7 +84,8 @@ A host's finished screens are the best starting point for its next one, and noth
 agent start from them. The plan is a catalog of host-written templates — real, renderable TSX, state
 management and table logic included — and replication in the shadcn sense, copy-and-own.
 `example list` presents the catalog; `example apply` copies a template to where the new screen
-goes, rewrites the component identifiers, and leaves a comment naming what it came from.
+goes, rewrites the component identifiers, leaves a comment naming what it came from, and reports the
+template's imports and where its inline mock data sits — the places the editing goes next.
 
 The catalog is a declaration the host writes, in the `examples` section of the config file above:
 per entry a key, a label, a description, a `templatePath`, and a `componentName`. A Story under a
@@ -102,7 +103,9 @@ own job, the machine-checkable static mock. Preview stays with the host's Storyb
 line holds: Yosegi still has no rendering environment of its own.
 
 A host has already proved the flow with hand-written templates and a replication script of its own.
-Generalizing that is this item, and a PoC is in progress.
+Generalizing that is this item, and the PoC is implemented: `list` against a catalog of eleven of
+that host's templates, `apply` on three of them — one of them several hundred lines — with every
+copy passing the host's type check and lint unedited.
 
 ### 7. Let CI gate on `registry status`
 
