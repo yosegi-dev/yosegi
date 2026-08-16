@@ -1216,6 +1216,92 @@ describe("runCli", () => {
 		}
 	});
 
+	// An index URL nothing is listening on. The port is bound and released rather than
+	// picked, so the connection is refused immediately instead of timing out.
+	const unreachableIndexUrl = async (): Promise<string> => {
+		const server = Bun.serve({ port: 0, fetch: () => new Response("") });
+		const url = new URL("/index.json", server.url).href;
+		await server.stop(true);
+		return url;
+	};
+
+	// The runtime reports an unreachable URL as a bare connection error, which names neither
+	// the URL nor the flag that chose it. `registry status` already explains this condition;
+	// build has to say at least as much, or an agent is left with nothing to act on.
+	it("registry build は届かない --index の URL とフラグと対処を示す", async () => {
+		const url = await unreachableIndexUrl();
+		const code = await runCli([
+			"registry",
+			"build",
+			"--index",
+			url,
+			"--out",
+			join(dataDir, "unreachable-registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const { error } = JSON.parse(output()) as {
+			error: { code: string; message: string };
+		};
+		expect(error.message).toContain(url);
+		expect(error.message).toContain("given as --index");
+		expect(error.message).toContain("Start Storybook");
+		// Without --source there is nothing else to build from, so dropping the flag is not
+		// a way out here.
+		expect(error.message).toContain("Without --source there is no other input");
+		expect(error.message).toContain("Underlying error:");
+	});
+
+	// With --source the registry can still be built, just without the Storybook layer, so
+	// dropping the flag is a real option and the message has to offer it.
+	it("registry build --source なら --index を外す選択肢も示す", async () => {
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const url = await unreachableIndexUrl();
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--index",
+			url,
+			"--out",
+			join(dataDir, "unreachable-source-registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const { error } = JSON.parse(output()) as { error: { message: string } };
+		expect(error.message).toContain(url);
+		expect(error.message).toContain("Dropping --index also works");
+	});
+
+	// The default location is not something the caller typed, so blaming --index for it
+	// would send the reader looking for a flag that is not in the invocation.
+	it("registry build は --index 未指定なら既定の場所だと明示する", async () => {
+		const code = await runCli([
+			"registry",
+			"build",
+			"--out",
+			join(dataDir, "default-index-registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(1);
+		const { error } = JSON.parse(output()) as { error: { message: string } };
+		expect(error.message).toContain("storybook-static/index.json");
+		expect(error.message).toContain("No --index was given");
+		expect(error.message).not.toContain("given as --index");
+	});
+
 	it("registry build --source はソースの型から Registry を書き出す", async () => {
 		const outFile = join(dataDir, "source-registry.json");
 		const reportFile = join(dataDir, "source-report.json");

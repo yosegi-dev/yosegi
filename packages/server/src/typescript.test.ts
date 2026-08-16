@@ -15,6 +15,10 @@ import {
 const ALIAS_COMMAND =
 	"npm install -D @typescript/native@npm:typescript typescript@npm:@typescript/typescript6";
 
+// bun cannot resolve the alias above, so it gets the 6.x compiler as a direct dependency.
+const BUN_COMMAND =
+	"bun add -d @typescript/native@npm:typescript typescript@^6";
+
 // What `require("typescript")` returns on a host that installed 7.0.
 const STUB_MODULE = { version: "7.0.2", versionMajorMinor: "7.0" };
 
@@ -52,17 +56,26 @@ describe("formatTypeScriptLoadFailure", () => {
 		expect(message).toContain("boom");
 	});
 
+	// bun resolves the compatibility package back to itself, so a bun host that followed the
+	// alias command alone would hit a second failure. Both forms have to be on screen.
+	it("TypeScript 7 なら bun 向けの直接依存も併記する", () => {
+		const message = formatTypeScriptLoadFailure("typescript@7.0.2", "boom");
+		expect(message).toContain(BUN_COMMAND);
+	});
+
 	// The alias is the wrong advice below 7, where the API is present and the failure is
 	// something else entirely.
 	it("TypeScript 6 では併存インストールを勧めない", () => {
 		const message = formatTypeScriptLoadFailure("typescript@6.0.3", "boom");
 		expect(message).toContain("typescript@6.0.3");
 		expect(message).not.toContain(ALIAS_COMMAND);
+		expect(message).not.toContain(BUN_COMMAND);
 	});
 
 	it("解決先が不明なら推測せず原因だけを伝える", () => {
 		const message = formatTypeScriptLoadFailure(null, "boom");
 		expect(message).not.toContain(ALIAS_COMMAND);
+		expect(message).not.toContain(BUN_COMMAND);
 		expect(message).toContain("Underlying error: boom");
 	});
 

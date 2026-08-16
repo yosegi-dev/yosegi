@@ -345,6 +345,38 @@ async function readJsonSource(source: string): Promise<unknown> {
 	return JSON.parse(await readFile(source, "utf8"));
 }
 
+// The Storybook index a `registry build` reads, with the failure explained the way
+// `registry status` already explains the same condition. A dev-server URL nobody is serving
+// surfaces as a bare "fetch failed" from the runtime — a message that names neither the URL
+// tried nor the flag that chose it, which leaves an agent with nothing to act on. It stays
+// an INTERNAL_ERROR rather than earning a code of its own: unlike REGISTRY_NOT_FOUND the fix
+// is not single-valued (start Storybook, correct the URL, or drop the flag), so the caller
+// has to read the message either way.
+async function readStorybookIndex(
+	source: string,
+	options: { fromFlag: boolean; hasSource: boolean },
+): Promise<unknown> {
+	try {
+		return await readJsonSource(source);
+	} catch (error) {
+		const isUrl = source.startsWith("http://") || source.startsWith("https://");
+		throw new Error(
+			[
+				options.fromFlag
+					? `Failed to read the Storybook index from ${source}, given as --index.`
+					: `Failed to read the Storybook index from ${source}. No --index was given, so that is the default location.`,
+				isUrl
+					? "Start Storybook so that URL responds, or point --index at a built storybook-static/index.json."
+					: "Build Storybook so that file exists, or point --index at a running Storybook's index.json URL.",
+				options.hasSource
+					? "Dropping --index also works: the registry is then built from --source alone, without Storybook categories or recommendations."
+					: "Without --source there is no other input, so the build cannot continue.",
+				`Underlying error: ${errorMessage(error)}`,
+			].join("\n"),
+		);
+	}
+}
+
 // The registry used for generation: the --registry file if given, otherwise
 // data/registry.json. Either way, synthetic primitives are added before returning it, so
 // the validator doesn't treat them as unregistered.
@@ -1211,7 +1243,12 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 		const projectRoot =
 			resolveProjectRoot(flags) ?? dirname(resolve(tsconfigPath));
 		const index = indexFlag
-			? storybookIndexSchema.parse(await readJsonSource(indexFlag))
+			? storybookIndexSchema.parse(
+					await readStorybookIndex(indexFlag, {
+						fromFlag: true,
+						hasSource: true,
+					}),
+				)
 			: undefined;
 		// Defaults to resolving via tsconfig's paths. Hosts whose aliases live outside
 		// tsconfig can spell them out with --import-map (same format as screen generate's
@@ -1331,7 +1368,12 @@ async function buildRegistry(flags: CliFlags): Promise<void> {
 	// via --index.
 	const indexPath =
 		indexFlag ?? join(process.cwd(), "storybook-static/index.json");
-	const index = storybookIndexSchema.parse(await readJsonSource(indexPath));
+	const index = storybookIndexSchema.parse(
+		await readStorybookIndex(indexPath, {
+			fromFlag: indexFlag !== undefined,
+			hasSource: false,
+		}),
+	);
 	const registry = withBuildProvenance(
 		buildRegistryFromStorybook(index, {
 			storybookBaseUrl,

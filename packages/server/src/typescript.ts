@@ -77,6 +77,12 @@ function majorOf(identifier: string | null): number | null {
 //
 // Shared with docgen.ts because the extractor fails on exactly the same host state, and one
 // of the two printing stale advice would send the reader down the wrong path.
+//
+// The bun line is not an aside: bun redirects the compatibility package's own
+// `npm:typescript@^6` dependency back to the compatibility package, so `typescript`
+// re-exports itself and extraction dies on `ts.TypeFlags` being undefined. A bun host that
+// followed the first command alone would land on a second, more obscure failure, so the
+// direct dependency is named here rather than left to docs/registry.md.
 export function compilerApiFix(resolved: string | null): string[] {
 	if ((majorOf(resolved) ?? 0) < 7) {
 		return [];
@@ -85,6 +91,8 @@ export function compilerApiFix(resolved: string | null): string[] {
 		"TypeScript 7.0 ships no compiler API, so Yosegi needs the 6.x one. Install 6 and 7 side by side:",
 		"  npm install -D @typescript/native@npm:typescript typescript@npm:@typescript/typescript6",
 		"That keeps tsc on 7 and gives tools back the 6.x API.",
+		"On bun, alias resolution sends the compatibility package back to itself, so depend on the 6.x compiler directly:",
+		"  bun add -d @typescript/native@npm:typescript typescript@^6",
 	];
 }
 
