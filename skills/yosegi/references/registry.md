@@ -103,6 +103,27 @@ can have any name — an `icon` slot that takes the element, a `footer`, a `sepa
 `slots (1) icon required` means the component takes no children at all and the icon goes in a named
 prop. This is a routine source of wrong JSX and there is no way to guess it.
 
+### `also accepts:` — DOM props that pass through
+
+```
+also accepts: button DOM props (onClick, aria-*, …) pass through
+```
+
+One line under `props`, on a component whose props type folds in a DOM-attribute mixin
+(`HTMLAttributes`, `ComponentPropsWithoutRef<"button">`, a Radix primitive's props). It means those
+attributes are real and accepted; they are not listed individually because a thin wrapper can carry
+hundreds of them.
+
+**Which route you are on decides whether you may use them.** Writing JSX yourself (3a), they are
+yours to pass — `aria-label`, `data-testid`, `onClick` — and the host's type checker is what
+confirms it. On the Screen JSON route they are **not** available: only the props the manifest lists
+can be written, so `"aria-label": "Close"` in `props` comes back as `UNKNOWN_PROP` with no
+candidate, however plainly this line says the component accepts it. Express what you can with the
+listed props, and leave the rest to the implementation.
+
+The line's absence proves nothing. It is only emitted when a mixin was detected, and detection is
+deliberately conservative — a component with no `also accepts:` line may still spread DOM props.
+
 ## Opaque props and what they mean
 
 A prop reported as `json` or `function` takes a value no literal can express. `inspect` prints one
@@ -135,6 +156,10 @@ level of the type's shape underneath it:
   people: the prop wants the component reference (`icon={Plus}`), not an element
   (`icon={<Plus />}`). Only the description distinguishes those, which is why the next section
   matters.
+- **No `shape:` line at all** under a `json` prop means the type could not be expanded even one
+  level, so there is nothing under it to read. The `description`, if the host wrote one, and the
+  host's own source are the only things left. This is not the same as the `Note:` below, which says
+  the whole prop list is unreliable; here the prop is real and only its inside is dark.
 
 ## When the host has not documented a prop
 

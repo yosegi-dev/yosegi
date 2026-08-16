@@ -106,14 +106,31 @@ yosegi screen context tmp/screen.json \
 from the request or the host's routing conventions, never from the Story; if neither settles it,
 that is the step 5 checkpoint — ask.
 
-JSON comes back, and it is verbose. Four keys carry the work.
+JSON comes back, and it is verbose. Four keys carry the work, and a screen with variants adds a
+fifth.
 
 | Key | What it gives you |
 | --- | --- |
 | `imports` | Import statements you can paste as-is. They resolve exactly as the Story's did |
-| `structure.outline` | The screen's skeleton as indented lines — which component sits in which slot, and how things nest |
+| `structure.outline` | The screen's skeleton as indented lines — which component sits in which slot, and how things nest. **The base tree only**; each variant's shape is under `variants[]` |
 | `components[]` | Per component in use: `usedProps`, `usedSlots`, `manifest` (every prop it *can* take), and `importStatement`. `synthetic: true` marks `Text` / `Box` / `Heading`. `unregistered: true` is the one that needs action — see below |
 | `tasks[]` | `bindings` and `events` flattened into wiring tasks. `path` and `nodeId` identify the target node; read `expression` into your implementation when `kind: "binding"`, and `action` plus `arguments` when `kind: "event"` |
+
+**A screen's variants are part of the context.** `imports` and `components[]` cover the base tree
+and every variant tree together, so a component that only the empty state renders is still there and
+still has an import statement. On such a component the entry carries `variantOnly: true`; on one the
+base renders too, `variants` lists the states that keep it, and its *absence* from a state's list is
+how you see that state drops it. `tasks[]` gains each variant's wiring, tagged with `variant` and
+limited to what the base does not already state.
+
+`variants[]` is one entry per declared variant, in declaration order: `name`, `description`,
+`outline` (the applied tree, in the same form as `structure.outline`), and `addedComponents` — the
+components no base node renders. Implement each state from its own `outline`; the base outline does
+not describe it.
+
+**Every one of these keys is absent on a screen that declares no variants** — no `variants[]`, no
+`variantOnly`, no `variant` on a task. Their absence means there are no other states, not that the
+context omitted them.
 
 **`unregistered: true`** means the id in the screen is not in the registry, so there is no
 `importStatement` and no `manifest`. Rebuild the registry with a `--source` glob wide enough to

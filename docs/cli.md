@@ -294,6 +294,56 @@ yosegi screen apply <screenId> <operations.json>
 `screen validate` targets saved screens only. A Screen JSON file is validated by `screen generate`
 as part of its own run.
 
+## `example list`
+
+**PoC.** Lists the screen templates the host has catalogued, which `example apply` copies from.
+
+```sh
+yosegi example list [options]
+```
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `--catalog <path>` | path | `examples.json` under `--data-dir` | The catalog to read |
+| `--quiet` | boolean | `false` | Drop the `<n> examples in <path>` header line |
+| `--json` | boolean | `false` | Return `{ catalog, root, total, examples }` instead of the text listing |
+
+```sh
+yosegi example list --data-dir .yosegi
+```
+
+The catalog is
+`{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }`. Every
+`templatePath` resolves against `root`, which is itself relative to the catalog file and defaults to
+the catalog's own directory. A catalog that is not there fails with `EXAMPLE_CATALOG_NOT_FOUND`, and
+duplicate keys with `INVALID_ARGUMENT`.
+
+## `example apply`
+
+**PoC.** Copies one catalogued template to `--out`, renaming its export to `--name`.
+
+```sh
+yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [options]
+```
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `--name <ComponentName>` | string | required | The name the copy's export takes. A JavaScript identifier, or `INVALID_ARGUMENT` |
+| `--out <file.tsx>` | path | required | Where the copy goes. An existing file is never overwritten (`EXAMPLE_OUTPUT_EXISTS`) |
+| `--catalog <path>` | path | `examples.json` under `--data-dir` | The catalog to read |
+| `--json` | boolean | `false` | Return `{ out, key, componentName, template, nextSteps, warnings }` instead of the text summary |
+
+```sh
+yosegi example apply guest-list \
+  --name GuestListRoute --out app/routes/guest-list.tsx --data-dir .yosegi
+```
+
+Two provenance comment lines go above the copy. The output then lists the copy's imports and its
+top-level array / object consts, each with the line it sits on in the file just written. An unknown
+key fails with `EXAMPLE_NOT_FOUND` and a did-you-mean `suggestion`; a `templatePath` that leads
+nowhere fails with `EXAMPLE_TEMPLATE_NOT_FOUND`. Both `example` commands reject a positional
+argument they do not take with `UNKNOWN_ARGUMENT`.
+
 ## `mcp`
 
 Serves the MCP tools over stdio and keeps running until the client disconnects. Takes `--data-dir`

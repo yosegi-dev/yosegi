@@ -159,6 +159,11 @@ The script is `scripts/check-docs.ts`, and CI runs it on every push.
 If `docs/ja/**` changed — authored or re-translated — run `bun run textlint` and fix every
 violation. It is the self-review on the translated output; do not commit with violations.
 
+If anything under `skills/` changed, update the `Version:` date at the top of
+`skills/yosegi/SKILL.md` to the commit's date, in the same commit. It is how an agent tells a stale
+installed copy from a current one, so a skill edit that leaves the date behind silently defeats that
+check.
+
 Finish with `bun lint`.
 
 ## Next steps

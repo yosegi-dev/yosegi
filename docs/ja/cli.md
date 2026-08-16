@@ -260,6 +260,53 @@ yosegi screen apply <screenId> <operations.json>
 
 `screen validate` の対象は保存済みの画面だけです。Screen JSON ファイルは `screen generate` が実行の一部として検証します。
 
+## `example list`
+
+**PoC。** ホストがカタログに登録した画面テンプレートを一覧します。`example apply` はここから複製します。
+
+```sh
+yosegi example list [options]
+```
+
+| フラグ | 型 | 既定値 | 意味 |
+| --- | --- | --- | --- |
+| `--catalog <path>` | path | `--data-dir` 直下の `examples.json` | 読み込むカタログ |
+| `--quiet` | boolean | `false` | `<n> examples in <path>` のヘッダ行を出さない |
+| `--json` | boolean | `false` | テキストの一覧ではなく `{ catalog, root, total, examples }` を返す |
+
+```sh
+yosegi example list --data-dir .yosegi
+```
+
+カタログの形は `{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }` です。
+各 `templatePath` は `root` を基準に解決され、その `root` 自体はカタログファイルからの相対で、既定値はカタログ自身のディレクトリです。
+カタログが存在しない場合は `EXAMPLE_CATALOG_NOT_FOUND`、キーが重複している場合は `INVALID_ARGUMENT` で失敗します。
+
+## `example apply`
+
+**PoC。** カタログのテンプレート 1 件を `--out` へ複製し、その export 名を `--name` に変えます。
+
+```sh
+yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [options]
+```
+
+| フラグ | 型 | 既定値 | 意味 |
+| --- | --- | --- | --- |
+| `--name <ComponentName>` | string | 必須 | 複製側の export が取る名前。JavaScript の識別子であること。さもなければ `INVALID_ARGUMENT` |
+| `--out <file.tsx>` | path | 必須 | 複製先。既存ファイルは決して上書きしない（`EXAMPLE_OUTPUT_EXISTS`） |
+| `--catalog <path>` | path | `--data-dir` 直下の `examples.json` | 読み込むカタログ |
+| `--json` | boolean | `false` | テキストの要約ではなく `{ out, key, componentName, template, nextSteps, warnings }` を返す |
+
+```sh
+yosegi example apply guest-list \
+  --name GuestListRoute --out app/routes/guest-list.tsx --data-dir .yosegi
+```
+
+複製の先頭には来歴を示すコメントが 2 行入ります。
+出力はそれに続けて、複製の import と、トップレベルの配列・オブジェクトの const を、書き出したファイル上の行番号付きで並べます。
+存在しないキーは did-you-mean の `suggestion` 付きで `EXAMPLE_NOT_FOUND`、`templatePath` の先にファイルが無い場合は `EXAMPLE_TEMPLATE_NOT_FOUND` になります。
+`example` の両コマンドは、受け取らない位置引数を `UNKNOWN_ARGUMENT` で拒否します。
+
 ## `mcp`
 
 MCP ツールを stdio で提供し、クライアントが切断するまで動き続けます。
