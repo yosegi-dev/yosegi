@@ -151,20 +151,28 @@ union の props 型でも `required` を使えるようにすることは、同�
 Language Service が先に安定するという事実自体が、上の抽出インターフェースの論拠になります。
 それを土台にした実装のほうが、Checker を土台にしたものより早く手が届きます。
 
-### `typescript` への依存の仕方を見直す
+### `typescript` は peer dependency にせず `dependency` のままとする
 
-`packages/server` は `typescript` を `>=5.4.0 <7` の `dependency` として宣言しています。
-厳密なバージョンではなく範囲を選んだのは意図的で、ホスト自身のコピーと Yosegi のものを unify させ、23MB のコンパイラが二重の入れ子となるのを避けるためでした。7.0 が npm の `latest` となった今、この理由は、それが想定していたホストでは働かなくなりました。7 のホストは `<7` を満たせないため、どのインストールでも 6 系のコピーが Yosegi の下に入れ子で入ります。
-範囲指定が防ごうとしていた結果そのものです。
+`packages/server` は `typescript` を `>=5.4.0 <7` の `dependency` として宣言しており、これを維持します。
+peer dependency 化が方向でしたが、2026-08-16 に npm 11・pnpm 10・bun 1.3 で実地にインストールして検証しました。
+7 のホストの下に 6 系のコピーが入れ子で入ることは、受け入れるコストとします。
 
-方向としては peer dependency です。
-ホストに新たな要求は生じません。docgen のために `typescript@npm:@typescript/typescript6` のエイリアスをどのみち入れるからです。
-そして解決を、エイリアスが置かれているホスト自身のツリーへ移せます。
+判断を左右する前提は成り立ちますが、得るものがありません。
+ホストの `typescript@npm:@typescript/typescript6` というエイリアスが提供する `typescript` の名前は、宣言した範囲とも peer の要求とも unify します。
+npm でも pnpm でも警告は出ません。
+ただし `@typescript/typescript6` は 10KB の shim であり、`@typescript/old: npm:typescript@^6` を通して実体のコンパイラを引き込みます。
+つまり約 24MB はどちらにせよ入ります。
 
-判断を左右する未検証の前提が 1 つあります。
-そのエイリアスが提供する `typescript` という名前が宣言した範囲と実際に unify するかは、パッケージマネージャごとのエイリアス解決の仕様に依存します。
-したがってこれは仕様を読むことではなく、実地のインストールでの検証を待ちます。
-もう 1 つの判断材料は、peer dependency にするとコンパイラのバージョンがホストの手に渡り、それとともに Registry の出力の再現性もホスト側に移ることです。
+一方で失うものは実在します。
+エイリアスを持たない素の 7 のホストでは `npm install` が `ERESOLVE` で失敗し、optional な peer にしても回避できません。
+pnpm と bun ではインストールは通りますが、実行時に生の `TypeError` でクラッシュします。
+遅延ロードしているのは `docgen.ts` だけで、5 つのモジュールがトップレベルで `typescript` を import しているためです。
+そして同じホストは現状の `dependencies` なら動いています。
+pnpm の isolated なレイアウトが Yosegi 自身の 6 系を与えるからです。
+つまりこの変更は、今動いているホストを壊します。
+
+再訪するのは、それらのトップレベルの `import * as ts` が遅延化された後です。
+これは堅牢化として別途進めており、コンパイラ API が欠けている場合に生の `TypeError` ではなく `docgen.ts` が既に出しているエラーを出すようにするものです。
 
 ### `@yosegi/core` とファイルシステム
 

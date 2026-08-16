@@ -194,22 +194,26 @@ re-evaluate on, not a date the cap comes off.
 That the Language Service stabilizes first is itself an argument for the extraction interface above:
 an implementation built on it is reachable sooner than one built on the Checker.
 
-### Reconsider how `typescript` is depended on
+### Keep `typescript` a `dependency`, not a peer dependency
 
-`packages/server` declares `typescript` as a `dependency` at `>=5.4.0 <7`. A range rather than an
-exact pin was the deliberate choice, so that the host's own copy and Yosegi's unify instead of
-nesting a second 23MB compiler. Now that 7.0 is npm's `latest`, that reasoning stops working for the
-hosts it was written for: a host on 7 cannot satisfy `<7`, so it nests a 6.x copy under Yosegi in
-every install — the outcome the range existed to prevent.
+`packages/server` declares `typescript` as a `dependency` at `>=5.4.0 <7`, and it stays there. A
+peer dependency was the direction until it was installed for real on 2026-08-16, against npm 11,
+pnpm 10, and bun 1.3. The nested 6.x copy under a host on 7 is the accepted cost.
 
-The direction is a peer dependency. It asks nothing new of the host, which already installs the
-aliased `typescript@npm:@typescript/typescript6` for docgen, and it moves resolution into the host's
-own tree, where the alias lives.
+The premise that decided it holds, and buys nothing. A `typescript` name provided by the host's
+`typescript@npm:@typescript/typescript6` alias does unify with a declared range and with a peer
+requirement, on npm and pnpm, without a warning — but `@typescript/typescript6` is a 10KB shim that
+pulls the real compiler in through `@typescript/old: npm:typescript@^6`, so the ~24MB arrives either
+way.
 
-One premise is unverified and decides the question: whether a `typescript` name provided by that
-alias unifies with the declared range depends on how each package manager resolves aliases, so this
-waits on a real install rather than on reading specs. The other thing to weigh is that a peer
-dependency hands the host the compiler version, and with it the reproducibility of registry output.
+What it costs is real. A host on plain 7 with no alias fails `npm install` with `ERESOLVE`, which an
+optional peer does not avoid; pnpm and bun install and then crash at runtime with a bare
+`TypeError`, because only `docgen.ts` defers its load while five modules import `typescript` at the
+top level. That same host works today under `dependencies` — pnpm's isolated layout gives Yosegi its
+own 6.x — so the change breaks a host that currently runs.
+
+Revisit it once those top-level `import * as ts` are lazy, which is being done separately so that a
+missing compiler API raises the error `docgen.ts` already raises instead of a bare `TypeError`.
 
 ### `@yosegi/core` and the filesystem
 
