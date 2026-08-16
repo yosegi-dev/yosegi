@@ -98,10 +98,14 @@ that committed them has already answered them for you.
   config means the same thing from anywhere in the host. `registry.source` globs are the single
   exception: they keep their `--project-root` base, which is also the base component ids are derived
   from.
-- **Typos are rejected, not ignored.** An unknown key fails the command with `CONFIG_INVALID` and a
-  did-you-mean, as does unparsable JSON or a value of the wrong type; a `--config` naming a file
-  that does not exist fails with `CONFIG_NOT_FOUND` (`errors.md`). A broken config also stops the
-  upward search rather than being climbed past, so the error always names the file you wrote.
+- **Typos are rejected, not ignored.** Anything wrong with the file fails the command with
+  `CONFIG_INVALID`, which always carries `path`. What comes with it depends on the fault: a key the
+  schema does not know and a value of the wrong type both add `issues`, and only an unknown key can
+  also add a did-you-mean `suggestion` — and only when a near candidate exists, so read `issues`
+  when there is none. A duplicate `examples` key adds `duplicateKeys` instead, and unparsable JSON
+  adds neither, since nothing was read. A `--config` naming a file that does not exist fails with
+  `CONFIG_NOT_FOUND` (`errors.md`). A broken config also stops the upward search rather than being
+  climbed past, so the error always names the file you wrote.
 - `registry build` records the values that actually won in the registry's `inputs`, so the
   `rebuild:` line in `component list` stays runnable whether they came from flags or from the
   config.

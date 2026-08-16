@@ -92,11 +92,16 @@ describe("loadHostConfig", () => {
 		expect(error.details?.path).toBe(join(root, "missing.json"));
 	});
 
-	it("壊れた JSON は CONFIG_INVALID", async () => {
+	// Nothing was read, so there is neither a key to suggest against nor a schema issue to
+	// report — the payload carries the path alone. The skill's reference documents that
+	// split, so keep it asserted rather than implied.
+	it("壊れた JSON は CONFIG_INVALID で path だけを返す", async () => {
 		const path = await write(root, "{ not json");
 		const error = await expectComposerError(loadHostConfig({ cwd: root }));
 		expect(error.code).toBe(SERVICE_CODES.CONFIG_INVALID);
 		expect(error.details?.path).toBe(path);
+		expect(error.details?.issues).toBeUndefined();
+		expect(error.suggestion).toBeNull();
 	});
 
 	it("未知のキーは CONFIG_INVALID になり候補を添える", async () => {
@@ -113,10 +118,22 @@ describe("loadHostConfig", () => {
 		expect(error.suggestion).toBe("Did you mean: source?");
 	});
 
-	it("型が違う値は CONFIG_INVALID になり issues を返す", async () => {
+	// A suggestion is only ever derived from an unrecognized key, so a well-named key with a
+	// wrong value leaves the reader with issues and nothing else.
+	it("型が違う値は CONFIG_INVALID になり issues のみを返す", async () => {
 		await write(root, { registry: { source: "**/*.tsx" } });
 		const error = await expectComposerError(loadHostConfig({ cwd: root }));
 		expect(error.code).toBe(SERVICE_CODES.CONFIG_INVALID);
+		expect(Array.isArray(error.details?.issues)).toBe(true);
+		expect(error.suggestion).toBeNull();
+	});
+
+	// Even an unknown key only gets a suggestion when something is close enough to it.
+	it("近い候補が無い未知のキーには suggestion が付かない", async () => {
+		await write(root, { totallyUnrelated: 1 });
+		const error = await expectComposerError(loadHostConfig({ cwd: root }));
+		expect(error.code).toBe(SERVICE_CODES.CONFIG_INVALID);
+		expect(error.suggestion).toBeNull();
 		expect(Array.isArray(error.details?.issues)).toBe(true);
 	});
 
@@ -142,6 +159,8 @@ describe("loadHostConfig", () => {
 		const error = await expectComposerError(loadHostConfig({ cwd: root }));
 		expect(error.code).toBe(SERVICE_CODES.CONFIG_INVALID);
 		expect(error.details?.duplicateKeys).toEqual(["list"]);
+		// The schema accepted it, so this fault reports duplicateKeys in place of issues.
+		expect(error.details?.issues).toBeUndefined();
 	});
 });
 
