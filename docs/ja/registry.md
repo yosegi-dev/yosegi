@@ -151,6 +151,10 @@ export 名は `displayName` ではなく TypeChecker が返すモジュールの
 `options` の並びは TypeScript がリテラル型を生成した順であって、宣言順とは限りません。
 同じ入力に対して安定はしていますが、順序に意味を持たせてはいけません。
 
+`shape` はベストエフォートです。
+抽出器が一段も展開できなかった型の場合、`component inspect` は `shape:` 行を持たない `json` prop を出します。
+その値が何であるかを語るのは、prop の `description` とホスト自身のソースだけです。
+
 ### HTML 属性と衝突する variants
 
 `React.HTMLAttributes<T> & VariantProps<typeof variants>` で組む場合、cva の `color` variant が `HTMLAttributes` の非推奨 `color` 属性と衝突します。
@@ -197,6 +201,23 @@ react-docgen-typescript の required 判定は、props 型に union が入った
 react-docgen-typescript が props を読めないコンポーネントでは、この 2 つだけを呼び出しシグネチャの第 1 引数から TypeChecker で直接読みます。
 他が読めなくてもここまでは確定できるためです。props 型そのものに辿り着けない場合は何も足しません。
 実在する prop を落とす方が、実在しない prop を作るより害が小さいからです。
+
+### 素通しされる DOM props
+
+props の型が React の DOM 属性ミックスインを取り込んでいるコンポーネントは、その要素の属性をすべて受け取ります。
+ミックスインとは `HTMLAttributes`、`ComponentPropsWithoutRef<"button">`、Radix プリミティブの props といったものです。
+個別に列挙すると 1 コンポーネントあたり数百件になるため、Manifest は代わりに 1 行の `passthrough` を持ち、`component inspect` がそれを props の下に出します。
+
+```
+also accepts: button DOM props (onClick, aria-*, …) pass through
+```
+
+これはミックスインを検出できたときだけ、しかも props を読めたコンポーネントにだけ付きます。
+推測するより控えめに出さない方を選んでいるので、この行が無いことは素通しが無いことの証拠にはなりません。
+
+この行が説明しているのはコンポーネントの型であって、Screen JSON のスキーマではありません。
+検証は `props` を Manifest 自身の props と突き合わせるので、素通しされる属性を Screen JSON に書くと `UNKNOWN_PROP` で拒否されます。
+これらの属性を使えるのは手書きの JSX の経路で、そこではホストの型検査が確認役になります。
 
 ### カテゴリとキュレーション
 

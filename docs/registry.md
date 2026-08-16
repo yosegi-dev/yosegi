@@ -191,6 +191,10 @@ The order of `options` follows the order in which TypeScript created the literal
 necessarily declaration order. It is stable for the same input, but no meaning should be attached to
 it.
 
+`shape` is best-effort. A type the extractor could not expand a level produces a `json` prop that
+`component inspect` prints with no `shape:` line under it, leaving the prop's `description` and the
+host's own source as the only account of what the value is.
+
 ### Variants that collide with HTML attributes
 
 In a component built as `React.HTMLAttributes<T> & VariantProps<typeof variants>`, a cva `color`
@@ -257,6 +261,26 @@ For a component whose props react-docgen-typescript cannot read at all, these tw
 off the call signature's first parameter through the TypeChecker, since that much can be settled
 even when the rest cannot. If even the props type is unreachable, nothing is added — omitting a real
 prop costs less than inventing one.
+
+### DOM props that pass through
+
+A component whose props type folds in one of React's DOM-attribute mixins — `HTMLAttributes`,
+`ComponentPropsWithoutRef<"button">`, a Radix primitive's props — accepts every attribute of that
+element. Listing them individually would add hundreds of entries per component, so the manifest
+carries a one-line `passthrough` note instead, which `component inspect` prints under `props`:
+
+```
+also accepts: button DOM props (onClick, aria-*, …) pass through
+```
+
+It is only set when a mixin was detected, and only on a component whose props could be read at all;
+under-claiming is preferred over guessing, so its absence is not evidence that nothing passes
+through.
+
+The note describes the component's type, not the Screen JSON schema. Validation checks `props`
+against the manifest's own props, so a passed-through attribute written into a Screen JSON is
+rejected with `UNKNOWN_PROP` — the route that can use these attributes is hand-written JSX, where
+the host's type checker is what confirms them.
 
 ### Categories and curation
 
