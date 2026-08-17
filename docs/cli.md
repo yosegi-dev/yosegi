@@ -308,9 +308,9 @@ yosegi example list [options]
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--catalog <path>` | path | `examples.json` under `--data-dir` | The catalog to read |
+| `--catalog <path>` | path | the config's `examples`, else `examples.json` under `--data-dir` | The catalog to read |
 | `--quiet` | boolean | `false` | Drop the `<n> examples in <path>` header line |
-| `--json` | boolean | `false` | Return `{ catalog, root, total, examples }` instead of the text listing |
+| `--json` | boolean | `false` | Return `{ catalog, root, source, total, examples }` instead of the text listing |
 
 ```sh
 yosegi example list --data-dir .yosegi
@@ -321,6 +321,11 @@ The catalog is
 `templatePath` resolves against `root`, which is itself relative to the catalog file and defaults to
 the catalog's own directory. A catalog that is not there fails with `EXAMPLE_CATALOG_NOT_FOUND`, and
 duplicate keys with `INVALID_ARGUMENT`.
+
+Without `--catalog`, the `examples` section of `yosegi.config.json` is read as the catalog in place,
+and `examples.json` under `--data-dir` is the fallback when there is no such section. `source` in
+the `--json` output is `flag`, `config`, or `data-dir` accordingly. See
+[Configuration file](./configuration.md).
 
 ## `example apply`
 
@@ -334,7 +339,7 @@ yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [optio
 | --- | --- | --- | --- |
 | `--name <ComponentName>` | string | required | The name the copy's export takes. A JavaScript identifier, or `INVALID_ARGUMENT` |
 | `--out <file.tsx>` | path | required | Where the copy goes. An existing file is never overwritten (`EXAMPLE_OUTPUT_EXISTS`) |
-| `--catalog <path>` | path | `examples.json` under `--data-dir` | The catalog to read |
+| `--catalog <path>` | path | the config's `examples`, else `examples.json` under `--data-dir` | The catalog to read |
 | `--json` | boolean | `false` | Return `{ out, key, componentName, template, nextSteps, warnings }` instead of the text summary |
 
 ```sh

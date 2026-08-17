@@ -90,9 +90,9 @@ template's imports and where its inline mock data sits — the places the editin
 The catalog is a declaration the host writes, in the `examples` section of the config file above:
 per entry a key, a label, a description, a `templatePath`, and a `componentName`. A Story under a
 title namespace (`Examples/*`) doubles as the preview, which leaves room to detect entries
-mechanically through the same `storyFile` that curation already reads. The PoC reads that
-declaration from `--catalog <path>` or from `<data-dir>/examples.json`; moving it onto the config
-file is what is left.
+mechanically through the same `storyFile` that curation already reads. That section is read as the
+catalog today, after `--catalog <path>` and ahead of `<data-dir>/examples.json`; detecting entries
+from Stories is what is left.
 
 What it buys is correctness by construction. A new screen's skeleton, its state management, and the
 design system's idioms are inherited from reviewed code rather than generated from nothing, so the

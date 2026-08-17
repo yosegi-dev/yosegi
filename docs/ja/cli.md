@@ -274,9 +274,9 @@ yosegi example list [options]
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--catalog <path>` | path | `--data-dir` 直下の `examples.json` | 読み込むカタログ |
+| `--catalog <path>` | path | config の `examples`、無ければ `--data-dir` 直下の `examples.json` | 読み込むカタログ |
 | `--quiet` | boolean | `false` | `<n> examples in <path>` のヘッダ行を出さない |
-| `--json` | boolean | `false` | テキストの一覧ではなく `{ catalog, root, total, examples }` を返す |
+| `--json` | boolean | `false` | テキストの一覧ではなく `{ catalog, root, source, total, examples }` を返す |
 
 ```sh
 yosegi example list --data-dir .yosegi
@@ -285,6 +285,10 @@ yosegi example list --data-dir .yosegi
 カタログの形は `{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }` です。
 各 `templatePath` は `root` を基準に解決され、その `root` 自体はカタログファイルからの相対で、既定値はカタログ自身のディレクトリです。
 カタログが存在しない場合は `EXAMPLE_CATALOG_NOT_FOUND`、キーが重複している場合は `INVALID_ARGUMENT` で失敗します。
+
+`--catalog` が無い場合は `yosegi.config.json` の `examples` 節をその場でカタログとして読み、その節が無ければ `--data-dir` 直下の `examples.json` へ落ちます。
+`--json` 出力の `source` はそれぞれ `flag`、`config`、`data-dir` になります。
+[設定ファイル](./configuration.md)を参照してください。
 
 ## `example apply`
 
@@ -298,7 +302,7 @@ yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [optio
 | --- | --- | --- | --- |
 | `--name <ComponentName>` | string | 必須 | 複製側の export が取る名前。JavaScript の識別子であること。さもなければ `INVALID_ARGUMENT` |
 | `--out <file.tsx>` | path | 必須 | 複製先。既存ファイルは決して上書きしない（`EXAMPLE_OUTPUT_EXISTS`） |
-| `--catalog <path>` | path | `--data-dir` 直下の `examples.json` | 読み込むカタログ |
+| `--catalog <path>` | path | config の `examples`、無ければ `--data-dir` 直下の `examples.json` | 読み込むカタログ |
 | `--json` | boolean | `false` | テキストの要約ではなく `{ out, key, componentName, template, nextSteps, warnings }` を返す |
 
 ```sh

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { ComposerError, didYouMean, SERVICE_CODES } from "@yosegi/core";
 import { z } from "zod";
+import { HOST_CONFIG_FILENAME } from "../host-config.ts";
 
 // The host's catalog of screen templates that `example apply` copies from.
 //
@@ -38,17 +39,24 @@ export const exampleCatalogSchema = z.object({
 
 export type ExampleEntry = z.infer<typeof exampleEntrySchema>;
 
+// Which of the three declarations the catalog in hand came from. Carried on the value
+// rather than re-derived from the path, because the config case is not a catalog file at
+// all — its entries live inside yosegi.config.json — and the output has to say so.
+export type CatalogSource = "flag" | "config" | "data-dir";
+
 export type LoadedCatalog = {
 	// Absolute path the catalog was read from. Echoed in output so a reader never has to
-	// guess which of --catalog and the --data-dir default was consulted.
+	// guess which of --catalog, the config, and the --data-dir default was consulted.
 	path: string;
 	// Absolute base for templatePath.
 	root: string;
+	source: CatalogSource;
 	examples: ExampleEntry[];
 };
 
 export async function loadExampleCatalog(
 	catalogPath: string,
+	source: Exclude<CatalogSource, "config">,
 ): Promise<LoadedCatalog> {
 	const path = resolve(catalogPath);
 	let raw: string;
@@ -63,7 +71,7 @@ export async function loadExampleCatalog(
 		// instead of only inside the message.
 		throw new ComposerError(
 			SERVICE_CODES.EXAMPLE_CATALOG_NOT_FOUND,
-			`Example catalog not found at ${path}. Pass --catalog <path>, or place the catalog at <data-dir>/examples.json.`,
+			`Example catalog not found at ${path}. Pass --catalog <path>, add an "examples" section to ${HOST_CONFIG_FILENAME}, or place the catalog at <data-dir>/examples.json.`,
 			null,
 			{ details: { path } },
 		);
@@ -95,7 +103,25 @@ export async function loadExampleCatalog(
 	return {
 		path,
 		root: resolve(dirname(path), parsed.root ?? "."),
+		source,
 		examples: parsed.examples,
+	};
+}
+
+// The same catalog, declared in yosegi.config.json's `examples` section instead of in a
+// file of its own. The entries arrive with templatePath already resolved against the
+// config's directory (hostConfigDefaults does it, as it does for every other path in the
+// file), so root is that directory: resolving an absolute path against it is a no-op, and
+// it is the base the `template:` line in apply's output is relative to.
+export function exampleCatalogFromConfig(
+	configPath: string,
+	examples: ExampleEntry[],
+): LoadedCatalog {
+	return {
+		path: configPath,
+		root: dirname(configPath),
+		source: "config",
+		examples,
 	};
 }
 

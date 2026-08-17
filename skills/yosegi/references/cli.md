@@ -78,7 +78,8 @@ that committed them has already answered them for you.
   "emit": {
     "importMap": ["./app=~"],
     "metaTemplate": "./.storybook/screen-meta.tsx"
-  }
+  },
+  "examples": []
 }
 ```
 
@@ -88,8 +89,9 @@ that committed them has already answered them for you.
   without a config. `--config <path>` names one outright and skips the search.
 - **What it supplies.** `dataDir` for `--data-dir` on every command; `registry.source` /
   `registry.tsconfig` / `registry.metadata` for `registry build`; `emit.importMap` /
-  `emit.metaTemplate` for `screen generate`. Every key is optional. `emit.importMap` is an array of
-  the same `<from>=<to>` entries `--import-map` takes as one comma-separated string.
+  `emit.metaTemplate` for `screen generate`; `examples` as the catalog `example list` /
+  `example apply` read. Every key is optional. `emit.importMap` is an array of the same
+  `<from>=<to>` entries `--import-map` takes as one comma-separated string.
 - **Precedence.** A flag beats the file, and the file beats the built-in default. Nothing merges: a
   `--source` on the command line replaces the config's list rather than adding to it. Keep passing
   `--data-dir` explicitly as this reference shows — an explicit flag wins either way, so it stays
@@ -401,18 +403,20 @@ yosegi example apply guest-list \
   --data-dir .yosegi
 ```
 
-The catalog is a JSON file the host maintains —
+The catalog is a declaration the host maintains —
 `{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }` — read from
-`--catalog <path>`, or from `examples.json` under `--data-dir`. `templatePath` resolves against
-`root`, which is relative to the catalog file and defaults to the catalog's own directory.
+`--catalog <path>`, then from the `examples` section of `yosegi.config.json`, then from
+`examples.json` under `--data-dir`. `templatePath` resolves against `root`, which is relative to the
+catalog file and defaults to the catalog's own directory; in the config it resolves against the
+config file, like every other path there.
 
 | Flag | Meaning |
 | --- | --- |
-| `--catalog <path>` | The catalog to read. Both commands take it |
+| `--catalog <path>` | The catalog to read, ahead of the config and `--data-dir`. Both commands take it |
 | `--name <ComponentName>` | `apply` only, required. The name the copy's export takes; a non-identifier is `INVALID_ARGUMENT` |
 | `--out <file.tsx>` | `apply` only, required. Where the copy goes |
 | `--quiet` | `list` only. Drops the `<n> examples in <path>` header line |
-| `--json` | `list`: `{ catalog, root, total, examples }`. `apply`: `{ out, key, componentName, template, nextSteps, warnings }` |
+| `--json` | `list`: `{ catalog, root, source, total, examples }`, `source` being `flag` / `config` / `data-dir`. `apply`: `{ out, key, componentName, template, nextSteps, warnings }` |
 
 What `apply` actually does is copy the file and rename one identifier. **The copy owns itself from
 then on** — it keeps no link to the template, so editing it afterwards is unremarkable, and later

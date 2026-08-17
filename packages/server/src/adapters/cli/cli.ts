@@ -42,7 +42,12 @@ import {
 } from "../../config.ts";
 import { parseMetaTemplate } from "../../emit/meta-template.ts";
 import { applyExample } from "../../examples/apply.ts";
-import { loadExampleCatalog, requireExample } from "../../examples/catalog.ts";
+import {
+	exampleCatalogFromConfig,
+	type LoadedCatalog,
+	loadExampleCatalog,
+	requireExample,
+} from "../../examples/catalog.ts";
 import {
 	HOST_CONFIG_FILENAME,
 	type HostConfigDefaults,
@@ -854,9 +859,22 @@ async function screenContext(
 	return 0;
 }
 
-// --catalog, or the host's <data-dir>/examples.json.
-function catalogPath(flags: CliFlags, dataDir: string): string {
-	return flagString(flags, "catalog") ?? examplesPath(dataDir);
+// The catalog in effect, from the same flag > config > built-in default chain every other
+// setting follows. The config's `examples` section is a catalog in its own right rather
+// than a pointer to one, so it is used in place instead of being read from disk again.
+async function resolveCatalog(
+	flags: CliFlags,
+	dataDir: string,
+	defaults: HostConfigDefaults,
+): Promise<LoadedCatalog> {
+	const fromFlag = flagString(flags, "catalog");
+	if (fromFlag !== undefined) {
+		return await loadExampleCatalog(fromFlag, "flag");
+	}
+	if (defaults.configPath !== null && defaults.examples.length > 0) {
+		return exampleCatalogFromConfig(defaults.configPath, defaults.examples);
+	}
+	return await loadExampleCatalog(examplesPath(dataDir), "data-dir");
 }
 
 // List the screen templates the host has catalogued. The entry point for `example apply`:
@@ -865,17 +883,21 @@ async function listExamples(
 	rest: string[],
 	flags: CliFlags,
 	dataDir: string,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	// Checked before the catalog is read, so a mistyped invocation does no work at all.
 	const extra = checkPositionals("example list", rest, 0);
 	if (extra !== null) {
 		return extra;
 	}
-	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	const catalog = await resolveCatalog(flags, dataDir, defaults);
 	if (flagBoolean(flags, "json")) {
 		print({
 			catalog: catalog.path,
 			root: catalog.root,
+			// Which declaration won, so a caller reading the JSON can tell an entry that came
+			// from the config from one that came from a catalog file at the same path.
+			source: catalog.source,
 			total: catalog.examples.length,
 			examples: catalog.examples,
 		});
@@ -890,6 +912,7 @@ async function applyExampleCommand(
 	rest: string[],
 	flags: CliFlags,
 	dataDir: string,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	const extra = checkPositionals("example apply", rest, 1);
 	if (extra !== null) {
@@ -916,7 +939,7 @@ async function applyExampleCommand(
 			"example apply requires --out <file.tsx>.",
 		);
 	}
-	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	const catalog = await resolveCatalog(flags, dataDir, defaults);
 	const result = await applyExample({
 		catalog,
 		example: requireExample(catalog, key),
@@ -1580,11 +1603,11 @@ export async function runCli(argv: string[]): Promise<number> {
 		// The example commands touch neither the registry nor the screen store — a
 		// catalogued template is copied as source text — so neither is loaded here.
 		if (group === "example" && action === "list") {
-			return await listExamples(rest, flags, dataDir);
+			return await listExamples(rest, flags, dataDir, defaults);
 		}
 
 		if (group === "example" && action === "apply") {
-			return await applyExampleCommand(rest, flags, dataDir);
+			return await applyExampleCommand(rest, flags, dataDir, defaults);
 		}
 
 		if (group === "screen") {
@@ -1747,7 +1770,8 @@ function usage(): string {
 		"  example list [--catalog <path>] [--json] [--quiet]   # PoC",
 		"      List the host's catalogued screen templates. The catalog is a JSON file",
 		'      ({ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }),',
-		"      read from --catalog or <data-dir>/examples.json.",
+		`      read from --catalog, the "examples" section of ${HOST_CONFIG_FILENAME}, or`,
+		"      <data-dir>/examples.json, in that order.",
 		"  example apply <exampleKey> --name <ComponentName> --out <file.tsx> [--catalog <path>] [--json]   # PoC",
 		"      Copy that template to --out, renaming its export to --name. The copy owns itself",
 		"      from then on and does not track the template. An existing --out is never",

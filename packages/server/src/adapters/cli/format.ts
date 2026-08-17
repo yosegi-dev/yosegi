@@ -588,11 +588,17 @@ export function formatExampleList(
 	catalog: LoadedCatalog,
 	options: { quiet?: boolean } = {},
 ): string {
+	// The config case is entries inside yosegi.config.json rather than a catalog file, so
+	// the path alone would read as "there is a catalog at this path". Name the section.
+	const origin =
+		catalog.source === "config"
+			? `the "examples" section of ${catalog.path}`
+			: catalog.path;
 	const head = options.quiet
 		? null
-		: `${catalog.examples.length} examples in ${catalog.path}`;
+		: `${catalog.examples.length} examples in ${origin}`;
 	if (catalog.examples.length === 0) {
-		const note = `No examples in ${catalog.path}. Add entries under "examples".`;
+		const note = `No examples in ${origin}. Add entries under "examples".`;
 		return head ? `${head}\n\n${note}` : note;
 	}
 	const body = [

@@ -77,7 +77,9 @@ Storybook 10.5 の `storybook build` は Component Manifest（`/manifests/compon
 カタログはホストが書く宣言で、上の設定ファイルの `examples` セクションに置きます。
 1 件ごとに key・label・description・`templatePath`・`componentName` を持ちます。
 title の namespace（`Examples/*`）に置いた Story がプレビューを兼ねるため、キュレーションが既に読んでいる `storyFile` を通じて機械的に検出する余地も残ります。
-PoC がこの宣言を読むのは `--catalog <path>` か `<data-dir>/examples.json` からで、設定ファイルへの載せ替えが残っています。
+現在この節をカタログとして読みます。
+順序は `--catalog <path>` の次、`<data-dir>/examples.json` の前です。
+Story から要素を検出する部分が残っています。
 
 これが効くのは、構築による正しさです。
 新しい画面の骨格・状態管理・デザインシステムの慣用は、ゼロから生成されるのではなく、レビュー済みのコードから受け継がれます。

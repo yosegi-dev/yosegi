@@ -200,6 +200,10 @@ export async function loadHostConfig(
 // config says nothing about this", which is what lets the CLI express the precedence chain
 // as `flag ?? config ?? built-in default`.
 export type HostConfigDefaults = {
+	// Absolute path of the file these defaults came from, or null when there was none.
+	// The `examples` section is read as a catalog in place, so the command that lists it
+	// has to be able to name the file the entries were declared in.
+	configPath: string | null;
 	dataDir: string | null;
 	registrySources: string[];
 	tsconfig: string | null;
@@ -212,6 +216,7 @@ export type HostConfigDefaults = {
 };
 
 export const NO_HOST_CONFIG: HostConfigDefaults = {
+	configPath: null,
 	dataDir: null,
 	registrySources: [],
 	tsconfig: null,
@@ -235,6 +240,7 @@ export function hostConfigDefaults(
 		value === undefined ? null : resolve(base, value);
 	const { config } = loaded;
 	return {
+		configPath: loaded.path,
 		dataDir: at(config.dataDir),
 		// The one exception to config-relative resolution: --source globs are matched
 		// against --project-root (which defaults to the tsconfig's directory), and that base
