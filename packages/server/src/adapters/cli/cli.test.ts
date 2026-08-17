@@ -1882,6 +1882,59 @@ describe("runCli", () => {
 		expect(await Bun.file(join(freshDir, "registry.json")).exists()).toBe(true);
 	});
 
+	// The data dir is build output. Marking it ignored where Yosegi creates it saves every
+	// host the same manual .gitignore line, the way a build directory does it.
+	it("registry build は data-dir に .gitignore を書き出す", async () => {
+		const freshDir = join(dataDir, "ignored");
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--data-dir",
+			freshDir,
+		]);
+		expect(code).toBe(0);
+		expect(await Bun.file(join(freshDir, ".gitignore")).text()).toContain("*");
+	});
+
+	// --out puts the registry in a directory the host owns and may well commit. Ignoring it
+	// would be Yosegi deciding that for them.
+	it("--out が data-dir の外なら .gitignore を書かない", async () => {
+		const outDir = join(dataDir, "host-owned");
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--out",
+			join(outDir, "registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		expect(await Bun.file(join(outDir, "registry.json")).exists()).toBe(true);
+		expect(await Bun.file(join(outDir, ".gitignore")).exists()).toBe(false);
+	});
+
 	// A registry made up of only synthetic primitives can still be written, so warn about it
 	// so it doesn't get lost among the success message.
 	it("registry build --source が 0 件のときは警告を出す", async () => {

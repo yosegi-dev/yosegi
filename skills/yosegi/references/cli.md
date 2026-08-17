@@ -48,7 +48,9 @@ user.
   directory, so it moves with your cwd). **Pass the same value to every command.** Writing
   `registry build`'s output to one location and then passing a different `--data-dir` to
   `component list` produces `REGISTRY_NOT_FOUND` (its `path` / `dataDir` fields name the location
-  that was actually consulted). The directory is created if it does not exist.
+  that was actually consulted). The directory is created if it does not exist, together with a
+  `.gitignore` that ignores everything in it — it holds generated data. An existing one is left
+  alone, so a host that decided to commit the registry keeps that decision.
 - Repeatable flags (`--source`, `--query`) also accept comma-separated values.
 - **Always quote globs.** `--source app/components/**/*.tsx` is expanded by the shell first and only
   one file reaches the CLI. Write `--source "app/components/**/*.tsx"`.

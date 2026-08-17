@@ -33,6 +33,7 @@ import {
 import { z } from "zod";
 import {
 	DEFAULT_DATA_DIR,
+	ensureDataDir,
 	examplesPath,
 	loadRegistry,
 	registryPath,
@@ -1318,7 +1319,14 @@ async function buildRegistry(
 	const out = flagString(flags, "out") ?? registryPath(dataDir);
 	// The output destination is auto-created, same as screen generate. Otherwise an agent
 	// would have to remember to insert an mkdir step just to pass a fresh --data-dir tmp/yosegi.
-	await mkdir(dirname(out), { recursive: true });
+	// registry build is usually the first command a host runs, so this is where the data dir
+	// comes into existence and gets its .gitignore — unless --out redirects the registry
+	// somewhere the host owns, in which case marking that directory ignored would be wrong.
+	if (resolve(dirname(out)) === resolve(dataDir)) {
+		await ensureDataDir(dataDir);
+	} else {
+		await mkdir(dirname(out), { recursive: true });
+	}
 	const storybookBaseUrl = inputs.storybookUrl;
 	const version = inputs.version;
 	const sources = inputs.sources;

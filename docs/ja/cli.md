@@ -25,7 +25,7 @@ bun add -d @yosegi/yosegi
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ作成する。全コマンドへ同じ値を渡す |
+| `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ、中身をすべて無視する `.gitignore` とともに作成する。全コマンドへ同じ値を渡す |
 | `--config <path>` | path | cwd から上方へ探索して最初に見つかる `yosegi.config.json` | 既定値を与える設定ファイル。パスが存在しなければ `CONFIG_NOT_FOUND`。探索で見つからないことはエラーではない |
 
 フラグが `yosegi.config.json` に勝ち、このファイルが組み込みの既定値に勝ちます。
