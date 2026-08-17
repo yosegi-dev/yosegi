@@ -101,7 +101,8 @@ yosegi screen context tmp/screen.json \
 
 `--data-dir` は全コマンドへ同じ値を渡します。Registry と保存済み画面の置き場で、既定はカレントディレクトリ直下の `.yosegi` です。
 Yosegi は中身をすべて無視する `.gitignore` とともにこのディレクトリを作ります。
-Registry をコミットしたい場合は、そのファイルを削除してください。
+Registry をコミットしたい場合は、そのファイルに `!registry.json` を足してください。
+このファイルが書き換えられることはありませんが、削除した場合は次のコマンドで復活します。
 
 必須なのは手順 1 と 2 です。
 コンポーネントの本当の props・enum の選択肢・slots・import specifier を、推測ではなくここで確定させます。

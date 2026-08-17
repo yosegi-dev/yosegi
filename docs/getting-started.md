@@ -103,7 +103,8 @@ yosegi screen context tmp/screen.json \
 
 Pass the same `--data-dir` to every command; it is where the registry and the saved screens live.
 The default is `.yosegi` under the current directory. Yosegi creates it with a `.gitignore` that
-ignores everything in it — delete that file to commit the registry instead.
+ignores everything in it. To commit the registry instead, add `!registry.json` to that file: it is
+never rewritten, while a deleted one comes back on the next command.
 
 Steps 1 and 2 are the mandatory part: a component's real props, enum options, slots, and import
 specifier are confirmed there instead of guessed. The output lands in the host's repository and is

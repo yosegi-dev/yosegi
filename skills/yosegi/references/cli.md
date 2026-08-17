@@ -49,8 +49,9 @@ user.
   `registry build`'s output to one location and then passing a different `--data-dir` to
   `component list` produces `REGISTRY_NOT_FOUND` (its `path` / `dataDir` fields name the location
   that was actually consulted). The directory is created if it does not exist, together with a
-  `.gitignore` that ignores everything in it — it holds generated data. An existing one is left
-  alone, so a host that decided to commit the registry keeps that decision.
+  `.gitignore` that ignores everything in it — it holds generated data. An existing one is never
+  rewritten, so a host that added `!registry.json` to it keeps that decision; a host that deleted it
+  gets it back on the next command.
 - Repeatable flags (`--source`, `--query`) also accept comma-separated values.
 - **Always quote globs.** `--source app/components/**/*.tsx` is expanded by the shell first and only
   one file reaches the CLI. Write `--source "app/components/**/*.tsx"`.
