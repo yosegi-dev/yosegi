@@ -50,8 +50,8 @@ component ids are derived from, so rewriting the globs here would change which i
 | --- | --- | --- | --- |
 | `$schema` | string | — | Accepted so an editor can be pointed at a JSON Schema. Yosegi ignores it, and ships none |
 | `dataDir` | path | `--data-dir`, every command | Where the registry and the saved screens live |
-| `registry.source` | glob array | `--source`, `registry build` | Resolved against `--project-root`, not against this file |
-| `registry.tsconfig` | path | `--tsconfig`, `registry build` | Also moves the default `--project-root` with it |
+| `registry.source` | glob array | `--source`, `registry build` / `registry metadata` | Resolved against `--project-root`, not against this file |
+| `registry.tsconfig` | path | `--tsconfig`, `registry build` / `registry metadata` | Also moves the default `--project-root` with it |
 | `registry.metadata` | path | `--metadata`, `registry build` | Hand-supplied props for components whose types could not be read |
 | `emit.importMap` | string array | `--import-map`, `screen generate` | One `<from>=<to>` per entry; joined into the single string the flag takes |
 | `emit.metaTemplate` | path | `--meta-template`, `screen generate` | Not applied to `--target component`, which writes a file with no Story meta |

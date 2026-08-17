@@ -669,6 +669,7 @@ async function generateStory(
 async function generateMetadata(
 	componentIds: string[],
 	flags: CliFlags,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	if (componentIds.length === 0) {
 		return missingArgument(
@@ -676,19 +677,28 @@ async function generateMetadata(
 			"registry metadata requires at least one <componentId>.",
 		);
 	}
+	// --tsconfig and --source mean here what they mean in registry build, so they come from
+	// the config the same way. The scaffold this writes is fed straight back to that build:
+	// reading a different tsconfig than the build will would resolve the same ids against a
+	// different project.
+	const tsconfig =
+		flagString(flags, "tsconfig") ?? defaults.tsconfig ?? undefined;
 	// Both the glob and the id's module path are resolved with the same base as registry build.
-	const projectRoot = resolveProjectRoot(flags, flagString(flags, "tsconfig"));
+	const projectRoot = resolveProjectRoot(flags, tsconfig);
 	if (!projectRoot) {
 		throw new ComposerError(
 			SERVICE_CODES.INVALID_ARGUMENT,
-			"registry metadata requires --tsconfig <path> or --project-root <dir> (the base for --source globs and for component id module paths).",
+			`registry metadata requires --tsconfig <path> or --project-root <dir> (the base for --source globs and for component id module paths), or a registry.tsconfig in ${HOST_CONFIG_FILENAME}.`,
 		);
 	}
 
+	// A --source on the command line replaces the config's list rather than adding to it,
+	// exactly as in registry build.
+	const sources = flagList(flags, "source");
 	const { metadata, notes } = buildCvaMetadata({
 		projectRoot,
 		componentIds,
-		sources: flagList(flags, "source"),
+		sources: sources.length > 0 ? sources : defaults.registrySources,
 	});
 
 	const out = flagString(flags, "out");
@@ -1562,7 +1572,7 @@ export async function runCli(argv: string[]): Promise<number> {
 		}
 
 		if (group === "registry" && action === "metadata") {
-			return await generateMetadata(rest, flags);
+			return await generateMetadata(rest, flags, defaults);
 		}
 
 		if (group === "registry" && action === "status") {
@@ -1784,8 +1794,9 @@ function usage(): string {
 		"  common: --data-dir <dir> [--config <path>]",
 		`      --config points at a ${HOST_CONFIG_FILENAME}. Without it, one is searched for from the`,
 		"      cwd upwards; running without one is fine. It supplies defaults for --data-dir, for",
-		"      registry build's --source / --tsconfig / --metadata, and for screen generate's",
-		"      --import-map / --meta-template. A flag always wins over the file, and paths inside it",
+		"      registry build's --source / --tsconfig / --metadata, for registry metadata's",
+		"      --source / --tsconfig, for screen generate's --import-map / --meta-template, and the",
+		"      example commands' catalog. A flag always wins over the file, and paths inside it",
 		"      are read against the file's own directory (--source globs excepted: those keep their",
 		"      --project-root base).",
 		"",

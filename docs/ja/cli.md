@@ -86,9 +86,9 @@ yosegi registry metadata <componentId> [<componentId> ...] --tsconfig <path> [op
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--tsconfig <path>` | path | — | `--project-root` を渡さない場合は必須 |
+| `--tsconfig <path>` | path | config の `registry.tsconfig` | `--project-root` を渡さない場合は必須 |
 | `--project-root <dir>` | path | `--tsconfig` のあるディレクトリ | `registry build` と同じ意味 |
-| `--source <glob>` | glob | — | 短い id（`Button`）の場合のみ必要。この範囲から export 名を探す |
+| `--source <glob>` | glob | config の `registry.source` | 短い id（`Button`）の場合のみ必要。この範囲から export 名を探す |
 | `--out <path>` | path | 標準出力 | 雛形の書き出し先 |
 
 ```sh

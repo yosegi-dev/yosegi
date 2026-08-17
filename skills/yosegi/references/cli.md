@@ -88,7 +88,8 @@ that committed them has already answered them for you.
   an error — flags alone remain a complete invocation, and every command in this reference works
   without a config. `--config <path>` names one outright and skips the search.
 - **What it supplies.** `dataDir` for `--data-dir` on every command; `registry.source` /
-  `registry.tsconfig` / `registry.metadata` for `registry build`; `emit.importMap` /
+  `registry.tsconfig` for `registry build` and `registry metadata`, `registry.metadata` for
+  `registry build`; `emit.importMap` /
   `emit.metaTemplate` for `screen generate`; `examples` as the catalog `example list` /
   `example apply` read. Every key is optional. `emit.importMap` is an array of the same
   `<from>=<to>` entries `--import-map` takes as one comma-separated string.

@@ -3660,6 +3660,101 @@ describe("yosegi.config.json", () => {
 		expect(written.inputs.sources).toEqual(["nowhere/*.tsx"]);
 	});
 
+	// registry metadata writes the scaffold registry build then reads, so the two have to
+	// resolve ids against the same project. A cva component, which is all the scaffold covers.
+	async function writeCvaHost(
+		directory: string,
+		variants = '{ sm: "text-sm", md: "text-base" }',
+	): Promise<void> {
+		await mkdir(join(directory, "components"), { recursive: true });
+		await writeFile(
+			join(directory, "tsconfig.json"),
+			JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }),
+		);
+		await writeFile(
+			join(directory, "components", "typography.tsx"),
+			`import { cva } from "class-variance-authority";
+
+const textVariants = cva("", { variants: { size: ${variants} } });
+
+export function Text() {
+	return <p className={textVariants()} />;
+}
+`,
+		);
+	}
+
+	// The scaffold is the first line; the rest are Note: lines.
+	function scaffoldProps(id: string): Record<string, { options?: unknown[] }> {
+		const parsed = JSON.parse(logs[0]) as Record<
+			string,
+			{ props: Record<string, { options?: unknown[] }> }
+		>;
+		return parsed[id].props;
+	}
+
+	it("registry metadata は config の tsconfig を使う", async () => {
+		await writeCvaHost(root);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: { tsconfig: "./tsconfig.json" },
+		});
+		const nested = join(root, "apps", "web");
+		await mkdir(nested, { recursive: true });
+		process.chdir(nested);
+
+		const code = await runCli([
+			"registry",
+			"metadata",
+			"components/typography#Text",
+		]);
+		expect(code).toBe(0);
+		expect(scaffoldProps("components/typography#Text").size?.options).toEqual([
+			"sm",
+			"md",
+		]);
+	});
+
+	// A short id is searched for within --source, so the config's list has to reach here too.
+	it("registry metadata は短い id を config の source から解決する", async () => {
+		await writeCvaHost(root);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: {
+				source: ["components/**/*.tsx"],
+				tsconfig: "./tsconfig.json",
+			},
+		});
+		process.chdir(root);
+
+		const code = await runCli(["registry", "metadata", "Text"]);
+		expect(code).toBe(0);
+		expect(scaffoldProps("Text").size?.options).toEqual(["sm", "md"]);
+	});
+
+	it("--tsconfig フラグは config の tsconfig に勝つ", async () => {
+		await writeCvaHost(root);
+		const other = join(root, "other");
+		await writeCvaHost(other, '{ lg: "text-lg" }');
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: { tsconfig: "./tsconfig.json" },
+		});
+		process.chdir(root);
+
+		const code = await runCli([
+			"registry",
+			"metadata",
+			"components/typography#Text",
+			"--tsconfig",
+			join(other, "tsconfig.json"),
+		]);
+		expect(code).toBe(0);
+		expect(scaffoldProps("components/typography#Text").size?.options).toEqual([
+			"lg",
+		]);
+	});
+
 	it("screen generate は config の importMap / metaTemplate を使う", async () => {
 		const dataDir = await seedDataDir(join(root, ".yosegi"));
 		await writeFile(

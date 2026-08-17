@@ -53,8 +53,8 @@ tsconfig の解決と同じ規則です。
 | --- | --- | --- | --- |
 | `$schema` | string | — | エディタから JSON Schema を指せるように受け付ける。Yosegi は無視し、Schema も同梱しない |
 | `dataDir` | path | 全コマンドの `--data-dir` | Registry と保存済み画面の置き場 |
-| `registry.source` | glob の配列 | `registry build` の `--source` | このファイルではなく `--project-root` を基準に解決する |
-| `registry.tsconfig` | path | `registry build` の `--tsconfig` | 既定の `--project-root` もこれに追随して動く |
+| `registry.source` | glob の配列 | `registry build` / `registry metadata` の `--source` | このファイルではなく `--project-root` を基準に解決する |
+| `registry.tsconfig` | path | `registry build` / `registry metadata` の `--tsconfig` | 既定の `--project-root` もこれに追随して動く |
 | `registry.metadata` | path | `registry build` の `--metadata` | 型から読めなかったコンポーネントの props を手で補う |
 | `emit.importMap` | string の配列 | `screen generate` の `--import-map` | 1 要素につき `<from>=<to>` を 1 つ。フラグが取る 1 本の文字列へ連結する |
 | `emit.metaTemplate` | path | `screen generate` の `--meta-template` | Story の meta を持たないファイルを書く `--target component` には適用しない |

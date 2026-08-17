@@ -102,9 +102,9 @@ yosegi registry metadata <componentId> [<componentId> ...] --tsconfig <path> [op
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--tsconfig <path>` | path | — | Required unless `--project-root` is given |
+| `--tsconfig <path>` | path | the config's `registry.tsconfig` | Required unless `--project-root` is given |
 | `--project-root <dir>` | path | the `--tsconfig` directory | Same meaning as in `registry build` |
-| `--source <glob>` | glob | — | Only needed for short ids (`Button`); the export name is searched for within this range |
+| `--source <glob>` | glob | the config's `registry.source` | Only needed for short ids (`Button`); the export name is searched for within this range |
 | `--out <path>` | path | stdout | Where the scaffold is written |
 
 ```sh
