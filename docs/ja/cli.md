@@ -140,7 +140,7 @@ yosegi component list --query card --data-dir .yosegi
 ```
 
 見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出ます。
-この行は結果を左右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープリンクを再現できます。`--json` が返すフィールドは 8 つです。`version`、`generatedAt`、`builtWith`（生成した Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
+この行は結果を左右する全フラグ（`--storybook-url` を含む）を持ち、左右しないフラグ（`--data-dir`、`--out`、`--report`）は外すので、そのまま実行すれば同じ version とディープリンクを再現できます。`--json` が返すフィールドは 8 つです。`version`、`generatedAt`、`builtWith`（生成した Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
 記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの Yosegi が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出します。Registry が実際に古くなっているかどうかは、この見出しを目で判断せず `registry status`（上記）で確認します。
 
 ## `component inspect`

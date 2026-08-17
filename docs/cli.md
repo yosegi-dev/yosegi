@@ -159,8 +159,9 @@ yosegi component list --query card --data-dir .yosegi
 ```
 
 The header names the registry in use, when it was built, and the `registry build` that would rebuild
-it — carrying every flag that shapes the result (`--storybook-url` included), so running it verbatim
-reproduces the same version and deep links. `--json` returns `version`, `generatedAt`, `builtWith`
+it — carrying every flag that shapes the result (`--storybook-url` included) and leaving out the
+ones that do not (`--data-dir`, `--out`, `--report`), so running it verbatim reproduces the same
+version and deep links. `--json` returns `version`, `generatedAt`, `builtWith`
 (the Yosegi that wrote it), `builtWithCliPath`, `inputs`, `total`, `categories`, and
 `components`. A registry written before this was recorded reports
 `built: not recorded`; one built by a different Yosegi version than the running CLI prints a

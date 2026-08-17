@@ -284,9 +284,10 @@ app/components/ui/button#Button [app/components/ui] recommended
 **`registry status` is how you judge whether the registry is stale — this header is not a
 substitute for it.** `list`'s version string alone cannot tell you: it is a content hash, so a
 rebuild from an unchanged host produces the same string. The `rebuild:` line is the command that
-produced it, minus `--data-dir` — it carries every flag that shapes the result (`--storybook-url`
-included, so the deep links and the version survive a re-run), so run it verbatim with your
-`--data-dir` to refresh once `status` has told you to. A registry written before this was recorded
+produced it, minus the flags that only name a destination (`--data-dir`, `--out`, `--report`) — it
+carries every flag that shapes the result (`--storybook-url` included, so the deep links and the
+version survive a re-run), so run it verbatim with your `--data-dir` to refresh once `status` has
+told you to. A registry written before this was recorded
 says `built: not recorded`; rebuild it. Separately, if the registry was built by a **different Yosegi
 version** than the CLI you are running, every command that reads it prints a `Warning:` naming both
 versions and the rebuild command — heed it, because an older Yosegi omits fields a newer one emits
