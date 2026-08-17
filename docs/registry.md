@@ -465,6 +465,9 @@ components filled in this way are counted neither in `propsUnreadable` nor in th
 `component inspect` reads the manifest's `propsFromTypes` and says so, which is how you find the
 candidates to fill in.
 
+The metadata file is an input to every build, not an output of one, so it is committed to the host's
+repository — somewhere like `tools/`, and never inside the data directory, which is not tracked.
+
 **3. Unions of object types cannot have their options enumerated**
 
 A union expressed by a single type name, such as an icon component type, cannot be reduced to

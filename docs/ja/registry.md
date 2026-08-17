@@ -375,6 +375,9 @@ const ChartTooltip = Primitive.Tooltip; // チャートライブラリから
 **この 3 コンポーネントへの対処は `--metadata` で埋めること。** Registry が props を知らなければ、実在する prop を Screen JSON に書いた時点で `UNKNOWN_PROP` になり画面を組めません。
 明示的な metadata は型から得た props より優先され、こうして埋めたコンポーネントは `propsUnreadable` にも `--report` の取りこぼしにも数えられません。`component inspect` は Manifest の `propsFromTypes` を見てその旨を告げるので、埋めるべき候補はそこから見つかります。
 
+metadata ファイルはビルドの出力ではなく毎回のビルドの入力なので、ホストのリポジトリへコミットします。
+置き場は `tools/` などで、追跡されない data ディレクトリの中には置きません。
+
 **3. オブジェクト型の union は選択肢を列挙できない**
 
 アイコンのコンポーネント型のように、単一の型名で表された union は `options` に落とせないので `json` / `editable: false` になります。`shape` がその一部を埋めます。
