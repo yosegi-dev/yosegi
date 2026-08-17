@@ -57,9 +57,8 @@ with props read from types, deterministic output. See [`docs/registry.md`](./doc
   design-system scale ([`docs/benchmark.md`](./docs/benchmark.md)). Guessing is what an agent does
   when being right is expensive.
 - **See every option, not just the one you meant to write.** Reading the source verifies the prop an
-  agent already planned; `component inspect` lists everything the component takes — every variant,
-  every enum value. An option an agent never saw is an option it works around, usually against your
-  conventions.
+  agent already planned; `component inspect` lists every variant and enum value your types declare.
+  An option an agent never saw is an option it works around, usually against your conventions.
 - **Iterate without Figma in the loop.** What you review and what you implement are the same
   components. Figma still owns new visual design.
 
