@@ -51,13 +51,21 @@ with props read from types, deterministic output. See [`docs/registry.md`](./doc
 
 - **Mock a screen fast.** Ask for a screen; the agent looks up the components, writes the Story, and
   your team reviews it in Storybook — drawn with the real components, with the real props.
-- **Stop guessing at your own API.** The agent asks the registry what a component takes instead of
-  writing what the upstream library used to take.
-- **Keep the host out of the context window.** Benchmarked: the registry gets an agent to the same
-  screen as reading the source, off the smallest read of any carrier — a fifth of the source, a
-  third of a package's `.d.ts` at design-system scale ([`docs/benchmark.md`](./docs/benchmark.md)).
+- **Make being right cheap.** A diligent agent digs the same props out of your source, file by file;
+  what the registry changes is the cost. Benchmarked: the same screen as reading the source, off the
+  smallest read of any carrier — a fifth of the source, a third of a package's `.d.ts` at
+  design-system scale ([`docs/benchmark.md`](./docs/benchmark.md)). Guessing is what an agent does
+  when being right is expensive.
+- **See every option, not just the one you meant to write.** Reading the source verifies the prop an
+  agent already planned; `component inspect` lists everything the component takes — every variant,
+  every enum value. An option an agent never saw is an option it works around, usually against your
+  conventions.
 - **Iterate without Figma in the loop.** What you review and what you implement are the same
   components. Figma still owns new visual design.
+
+The registry and your own Stories answer different questions. What a component takes comes from the
+registry; what your screens actually do with it — the idiom, the conventions — only ever comes from
+the host's own code, and the Skill reads both.
 
 Details in [`docs/workflows.md`](./docs/workflows.md).
 

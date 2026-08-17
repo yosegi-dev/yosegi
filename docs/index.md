@@ -38,9 +38,10 @@ output. How types become a catalog, and what the numbers mean:
 [Component Registry](./registry.md).
 
 And benchmarked across four UI libraries: an agent given any carrier of your components' API —
-the source, a package's `.d.ts`, or the registry — produces the same clean screen. The registry
-is the smallest of those reads at design-system scale: a fifth of the source, a third of the
-`.d.ts` a package ships. Same output, least context: [Benchmark](./benchmark.md).
+the source, a package's `.d.ts`, or the registry — produces the same clean screen. What the
+registry changes is the price of being right: the smallest read at design-system scale, a fifth
+of the source, a third of the `.d.ts` a package ships. Same output, least context:
+[Benchmark](./benchmark.md).
 
 ## Install
 
