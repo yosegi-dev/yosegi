@@ -101,6 +101,9 @@ yosegi screen context tmp/screen.json \
 
 `--data-dir` は全コマンドへ同じ値を渡します。Registry と保存済み画面の置き場で、既定はカレントディレクトリ直下の `.yosegi` です。
 
+`registry build` はこのディレクトリへ `.gitignore` を書き出します。
+リンタとフォーマッタは `.gitignore` を読まないので、それぞれの設定でもこのディレクトリを除外します。
+
 必須なのは手順 1 と 2 です。
 コンポーネントの本当の props・enum の選択肢・slots・import specifier を、推測ではなくここで確定させます。
 出力はホストのリポジトリに入り、ホストのコードとしてレビューされるので、手順 3 も省略できません。
@@ -111,7 +114,7 @@ yosegi screen context tmp/screen.json \
 - `registry build` をリポジトリのスクリプトにします（`bun run yosegi:registry`）。`--source` / `--tsconfig` / `--index` を毎回思い出さずに済みます。
 - Story に必要な meta の定型（`tags`、Docs ページ、デザイン参照）をテンプレートファイルに書き、`screen generate --meta-template` へ渡します。
 - ホストの Story 規約・デザイントークン・真似する価値のある複合 Story をエージェントに示します。
-- 型から props を読めないコンポーネントがあれば `registry metadata` で `--metadata` の雛形を作り、上のスクリプトへ組み込みます。
+- 型から props を読めないコンポーネントがあれば `registry metadata` で `--metadata` の雛形を作り、コミットして、上のスクリプトへ組み込みます。
 
 ## 次に読む
 

@@ -104,6 +104,9 @@ yosegi screen context tmp/screen.json \
 Pass the same `--data-dir` to every command; it is where the registry and the saved screens live.
 The default is `.yosegi` under the current directory.
 
+`registry build` writes a `.gitignore` into that directory. A linter and a formatter do not read
+`.gitignore`, so exclude the directory in their config as well.
+
 Steps 1 and 2 are the mandatory part: a component's real props, enum options, slots, and import
 specifier are confirmed there instead of guessed. The output lands in the host's repository and is
 reviewed as the host's code, so step 3 is not optional either. The
@@ -118,7 +121,7 @@ reviewed as the host's code, so step 3 is not optional either. The
 - Point the agent at the host's Story conventions, design tokens, and a composed example Story worth
   imitating.
 - If some components cannot have their props read from types, scaffold a `--metadata` file with
-  `registry metadata` and wire it into the script above.
+  `registry metadata`, commit it, and wire it into the script above.
 
 ## Next steps
 
