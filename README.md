@@ -52,10 +52,10 @@ with props read from types, deterministic output. See [`docs/registry.md`](./doc
 - **Mock a screen fast.** Ask for a screen; the agent looks up the components, writes the Story, and
   your team reviews it in Storybook — drawn with the real components, with the real props.
 - **Make being right cheap.** A diligent agent digs the same props out of your source, file by file;
-  what the registry changes is the cost. Benchmarked: the same screen as reading the source, off the
-  smallest read of any carrier — a fifth of the source, a third of a package's `.d.ts` at
-  design-system scale ([`docs/benchmark.md`](./docs/benchmark.md)). Guessing is what an agent does
-  when being right is expensive.
+  what the registry changes is the cost. Benchmarked: the same screen as reading the source, off
+  the smallest read of any carrier at design-system scale
+  ([`docs/benchmark.md`](./docs/benchmark.md)). Guessing is what an agent does when being right is
+  expensive.
 - **See every option, not just the one you meant to write.** Reading the source verifies the prop an
   agent already planned; `component inspect` lists every variant and enum value your types declare.
   An option an agent never saw is an option it works around, usually against your conventions.
