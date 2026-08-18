@@ -53,16 +53,20 @@ tsconfig の解決と同じ規則です。
 | --- | --- | --- | --- |
 | `$schema` | string | — | エディタから JSON Schema を指せるように受け付ける。Yosegi は無視し、Schema も同梱しない |
 | `dataDir` | path | 全コマンドの `--data-dir` | Registry と保存済み画面の置き場 |
-| `registry.source` | glob の配列 | `registry build` の `--source` | このファイルではなく `--project-root` を基準に解決する |
-| `registry.tsconfig` | path | `registry build` の `--tsconfig` | 既定の `--project-root` もこれに追随して動く |
+| `registry.source` | glob の配列 | `registry build` / `registry metadata` の `--source` | このファイルではなく `--project-root` を基準に解決する |
+| `registry.tsconfig` | path | `registry build` / `registry metadata` の `--tsconfig` | 既定の `--project-root` もこれに追随して動く |
 | `registry.metadata` | path | `registry build` の `--metadata` | 型から読めなかったコンポーネントの props を手で補う |
 | `emit.importMap` | string の配列 | `screen generate` の `--import-map` | 1 要素につき `<from>=<to>` を 1 つ。フラグが取る 1 本の文字列へ連結する |
 | `emit.metaTemplate` | path | `screen generate` の `--meta-template` | Story の meta を持たないファイルを書く `--target component` には適用しない |
-| `examples` | object の配列 | — | ホストがテンプレートとして持つ画面のカタログ。検証のみで、まだ消費しない |
+| `examples` | object の配列 | `example list` / `example apply` の `--catalog` | ホストがテンプレートとして持つ画面のカタログ |
 
 すべてのキーは任意なので、ホストが必要とする既定値だけを config に書けます。
 `examples` の要素は `key`、`label`、`description`、`templatePath`、`componentName` を取り、すべて必須です。
 `key` は配列の中で一意である必要があります。
+
+`examples` はカタログへのパスではなくカタログそのものなので、`example` コマンドはこの節をその場で読みます。
+まず `--catalog`、次にこの節、最後に `--data-dir` 配下の `examples.json` の順です。
+節が無い場合や空の場合は、そのファイルへ落ちます。
 
 ## 優先順位
 
@@ -73,6 +77,8 @@ tsconfig の解決と同じ規則です。
 ```sh
 yosegi registry build                          # --source と --tsconfig は config から
 yosegi registry build --source "app/ui/**/*.tsx"   # この glob のみ。config の一覧は使わない
+yosegi example list                            # カタログは config の examples 節から
+yosegi example list --catalog ./examples.json  # このファイルのみ。config の節は使わない
 ```
 
 実際に採用された値が `registry build` の `inputs` に記録されます。

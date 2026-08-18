@@ -33,6 +33,7 @@ import {
 import { z } from "zod";
 import {
 	DEFAULT_DATA_DIR,
+	ensureDataDir,
 	examplesPath,
 	loadRegistry,
 	registryPath,
@@ -42,7 +43,12 @@ import {
 } from "../../config.ts";
 import { parseMetaTemplate } from "../../emit/meta-template.ts";
 import { applyExample } from "../../examples/apply.ts";
-import { loadExampleCatalog, requireExample } from "../../examples/catalog.ts";
+import {
+	exampleCatalogFromConfig,
+	type LoadedCatalog,
+	loadExampleCatalog,
+	requireExample,
+} from "../../examples/catalog.ts";
 import {
 	HOST_CONFIG_FILENAME,
 	type HostConfigDefaults,
@@ -664,6 +670,7 @@ async function generateStory(
 async function generateMetadata(
 	componentIds: string[],
 	flags: CliFlags,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	if (componentIds.length === 0) {
 		return missingArgument(
@@ -671,19 +678,28 @@ async function generateMetadata(
 			"registry metadata requires at least one <componentId>.",
 		);
 	}
+	// --tsconfig and --source mean here what they mean in registry build, so they come from
+	// the config the same way. The scaffold this writes is fed straight back to that build:
+	// reading a different tsconfig than the build will would resolve the same ids against a
+	// different project.
+	const tsconfig =
+		flagString(flags, "tsconfig") ?? defaults.tsconfig ?? undefined;
 	// Both the glob and the id's module path are resolved with the same base as registry build.
-	const projectRoot = resolveProjectRoot(flags, flagString(flags, "tsconfig"));
+	const projectRoot = resolveProjectRoot(flags, tsconfig);
 	if (!projectRoot) {
 		throw new ComposerError(
 			SERVICE_CODES.INVALID_ARGUMENT,
-			"registry metadata requires --tsconfig <path> or --project-root <dir> (the base for --source globs and for component id module paths).",
+			`registry metadata requires --tsconfig <path> or --project-root <dir> (the base for --source globs and for component id module paths), or a registry.tsconfig in ${HOST_CONFIG_FILENAME}.`,
 		);
 	}
 
+	// A --source on the command line replaces the config's list rather than adding to it,
+	// exactly as in registry build.
+	const sources = flagList(flags, "source");
 	const { metadata, notes } = buildCvaMetadata({
 		projectRoot,
 		componentIds,
-		sources: flagList(flags, "source"),
+		sources: sources.length > 0 ? sources : defaults.registrySources,
 	});
 
 	const out = flagString(flags, "out");
@@ -854,9 +870,22 @@ async function screenContext(
 	return 0;
 }
 
-// --catalog, or the host's <data-dir>/examples.json.
-function catalogPath(flags: CliFlags, dataDir: string): string {
-	return flagString(flags, "catalog") ?? examplesPath(dataDir);
+// The catalog in effect, from the same flag > config > built-in default chain every other
+// setting follows. The config's `examples` section is a catalog in its own right rather
+// than a pointer to one, so it is used in place instead of being read from disk again.
+async function resolveCatalog(
+	flags: CliFlags,
+	dataDir: string,
+	defaults: HostConfigDefaults,
+): Promise<LoadedCatalog> {
+	const fromFlag = flagString(flags, "catalog");
+	if (fromFlag !== undefined) {
+		return await loadExampleCatalog(fromFlag, "flag");
+	}
+	if (defaults.configPath !== null && defaults.examples.length > 0) {
+		return exampleCatalogFromConfig(defaults.configPath, defaults.examples);
+	}
+	return await loadExampleCatalog(examplesPath(dataDir), "data-dir");
 }
 
 // List the screen templates the host has catalogued. The entry point for `example apply`:
@@ -865,17 +894,21 @@ async function listExamples(
 	rest: string[],
 	flags: CliFlags,
 	dataDir: string,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	// Checked before the catalog is read, so a mistyped invocation does no work at all.
 	const extra = checkPositionals("example list", rest, 0);
 	if (extra !== null) {
 		return extra;
 	}
-	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	const catalog = await resolveCatalog(flags, dataDir, defaults);
 	if (flagBoolean(flags, "json")) {
 		print({
 			catalog: catalog.path,
 			root: catalog.root,
+			// Which declaration won, so a caller reading the JSON can tell an entry that came
+			// from the config from one that came from a catalog file at the same path.
+			source: catalog.source,
 			total: catalog.examples.length,
 			examples: catalog.examples,
 		});
@@ -890,6 +923,7 @@ async function applyExampleCommand(
 	rest: string[],
 	flags: CliFlags,
 	dataDir: string,
+	defaults: HostConfigDefaults,
 ): Promise<number> {
 	const extra = checkPositionals("example apply", rest, 1);
 	if (extra !== null) {
@@ -916,7 +950,7 @@ async function applyExampleCommand(
 			"example apply requires --out <file.tsx>.",
 		);
 	}
-	const catalog = await loadExampleCatalog(catalogPath(flags, dataDir));
+	const catalog = await resolveCatalog(flags, dataDir, defaults);
 	const result = await applyExample({
 		catalog,
 		example: requireExample(catalog, key),
@@ -1285,7 +1319,14 @@ async function buildRegistry(
 	const out = flagString(flags, "out") ?? registryPath(dataDir);
 	// The output destination is auto-created, same as screen generate. Otherwise an agent
 	// would have to remember to insert an mkdir step just to pass a fresh --data-dir tmp/yosegi.
-	await mkdir(dirname(out), { recursive: true });
+	// registry build is usually the first command a host runs, so this is where the data dir
+	// comes into existence and gets its .gitignore — unless --out redirects the registry
+	// somewhere the host owns, in which case marking that directory ignored would be wrong.
+	if (resolve(dirname(out)) === resolve(dataDir)) {
+		await ensureDataDir(dataDir);
+	} else {
+		await mkdir(dirname(out), { recursive: true });
+	}
 	const storybookBaseUrl = inputs.storybookUrl;
 	const version = inputs.version;
 	const sources = inputs.sources;
@@ -1539,7 +1580,7 @@ export async function runCli(argv: string[]): Promise<number> {
 		}
 
 		if (group === "registry" && action === "metadata") {
-			return await generateMetadata(rest, flags);
+			return await generateMetadata(rest, flags, defaults);
 		}
 
 		if (group === "registry" && action === "status") {
@@ -1580,11 +1621,11 @@ export async function runCli(argv: string[]): Promise<number> {
 		// The example commands touch neither the registry nor the screen store — a
 		// catalogued template is copied as source text — so neither is loaded here.
 		if (group === "example" && action === "list") {
-			return await listExamples(rest, flags, dataDir);
+			return await listExamples(rest, flags, dataDir, defaults);
 		}
 
 		if (group === "example" && action === "apply") {
-			return await applyExampleCommand(rest, flags, dataDir);
+			return await applyExampleCommand(rest, flags, dataDir, defaults);
 		}
 
 		if (group === "screen") {
@@ -1747,7 +1788,8 @@ function usage(): string {
 		"  example list [--catalog <path>] [--json] [--quiet]   # PoC",
 		"      List the host's catalogued screen templates. The catalog is a JSON file",
 		'      ({ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }),',
-		"      read from --catalog or <data-dir>/examples.json.",
+		`      read from --catalog, the "examples" section of ${HOST_CONFIG_FILENAME}, or`,
+		"      <data-dir>/examples.json, in that order.",
 		"  example apply <exampleKey> --name <ComponentName> --out <file.tsx> [--catalog <path>] [--json]   # PoC",
 		"      Copy that template to --out, renaming its export to --name. The copy owns itself",
 		"      from then on and does not track the template. An existing --out is never",
@@ -1760,8 +1802,9 @@ function usage(): string {
 		"  common: --data-dir <dir> [--config <path>]",
 		`      --config points at a ${HOST_CONFIG_FILENAME}. Without it, one is searched for from the`,
 		"      cwd upwards; running without one is fine. It supplies defaults for --data-dir, for",
-		"      registry build's --source / --tsconfig / --metadata, and for screen generate's",
-		"      --import-map / --meta-template. A flag always wins over the file, and paths inside it",
+		"      registry build's --source / --tsconfig / --metadata, for registry metadata's",
+		"      --source / --tsconfig, for screen generate's --import-map / --meta-template, and the",
+		"      example commands' catalog. A flag always wins over the file, and paths inside it",
 		"      are read against the file's own directory (--source globs excepted: those keep their",
 		"      --project-root base).",
 		"",

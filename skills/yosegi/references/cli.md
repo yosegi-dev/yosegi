@@ -48,7 +48,10 @@ user.
   directory, so it moves with your cwd). **Pass the same value to every command.** Writing
   `registry build`'s output to one location and then passing a different `--data-dir` to
   `component list` produces `REGISTRY_NOT_FOUND` (its `path` / `dataDir` fields name the location
-  that was actually consulted). The directory is created if it does not exist.
+  that was actually consulted). The directory is created if it does not exist, together with a
+  `.gitignore` that ignores everything in it — it holds generated data. An existing one is never
+  rewritten, so a host that added `!registry.json` to it keeps that decision; a host that deleted it
+  gets it back on the next command.
 - Repeatable flags (`--source`, `--query`) also accept comma-separated values.
 - **Always quote globs.** `--source app/components/**/*.tsx` is expanded by the shell first and only
   one file reaches the CLI. Write `--source "app/components/**/*.tsx"`.
@@ -78,7 +81,8 @@ that committed them has already answered them for you.
   "emit": {
     "importMap": ["./app=~"],
     "metaTemplate": "./.storybook/screen-meta.tsx"
-  }
+  },
+  "examples": []
 }
 ```
 
@@ -87,9 +91,11 @@ that committed them has already answered them for you.
   an error — flags alone remain a complete invocation, and every command in this reference works
   without a config. `--config <path>` names one outright and skips the search.
 - **What it supplies.** `dataDir` for `--data-dir` on every command; `registry.source` /
-  `registry.tsconfig` / `registry.metadata` for `registry build`; `emit.importMap` /
-  `emit.metaTemplate` for `screen generate`. Every key is optional. `emit.importMap` is an array of
-  the same `<from>=<to>` entries `--import-map` takes as one comma-separated string.
+  `registry.tsconfig` for `registry build` and `registry metadata`, `registry.metadata` for
+  `registry build`; `emit.importMap` /
+  `emit.metaTemplate` for `screen generate`; `examples` as the catalog `example list` /
+  `example apply` read. Every key is optional. `emit.importMap` is an array of the same
+  `<from>=<to>` entries `--import-map` takes as one comma-separated string.
 - **Precedence.** A flag beats the file, and the file beats the built-in default. Nothing merges: a
   `--source` on the command line replaces the config's list rather than adding to it. Keep passing
   `--data-dir` explicitly as this reference shows — an explicit flag wins either way, so it stays
@@ -281,9 +287,10 @@ app/components/ui/button#Button [app/components/ui] recommended
 **`registry status` is how you judge whether the registry is stale — this header is not a
 substitute for it.** `list`'s version string alone cannot tell you: it is a content hash, so a
 rebuild from an unchanged host produces the same string. The `rebuild:` line is the command that
-produced it, minus `--data-dir` — it carries every flag that shapes the result (`--storybook-url`
-included, so the deep links and the version survive a re-run), so run it verbatim with your
-`--data-dir` to refresh once `status` has told you to. A registry written before this was recorded
+produced it, minus the flags that only name a destination (`--data-dir`, `--out`, `--report`) — it
+carries every flag that shapes the result (`--storybook-url` included, so the deep links and the
+version survive a re-run), so run it verbatim with your `--data-dir` to refresh once `status` has
+told you to. A registry written before this was recorded
 says `built: not recorded`; rebuild it. Separately, if the registry was built by a **different Yosegi
 version** than the CLI you are running, every command that reads it prints a `Warning:` naming both
 versions and the rebuild command — heed it, because an older Yosegi omits fields a newer one emits
@@ -401,18 +408,20 @@ yosegi example apply guest-list \
   --data-dir .yosegi
 ```
 
-The catalog is a JSON file the host maintains —
+The catalog is a declaration the host maintains —
 `{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }` — read from
-`--catalog <path>`, or from `examples.json` under `--data-dir`. `templatePath` resolves against
-`root`, which is relative to the catalog file and defaults to the catalog's own directory.
+`--catalog <path>`, then from the `examples` section of `yosegi.config.json`, then from
+`examples.json` under `--data-dir`. `templatePath` resolves against `root`, which is relative to the
+catalog file and defaults to the catalog's own directory; in the config it resolves against the
+config file, like every other path there.
 
 | Flag | Meaning |
 | --- | --- |
-| `--catalog <path>` | The catalog to read. Both commands take it |
+| `--catalog <path>` | The catalog to read, ahead of the config and `--data-dir`. Both commands take it |
 | `--name <ComponentName>` | `apply` only, required. The name the copy's export takes; a non-identifier is `INVALID_ARGUMENT` |
 | `--out <file.tsx>` | `apply` only, required. Where the copy goes |
 | `--quiet` | `list` only. Drops the `<n> examples in <path>` header line |
-| `--json` | `list`: `{ catalog, root, total, examples }`. `apply`: `{ out, key, componentName, template, nextSteps, warnings }` |
+| `--json` | `list`: `{ catalog, root, source, total, examples }`, `source` being `flag` / `config` / `data-dir`. `apply`: `{ out, key, componentName, template, nextSteps, warnings }` |
 
 What `apply` actually does is copy the file and rename one identifier. **The copy owns itself from
 then on** — it keeps no link to the template, so editing it afterwards is unremarkable, and later

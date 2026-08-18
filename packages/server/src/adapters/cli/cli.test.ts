@@ -1882,6 +1882,59 @@ describe("runCli", () => {
 		expect(await Bun.file(join(freshDir, "registry.json")).exists()).toBe(true);
 	});
 
+	// The data dir is build output. Marking it ignored where Yosegi creates it saves every
+	// host the same manual .gitignore line, the way a build directory does it.
+	it("registry build は data-dir に .gitignore を書き出す", async () => {
+		const freshDir = join(dataDir, "ignored");
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--data-dir",
+			freshDir,
+		]);
+		expect(code).toBe(0);
+		expect(await Bun.file(join(freshDir, ".gitignore")).text()).toContain("*");
+	});
+
+	// --out puts the registry in a directory the host owns and may well commit. Ignoring it
+	// would be Yosegi deciding that for them.
+	it("--out が data-dir の外なら .gitignore を書かない", async () => {
+		const outDir = join(dataDir, "host-owned");
+		const fixtureRoot = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"registry",
+			"__fixtures__",
+		);
+		const code = await runCli([
+			"registry",
+			"build",
+			"--source",
+			"**/*.tsx",
+			"--tsconfig",
+			join(fixtureRoot, "tsconfig.json"),
+			"--out",
+			join(outDir, "registry.json"),
+			"--data-dir",
+			dataDir,
+		]);
+		expect(code).toBe(0);
+		expect(await Bun.file(join(outDir, "registry.json")).exists()).toBe(true);
+		expect(await Bun.file(join(outDir, ".gitignore")).exists()).toBe(false);
+	});
+
 	// A registry made up of only synthetic primitives can still be written, so warn about it
 	// so it doesn't get lost among the success message.
 	it("registry build --source が 0 件のときは警告を出す", async () => {
@@ -3660,6 +3713,101 @@ describe("yosegi.config.json", () => {
 		expect(written.inputs.sources).toEqual(["nowhere/*.tsx"]);
 	});
 
+	// registry metadata writes the scaffold registry build then reads, so the two have to
+	// resolve ids against the same project. A cva component, which is all the scaffold covers.
+	async function writeCvaHost(
+		directory: string,
+		variants = '{ sm: "text-sm", md: "text-base" }',
+	): Promise<void> {
+		await mkdir(join(directory, "components"), { recursive: true });
+		await writeFile(
+			join(directory, "tsconfig.json"),
+			JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }),
+		);
+		await writeFile(
+			join(directory, "components", "typography.tsx"),
+			`import { cva } from "class-variance-authority";
+
+const textVariants = cva("", { variants: { size: ${variants} } });
+
+export function Text() {
+	return <p className={textVariants()} />;
+}
+`,
+		);
+	}
+
+	// The scaffold is the first line; the rest are Note: lines.
+	function scaffoldProps(id: string): Record<string, { options?: unknown[] }> {
+		const parsed = JSON.parse(logs[0]) as Record<
+			string,
+			{ props: Record<string, { options?: unknown[] }> }
+		>;
+		return parsed[id].props;
+	}
+
+	it("registry metadata は config の tsconfig を使う", async () => {
+		await writeCvaHost(root);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: { tsconfig: "./tsconfig.json" },
+		});
+		const nested = join(root, "apps", "web");
+		await mkdir(nested, { recursive: true });
+		process.chdir(nested);
+
+		const code = await runCli([
+			"registry",
+			"metadata",
+			"components/typography#Text",
+		]);
+		expect(code).toBe(0);
+		expect(scaffoldProps("components/typography#Text").size?.options).toEqual([
+			"sm",
+			"md",
+		]);
+	});
+
+	// A short id is searched for within --source, so the config's list has to reach here too.
+	it("registry metadata は短い id を config の source から解決する", async () => {
+		await writeCvaHost(root);
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: {
+				source: ["components/**/*.tsx"],
+				tsconfig: "./tsconfig.json",
+			},
+		});
+		process.chdir(root);
+
+		const code = await runCli(["registry", "metadata", "Text"]);
+		expect(code).toBe(0);
+		expect(scaffoldProps("Text").size?.options).toEqual(["sm", "md"]);
+	});
+
+	it("--tsconfig フラグは config の tsconfig に勝つ", async () => {
+		await writeCvaHost(root);
+		const other = join(root, "other");
+		await writeCvaHost(other, '{ lg: "text-lg" }');
+		await writeConfig(root, {
+			dataDir: ".yosegi",
+			registry: { tsconfig: "./tsconfig.json" },
+		});
+		process.chdir(root);
+
+		const code = await runCli([
+			"registry",
+			"metadata",
+			"components/typography#Text",
+			"--tsconfig",
+			join(other, "tsconfig.json"),
+		]);
+		expect(code).toBe(0);
+		expect(scaffoldProps("components/typography#Text").size?.options).toEqual([
+			"lg",
+		]);
+	});
+
 	it("screen generate は config の importMap / metaTemplate を使う", async () => {
 		const dataDir = await seedDataDir(join(root, ".yosegi"));
 		await writeFile(
@@ -3746,6 +3894,187 @@ describe("yosegi.config.json", () => {
 		expect(code).toBe(0);
 		expect(output()).toContain("emit.metaTemplate was not applied");
 		expect(await Bun.file(outFile).text()).not.toContain("autodocs");
+	});
+
+	// The config's `examples` section is the catalog itself, not a pointer to one, so these
+	// run with no --catalog at all — the invocation a host that wrote the section expects.
+
+	const CONFIG_TEMPLATE =
+		"export function SampleScreenExample() {\n\treturn <div />;\n}\n";
+
+	// One entry whose templatePath is written relative to the config, as a committed config
+	// would write it.
+	async function writeExampleTemplate(
+		directory: string,
+		key = "sample-screen",
+	): Promise<Record<string, string>> {
+		await mkdir(join(directory, "templates"), { recursive: true });
+		await writeFile(
+			join(directory, "templates", `${key}.tsx`),
+			CONFIG_TEMPLATE,
+		);
+		return {
+			key,
+			label: "Sample screen",
+			description: "A screen kept as a template",
+			templatePath: `./templates/${key}.tsx`,
+			componentName: "SampleScreenExample",
+		};
+	}
+
+	it("example list は config の examples をカタログとして読む", async () => {
+		const entry = await writeExampleTemplate(root);
+		const configPath = await writeConfig(root, {
+			dataDir: ".yosegi",
+			examples: [entry],
+		});
+		process.chdir(root);
+
+		const code = await runCli(["example", "list", "--json"]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			catalog: string;
+			source: string;
+			total: number;
+			examples: { key: string; templatePath: string }[];
+		};
+		expect(parsed.source).toBe("config");
+		expect(parsed.catalog).toBe(configPath);
+		expect(parsed.total).toBe(1);
+		expect(parsed.examples[0].key).toBe("sample-screen");
+		// Resolved against the config's own directory, like every other path in the file.
+		expect(parsed.examples[0].templatePath).toBe(
+			join(root, "templates", "sample-screen.tsx"),
+		);
+	});
+
+	// The entries are inside the config rather than in a catalog file at that path, and the
+	// listing has to say which of the two it is showing.
+	it("example list の見出しは config の examples 節を出所として示す", async () => {
+		const entry = await writeExampleTemplate(root);
+		const configPath = await writeConfig(root, {
+			dataDir: ".yosegi",
+			examples: [entry],
+		});
+		process.chdir(root);
+
+		const code = await runCli(["example", "list"]);
+		expect(code).toBe(0);
+		expect(output()).toContain(`the "examples" section of ${configPath}`);
+	});
+
+	it("example apply は config の examples から複製する", async () => {
+		const entry = await writeExampleTemplate(root);
+		await writeConfig(root, { dataDir: ".yosegi", examples: [entry] });
+		process.chdir(root);
+
+		const out = join(root, "routes", "guests.tsx");
+		const code = await runCli([
+			"example",
+			"apply",
+			"sample-screen",
+			"--name",
+			"GuestListRoute",
+			"--out",
+			out,
+		]);
+		expect(code).toBe(0);
+		const written = await readFile(out, "utf8");
+		expect(written).toContain("export function GuestListRoute()");
+		expect(written).not.toContain("SampleScreenExample");
+	});
+
+	it("--catalog は config の examples に勝つ", async () => {
+		const entry = await writeExampleTemplate(root, "from-config");
+		await writeConfig(root, { dataDir: ".yosegi", examples: [entry] });
+		const flagEntry = await writeExampleTemplate(root, "from-flag");
+		const catalog = join(root, "catalog.json");
+		await writeFile(catalog, JSON.stringify({ examples: [flagEntry] }));
+		process.chdir(root);
+
+		const code = await runCli([
+			"example",
+			"list",
+			"--catalog",
+			catalog,
+			"--json",
+		]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			source: string;
+			examples: { key: string }[];
+		};
+		expect(parsed.source).toBe("flag");
+		expect(parsed.examples.map((example) => example.key)).toEqual([
+			"from-flag",
+		]);
+	});
+
+	it("config の examples は <data-dir>/examples.json に勝つ", async () => {
+		const entry = await writeExampleTemplate(root, "from-config");
+		await writeConfig(root, { dataDir: ".yosegi", examples: [entry] });
+		const dataDir = await seedDataDir(join(root, ".yosegi"));
+		await writeFile(
+			join(dataDir, "examples.json"),
+			JSON.stringify({
+				examples: [await writeExampleTemplate(root, "from-file")],
+			}),
+		);
+		process.chdir(root);
+
+		const code = await runCli(["example", "list", "--json"]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			source: string;
+			examples: { key: string }[];
+		};
+		expect(parsed.source).toBe("config");
+		expect(parsed.examples.map((example) => example.key)).toEqual([
+			"from-config",
+		]);
+	});
+
+	// A config without the section leaves the pre-config behaviour exactly as it was.
+	it("config に examples が無ければ <data-dir>/examples.json を読む", async () => {
+		await writeConfig(root, { dataDir: ".yosegi" });
+		const dataDir = await seedDataDir(join(root, ".yosegi"));
+		const entry = await writeExampleTemplate(root, "from-file");
+		await writeFile(
+			join(dataDir, "examples.json"),
+			JSON.stringify({ root, examples: [entry] }),
+		);
+		process.chdir(root);
+
+		const code = await runCli(["example", "list", "--json"]);
+		expect(code).toBe(0);
+		const parsed = JSON.parse(output()) as {
+			catalog: string;
+			source: string;
+			examples: { key: string }[];
+		};
+		expect(parsed.source).toBe("data-dir");
+		expect(parsed.catalog).toBe(join(dataDir, "examples.json"));
+		expect(parsed.examples.map((example) => example.key)).toEqual([
+			"from-file",
+		]);
+	});
+
+	// The three declarations are all the reader has to choose from, so the failure names all
+	// three rather than only the two that predate the config.
+	it("カタログがどこにも無い場合のエラーは config の examples 節も挙げる", async () => {
+		await writeConfig(root, { dataDir: ".yosegi" });
+		await seedDataDir(join(root, ".yosegi"));
+		process.chdir(root);
+
+		const code = await runCli(["example", "list"]);
+		expect(code).toBe(1);
+		const parsed = JSON.parse(output()) as {
+			error: { code: string; message: string };
+		};
+		expect(parsed.error.code).toBe("EXAMPLE_CATALOG_NOT_FOUND");
+		expect(parsed.error.message).toContain(
+			'add an "examples" section to yosegi.config.json',
+		);
 	});
 });
 

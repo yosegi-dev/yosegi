@@ -25,7 +25,7 @@ bun add -d @yosegi/yosegi
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ作成する。全コマンドへ同じ値を渡す |
+| `--data-dir <dir>` | path | cwd 直下の `.yosegi` | Registry と保存済み画面の置き場。無ければ、中身をすべて無視する `.gitignore` とともに作成する。全コマンドへ同じ値を渡す |
 | `--config <path>` | path | cwd から上方へ探索して最初に見つかる `yosegi.config.json` | 既定値を与える設定ファイル。パスが存在しなければ `CONFIG_NOT_FOUND`。探索で見つからないことはエラーではない |
 
 フラグが `yosegi.config.json` に勝ち、このファイルが組み込みの既定値に勝ちます。
@@ -86,9 +86,9 @@ yosegi registry metadata <componentId> [<componentId> ...] --tsconfig <path> [op
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--tsconfig <path>` | path | — | `--project-root` を渡さない場合は必須 |
+| `--tsconfig <path>` | path | config の `registry.tsconfig` | `--project-root` を渡さない場合は必須 |
 | `--project-root <dir>` | path | `--tsconfig` のあるディレクトリ | `registry build` と同じ意味 |
-| `--source <glob>` | glob | — | 短い id（`Button`）の場合のみ必要。この範囲から export 名を探す |
+| `--source <glob>` | glob | config の `registry.source` | 短い id（`Button`）の場合のみ必要。この範囲から export 名を探す |
 | `--out <path>` | path | 標準出力 | 雛形の書き出し先 |
 
 ```sh
@@ -140,7 +140,7 @@ yosegi component list --query card --data-dir .yosegi
 ```
 
 見出しには使用中の Registry・その生成時刻・作り直すための `registry build` が出ます。
-この行は結果を左右する全フラグ（`--storybook-url` を含む）を持つので、そのまま実行すれば同じ version とディープリンクを再現できます。`--json` が返すフィールドは 8 つです。`version`、`generatedAt`、`builtWith`（生成した Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
+この行は結果を左右する全フラグ（`--storybook-url` を含む）を持ち、左右しないフラグ（`--data-dir`、`--out`、`--report`）は外すので、そのまま実行すれば同じ version とディープリンクを再現できます。`--json` が返すフィールドは 8 つです。`version`、`generatedAt`、`builtWith`（生成した Yosegi）、`builtWithCliPath`、`inputs`、`total`、`categories`、`components`。
 記録前に作られた Registry は `built: not recorded` になり、実行中の CLI と別バージョンの Yosegi が作った Registry は両方の版と作り直しコマンドを示す `Warning:` を出します。Registry が実際に古くなっているかどうかは、この見出しを目で判断せず `registry status`（上記）で確認します。
 
 ## `component inspect`
@@ -274,9 +274,9 @@ yosegi example list [options]
 
 | フラグ | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
-| `--catalog <path>` | path | `--data-dir` 直下の `examples.json` | 読み込むカタログ |
+| `--catalog <path>` | path | config の `examples`、無ければ `--data-dir` 直下の `examples.json` | 読み込むカタログ |
 | `--quiet` | boolean | `false` | `<n> examples in <path>` のヘッダ行を出さない |
-| `--json` | boolean | `false` | テキストの一覧ではなく `{ catalog, root, total, examples }` を返す |
+| `--json` | boolean | `false` | テキストの一覧ではなく `{ catalog, root, source, total, examples }` を返す |
 
 ```sh
 yosegi example list --data-dir .yosegi
@@ -285,6 +285,10 @@ yosegi example list --data-dir .yosegi
 カタログの形は `{ "root"?, "examples": [{ key, label, description, templatePath, componentName }] }` です。
 各 `templatePath` は `root` を基準に解決され、その `root` 自体はカタログファイルからの相対で、既定値はカタログ自身のディレクトリです。
 カタログが存在しない場合は `EXAMPLE_CATALOG_NOT_FOUND`、キーが重複している場合は `INVALID_ARGUMENT` で失敗します。
+
+`--catalog` が無い場合は `yosegi.config.json` の `examples` 節をその場でカタログとして読み、その節が無ければ `--data-dir` 直下の `examples.json` へ落ちます。
+`--json` 出力の `source` はそれぞれ `flag`、`config`、`data-dir` になります。
+[設定ファイル](./configuration.md)を参照してください。
 
 ## `example apply`
 
@@ -298,7 +302,7 @@ yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [optio
 | --- | --- | --- | --- |
 | `--name <ComponentName>` | string | 必須 | 複製側の export が取る名前。JavaScript の識別子であること。さもなければ `INVALID_ARGUMENT` |
 | `--out <file.tsx>` | path | 必須 | 複製先。既存ファイルは決して上書きしない（`EXAMPLE_OUTPUT_EXISTS`） |
-| `--catalog <path>` | path | `--data-dir` 直下の `examples.json` | 読み込むカタログ |
+| `--catalog <path>` | path | config の `examples`、無ければ `--data-dir` 直下の `examples.json` | 読み込むカタログ |
 | `--json` | boolean | `false` | テキストの要約ではなく `{ out, key, componentName, template, nextSteps, warnings }` を返す |
 
 ```sh

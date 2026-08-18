@@ -25,7 +25,7 @@ bun add -d @yosegi/yosegi
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--data-dir <dir>` | path | `.yosegi` under the cwd | Where the registry and the saved screens live. Created if missing. Pass the same value to every command |
+| `--data-dir <dir>` | path | `.yosegi` under the cwd | Where the registry and the saved screens live. Created if missing, with a `.gitignore` that ignores everything in it. Pass the same value to every command |
 | `--config <path>` | path | the nearest `yosegi.config.json` searching upwards from the cwd | The config file supplying defaults. `CONFIG_NOT_FOUND` if the path does not exist; finding none by search is not an error |
 
 A flag beats `yosegi.config.json`, and the file beats the built-in default. Which flags it can
@@ -102,9 +102,9 @@ yosegi registry metadata <componentId> [<componentId> ...] --tsconfig <path> [op
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--tsconfig <path>` | path | — | Required unless `--project-root` is given |
+| `--tsconfig <path>` | path | the config's `registry.tsconfig` | Required unless `--project-root` is given |
 | `--project-root <dir>` | path | the `--tsconfig` directory | Same meaning as in `registry build` |
-| `--source <glob>` | glob | — | Only needed for short ids (`Button`); the export name is searched for within this range |
+| `--source <glob>` | glob | the config's `registry.source` | Only needed for short ids (`Button`); the export name is searched for within this range |
 | `--out <path>` | path | stdout | Where the scaffold is written |
 
 ```sh
@@ -159,8 +159,9 @@ yosegi component list --query card --data-dir .yosegi
 ```
 
 The header names the registry in use, when it was built, and the `registry build` that would rebuild
-it — carrying every flag that shapes the result (`--storybook-url` included), so running it verbatim
-reproduces the same version and deep links. `--json` returns `version`, `generatedAt`, `builtWith`
+it — carrying every flag that shapes the result (`--storybook-url` included) and leaving out the
+ones that do not (`--data-dir`, `--out`, `--report`), so running it verbatim reproduces the same
+version and deep links. `--json` returns `version`, `generatedAt`, `builtWith`
 (the Yosegi that wrote it), `builtWithCliPath`, `inputs`, `total`, `categories`, and
 `components`. A registry written before this was recorded reports
 `built: not recorded`; one built by a different Yosegi version than the running CLI prints a
@@ -308,9 +309,9 @@ yosegi example list [options]
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `--catalog <path>` | path | `examples.json` under `--data-dir` | The catalog to read |
+| `--catalog <path>` | path | the config's `examples`, else `examples.json` under `--data-dir` | The catalog to read |
 | `--quiet` | boolean | `false` | Drop the `<n> examples in <path>` header line |
-| `--json` | boolean | `false` | Return `{ catalog, root, total, examples }` instead of the text listing |
+| `--json` | boolean | `false` | Return `{ catalog, root, source, total, examples }` instead of the text listing |
 
 ```sh
 yosegi example list --data-dir .yosegi
@@ -321,6 +322,11 @@ The catalog is
 `templatePath` resolves against `root`, which is itself relative to the catalog file and defaults to
 the catalog's own directory. A catalog that is not there fails with `EXAMPLE_CATALOG_NOT_FOUND`, and
 duplicate keys with `INVALID_ARGUMENT`.
+
+Without `--catalog`, the `examples` section of `yosegi.config.json` is read as the catalog in place,
+and `examples.json` under `--data-dir` is the fallback when there is no such section. `source` in
+the `--json` output is `flag`, `config`, or `data-dir` accordingly. See
+[Configuration file](./configuration.md).
 
 ## `example apply`
 
@@ -334,7 +340,7 @@ yosegi example apply <exampleKey> --name <ComponentName> --out <file.tsx> [optio
 | --- | --- | --- | --- |
 | `--name <ComponentName>` | string | required | The name the copy's export takes. A JavaScript identifier, or `INVALID_ARGUMENT` |
 | `--out <file.tsx>` | path | required | Where the copy goes. An existing file is never overwritten (`EXAMPLE_OUTPUT_EXISTS`) |
-| `--catalog <path>` | path | `examples.json` under `--data-dir` | The catalog to read |
+| `--catalog <path>` | path | the config's `examples`, else `examples.json` under `--data-dir` | The catalog to read |
 | `--json` | boolean | `false` | Return `{ out, key, componentName, template, nextSteps, warnings }` instead of the text summary |
 
 ```sh

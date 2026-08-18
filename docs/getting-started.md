@@ -102,7 +102,9 @@ yosegi screen context tmp/screen.json \
 ```
 
 Pass the same `--data-dir` to every command; it is where the registry and the saved screens live.
-The default is `.yosegi` under the current directory.
+The default is `.yosegi` under the current directory. Yosegi creates it with a `.gitignore` that
+ignores everything in it. To commit the registry instead, add `!registry.json` to that file: it is
+never rewritten, while a deleted one comes back on the next command.
 
 `registry build` writes a `.gitignore` into that directory. A linter and a formatter do not read
 `.gitignore`, so exclude the directory in their config as well.

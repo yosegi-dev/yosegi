@@ -137,11 +137,16 @@ export type ComponentListSummary = {
 
 // Build a command that rebuilds the same registry, from the recorded inputs.
 // "What this was built from" is shorter shown as a single line that can be typed verbatim,
-// rather than explained in prose. Every recorded input is written out here without
-// exception — dropping even one produces a rebuild line that makes a different registry
-// (e.g. dropping storybook-url loses the deep links and even changes the version hash).
-// Output destinations like --data-dir / --out aren't printed, since the reader is already
-// supplying that value right now.
+// rather than explained in prose. Every recorded input that shapes the registry is written
+// out here without exception — dropping one produces a rebuild line that makes a different
+// registry (e.g. dropping storybook-url loses the deep links and even changes the version
+// hash). Output destinations like --data-dir / --out aren't printed, since the reader is
+// already supplying that value right now.
+//
+// --report is the same kind of destination, and it is dropped for that reason: it changes
+// nothing in the registry, and the path recorded was usually a scratch file from the
+// original build. Rerunning the line as printed would either recreate that file or fail on
+// a directory that no longer exists.
 function renderRebuildCommand(
 	inputs: RegistryBuildInputs | null,
 ): string | null {
@@ -160,7 +165,6 @@ function renderRebuildCommand(
 		inputs.storybookUrl ? `--storybook-url ${inputs.storybookUrl}` : null,
 		inputs.version ? `--version ${inputs.version}` : null,
 		inputs.metadata ? `--metadata ${inputs.metadata}` : null,
-		inputs.report ? `--report ${inputs.report}` : null,
 	].filter((arg): arg is string => arg !== null);
 	return args.length > 0 ? `yosegi registry build ${args.join(" ")}` : null;
 }
@@ -588,11 +592,17 @@ export function formatExampleList(
 	catalog: LoadedCatalog,
 	options: { quiet?: boolean } = {},
 ): string {
+	// The config case is entries inside yosegi.config.json rather than a catalog file, so
+	// the path alone would read as "there is a catalog at this path". Name the section.
+	const origin =
+		catalog.source === "config"
+			? `the "examples" section of ${catalog.path}`
+			: catalog.path;
 	const head = options.quiet
 		? null
-		: `${catalog.examples.length} examples in ${catalog.path}`;
+		: `${catalog.examples.length} examples in ${origin}`;
 	if (catalog.examples.length === 0) {
-		const note = `No examples in ${catalog.path}. Add entries under "examples".`;
+		const note = `No examples in ${origin}. Add entries under "examples".`;
 		return head ? `${head}\n\n${note}` : note;
 	}
 	const body = [

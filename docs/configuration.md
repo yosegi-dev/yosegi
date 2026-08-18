@@ -50,16 +50,20 @@ component ids are derived from, so rewriting the globs here would change which i
 | --- | --- | --- | --- |
 | `$schema` | string | — | Accepted so an editor can be pointed at a JSON Schema. Yosegi ignores it, and ships none |
 | `dataDir` | path | `--data-dir`, every command | Where the registry and the saved screens live |
-| `registry.source` | glob array | `--source`, `registry build` | Resolved against `--project-root`, not against this file |
-| `registry.tsconfig` | path | `--tsconfig`, `registry build` | Also moves the default `--project-root` with it |
+| `registry.source` | glob array | `--source`, `registry build` / `registry metadata` | Resolved against `--project-root`, not against this file |
+| `registry.tsconfig` | path | `--tsconfig`, `registry build` / `registry metadata` | Also moves the default `--project-root` with it |
 | `registry.metadata` | path | `--metadata`, `registry build` | Hand-supplied props for components whose types could not be read |
 | `emit.importMap` | string array | `--import-map`, `screen generate` | One `<from>=<to>` per entry; joined into the single string the flag takes |
 | `emit.metaTemplate` | path | `--meta-template`, `screen generate` | Not applied to `--target component`, which writes a file with no Story meta |
-| `examples` | object array | — | A catalog of whole screens the host keeps as templates. Validated, not yet consumed |
+| `examples` | object array | `--catalog`, `example list` / `example apply` | A catalog of whole screens the host keeps as templates |
 
 Every key is optional, so a config can carry just the one default a host cares about. An `examples`
 entry takes `key`, `label`, `description`, `templatePath`, and `componentName`, all required, with
 `key` unique across the array.
+
+`examples` is the catalog itself rather than a path to one, so the `example` commands read it in
+place: `--catalog` first, then this section, then `examples.json` under `--data-dir`. A section that
+is absent or empty falls through to that file.
 
 ## Precedence
 
@@ -70,6 +74,8 @@ to one glob.
 ```sh
 yosegi registry build                          # --source and --tsconfig from the config
 yosegi registry build --source "app/ui/**/*.tsx"   # this glob only; the config's list is unused
+yosegi example list                            # the catalog from the config's examples section
+yosegi example list --catalog ./examples.json  # this file only; the config's section is unused
 ```
 
 The value that actually won is what `registry build` records in `inputs`, so the rebuild line

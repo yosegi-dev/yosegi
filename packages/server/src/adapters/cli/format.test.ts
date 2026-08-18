@@ -258,8 +258,10 @@ describe("formatComponentList の台帳の出所", () => {
 
 	// Don't drop any flag that affects the content, so typing the rebuild line verbatim
 	// reproduces the same registry. Dropping storybook-url loses the deep links and even
-	// changes the version hash.
-	it("再ビルドのコマンドに storybook-url などの全フラグを含める", () => {
+	// changes the version hash. --report is the exception: it writes a separate file and
+	// leaves the registry untouched, so the recorded path is a scratch destination the
+	// rebuild has no reason to write to again.
+	it("再ビルドのコマンドに storybook-url などの全フラグを含め --report は外す", () => {
 		const output = formatComponentList(
 			[button()],
 			listSummary({
@@ -280,8 +282,9 @@ describe("formatComponentList の台帳の出所", () => {
 			}),
 		);
 		expect(output).toContain(
-			'rebuild: yosegi registry build --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --project-root ./app --index http://localhost:6006/index.json --storybook-url http://localhost:6006 --version v1.2.3 --metadata ./meta.json --report tmp/report.json',
+			'rebuild: yosegi registry build --source "app/components/**/*.tsx" --tsconfig ./tsconfig.json --project-root ./app --index http://localhost:6006/index.json --storybook-url http://localhost:6006 --version v1.2.3 --metadata ./meta.json',
 		);
+		expect(output).not.toContain("--report");
 	});
 });
 
