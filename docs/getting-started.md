@@ -30,15 +30,6 @@ bun add -d @yosegi/yosegi
 `yosegi` below means `npx yosegi` (`pnpm yosegi`, `yarn yosegi`, `bunx yosegi`). Running it with no
 arguments prints every command.
 
-A host that sets `install.minimumReleaseAge` in `bunfig.toml` cannot resolve a release published
-inside that window. Exclude both packages — the gate applies to `@yosegi/core` as well, since
-`@yosegi/yosegi` depends on it.
-
-```toml
-[install]
-minimumReleaseAgeExcludes = ["@yosegi/yosegi", "@yosegi/core"]
-```
-
 ## Install the Agent Skill
 
 The skill is how an agent learns the procedure below. Install it into whichever skills directory
@@ -113,9 +104,8 @@ yosegi screen context tmp/screen.json \
 Pass the same `--data-dir` to every command; it is where the registry and the saved screens live.
 The default is `.yosegi` under the current directory.
 
-Keep that directory out of the host's tooling as well as out of git. `registry build` writes a
-`.gitignore` into it, but a linter reads its own config: on Biome, add `"!.yosegi/**"` to
-`files.includes`, or the generated `registry.json` comes back reformatted and fails the host's lint.
+`registry build` writes a `.gitignore` into that directory. A linter and a formatter do not read
+`.gitignore`, so exclude the directory in their config as well.
 
 Steps 1 and 2 are the mandatory part: a component's real props, enum options, slots, and import
 specifier are confirmed there instead of guessed. The output lands in the host's repository and is

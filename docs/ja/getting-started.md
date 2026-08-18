@@ -29,14 +29,6 @@ bun add -d @yosegi/yosegi
 以下の `yosegi` は `npx yosegi`（`pnpm yosegi`、`yarn yosegi`、`bunx yosegi`）を指します。
 引数なしで実行すると全コマンドが出ます。
 
-`bunfig.toml` で `install.minimumReleaseAge` を設定しているホストは、その期間内に公開されたリリースを解決できません。
-`@yosegi/yosegi` が `@yosegi/core` に依存しており後者にも同じゲートがかかるので、両方を除外します。
-
-```toml
-[install]
-minimumReleaseAgeExcludes = ["@yosegi/yosegi", "@yosegi/core"]
-```
-
 ## Agent Skill を入れる
 
 エージェントは以下の手順をこの Skill から学びます。
@@ -109,9 +101,8 @@ yosegi screen context tmp/screen.json \
 
 `--data-dir` は全コマンドへ同じ値を渡します。Registry と保存済み画面の置き場で、既定はカレントディレクトリ直下の `.yosegi` です。
 
-このディレクトリは git だけでなくホストのツールからも外します。
-`registry build` がここへ `.gitignore` を書き出しますが、linter は自身の設定を読みます。Biome なら `files.includes` へ `"!.yosegi/**"` を追加します。
-除外しないと生成された `registry.json` が整形し直され、ホストの lint が落ちます。
+`registry build` はこのディレクトリへ `.gitignore` を書き出します。
+リンタとフォーマッタは `.gitignore` を読まないので、それぞれの設定でもこのディレクトリを除外します。
 
 必須なのは手順 1 と 2 です。
 コンポーネントの本当の props・enum の選択肢・slots・import specifier を、推測ではなくここで確定させます。
