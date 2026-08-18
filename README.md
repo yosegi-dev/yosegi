@@ -54,8 +54,8 @@ with props read from types, deterministic output. See [`docs/registry.md`](./doc
 - **Make being right cheap.** A diligent agent digs the same props out of your source, file by file;
   what the registry changes is the cost. Benchmarked: the same screen as reading the source, off
   the smallest read of any carrier at design-system scale
-  ([`docs/benchmark.md`](./docs/benchmark.md)). Guessing is what an agent does when being right is
-  expensive.
+  ([`docs/benchmark.md`](./docs/benchmark.md)). When checking is expensive, an agent guesses
+  instead.
 - **See every option, not just the one you meant to write.** Reading the source verifies the prop an
   agent already planned; `component inspect` lists every variant and enum value your types declare.
   An option an agent never saw is an option it works around, usually against your conventions.
